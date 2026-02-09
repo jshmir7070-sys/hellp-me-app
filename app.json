@@ -95,11 +95,6 @@
     ],
     "experiments": {
       "reactCompiler": true
-    },
-    "extra": {
-      "eas": {
-        "projectId": "YOUR_PROJECT_ID"
-      }
     }
   }
 }
