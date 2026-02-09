@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1770596567302,
+      "tag": "0000_add_address_fields_to_users",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,0 +1,158 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(222.2 84% 4.9%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(222.2 84% 4.9%);
+  --color-popover: hsl(0 0% 100%);
+  --color-popover-foreground: hsl(222.2 84% 4.9%);
+  --color-primary: hsl(221.2 83% 53%);
+  --color-primary-foreground: hsl(210 40% 98%);
+  --color-secondary: hsl(210 40% 96.1%);
+  --color-secondary-foreground: hsl(222.2 47.4% 11.2%);
+  --color-muted: hsl(210 40% 96.1%);
+  --color-muted-foreground: hsl(215.4 16.3% 46.9%);
+  --color-accent: hsl(210 40% 96.1%);
+  --color-accent-foreground: hsl(222.2 47.4% 11.2%);
+  --color-destructive: hsl(0 84.2% 60.2%);
+  --color-destructive-foreground: hsl(210 40% 98%);
+  --color-border: hsl(214.3 31.8% 91.4%);
+  --color-input: hsl(214.3 31.8% 91.4%);
+  --color-ring: hsl(221.2 83% 53%);
+  --color-helper: #1E40AF;
+  --color-requester: #059669;
+  --radius-lg: 0.5rem;
+  --radius-md: calc(0.5rem - 2px);
+  --radius-sm: calc(0.5rem - 4px);
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+}
+
+/* Excel-style table styles for raw HTML tables */
+.excel-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.75rem;
+}
+
+.excel-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(to bottom, #f9fafb, #f3f4f6);
+}
+
+.excel-table th {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  color: #374151;
+  border-bottom: 2px solid #d1d5db;
+  border-right: 1px solid #d1d5db;
+}
+
+.excel-table th:last-child {
+  border-right: none;
+}
+
+.excel-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  border-right: 1px solid #f3f4f6;
+}
+
+.excel-table td:last-child {
+  border-right: none;
+}
+
+.excel-table tbody tr:nth-child(even) {
+  background-color: #f9fafb;
+}
+
+.excel-table tbody tr:hover {
+  background-color: #eff6ff;
+}
+
+.excel-table-wrapper {
+  border: 1px solid #d1d5db;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: white;
+  width: 100%;
+}
+
+.excel-table-scroll {
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 350px);
+}
+
+.excel-table.table-fixed {
+  table-layout: fixed;
+}
+
+/* Apply excel style to all CardContent tables by default */
+.card-content table,
+[class*="CardContent"] table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.card-content table thead,
+[class*="CardContent"] table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(to bottom, #f9fafb, #f3f4f6);
+}
+
+.card-content table th,
+[class*="CardContent"] table th {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  color: #374151;
+  border-bottom: 2px solid #d1d5db;
+  border-right: 1px solid #e5e7eb;
+}
+
+.card-content table th:last-child,
+[class*="CardContent"] table th:last-child {
+  border-right: none;
+}
+
+.card-content table td,
+[class*="CardContent"] table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+  border-right: 1px solid #f3f4f6;
+}
+
+.card-content table td:last-child,
+[class*="CardContent"] table td:last-child {
+  border-right: none;
+}
+
+.card-content table tbody tr:nth-child(even),
+[class*="CardContent"] table tbody tr:nth-child(even) {
+  background-color: #f9fafb;
+}
+
+.card-content table tbody tr:hover,
+[class*="CardContent"] table tbody tr:hover {
+  background-color: #eff6ff;
+}
