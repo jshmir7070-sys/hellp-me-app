@@ -1017,6 +1017,19 @@ export const contracts = pgTable("contracts", {
   calculatedBalanceAmount: integer("calculated_balance_amount"), // 잔금 = finalAmount - downPaymentAmount
   balanceStatus: text("balance_status").default("pending"), // pending, paid
   closingReportId: integer("closing_report_id"), // 연결된 마감자료 ID
+  // 채권추심 관련 동의 항목 (Phase 2)
+  agreedLatePayment: boolean("agreed_late_payment").default(false), // 연체이자 동의
+  agreedDebtCollection: boolean("agreed_debt_collection").default(false), // 채권추심 동의
+  agreedJointGuarantee: boolean("agreed_joint_guarantee").default(false), // 연대보증 동의
+  agreedDocObligation: boolean("agreed_doc_obligation").default(false), // 서류 제출 의무 동의 (헬퍼)
+  agreedVehicleMgmt: boolean("agreed_vehicle_mgmt").default(false), // 차량 관리 동의 (헬퍼)
+  agreedFalseDoc: boolean("agreed_false_doc").default(false), // 허위 서류 법적 책임 동의 (헬퍼)
+  agreedLatePaymentAt: timestamp("agreed_late_payment_at"), // 동의 시각
+  agreedDebtCollectionAt: timestamp("agreed_debt_collection_at"),
+  agreedJointGuaranteeAt: timestamp("agreed_joint_guarantee_at"),
+  agreedDocObligationAt: timestamp("agreed_doc_obligation_at"),
+  agreedVehicleMgmtAt: timestamp("agreed_vehicle_mgmt_at"),
+  agreedFalseDocAt: timestamp("agreed_false_doc_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1577,6 +1590,15 @@ export const payments = pgTable("payments", {
   refundReason: text("refund_reason"),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
+  // 연체 관리 (Phase 2)
+  overdueStatus: text("overdue_status").default("normal"), // normal, warning, overdue, collection, legal
+  overdueDays: integer("overdue_days").default(0), // 연체 일수
+  lateInterest: numeric("late_interest", { precision: 10, scale: 2 }).default("0"), // 지연손해금 (연 15%)
+  reminderSentCount: integer("reminder_sent_count").default(0), // 독촉 발송 횟수
+  lastReminderSentAt: timestamp("last_reminder_sent_at"), // 마지막 독촉 발송 시각
+  serviceRestrictedAt: timestamp("service_restricted_at"), // 서비스 제한 시작 시각
+  collectionStartedAt: timestamp("collection_started_at"), // 추심 위탁 시작 시각
+  legalActionStartedAt: timestamp("legal_action_started_at"), // 법적 조치 시작 시각
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
