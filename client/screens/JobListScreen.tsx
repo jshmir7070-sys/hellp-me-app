@@ -190,7 +190,7 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
                 styles.filterChipText,
                 {
                   color: (selectedCategory === cat || (cat === '전체' && !selectedCategory))
-                    ? '#FFFFFF'
+                    ? Colors.light.buttonText
                     : theme.text,
                 },
               ]}
@@ -228,14 +228,14 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
             <View style={[styles.summaryDivider, { backgroundColor: theme.backgroundDefault }]} />
             <View style={styles.summaryItem}>
               <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>매칭완료</ThemedText>
-              <ThemedText style={[styles.summaryValue, { color: '#10B981' }]}>
+              <ThemedText style={[styles.summaryValue, { color: BrandColors.success }]}>
                 {decidedApplications.filter(a => a.applicationStatus === 'accepted').length}건
               </ThemedText>
             </View>
             <View style={[styles.summaryDivider, { backgroundColor: theme.backgroundDefault }]} />
             <View style={styles.summaryItem}>
               <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>미선정</ThemedText>
-              <ThemedText style={[styles.summaryValue, { color: '#EF4444' }]}>
+              <ThemedText style={[styles.summaryValue, { color: BrandColors.error }]}>
                 {decidedApplications.filter(a => a.applicationStatus === 'rejected').length}건
               </ThemedText>
             </View>

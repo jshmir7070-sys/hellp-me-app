@@ -467,7 +467,7 @@ export default function HelpScreen({ navigation }: HelpScreenProps) {
           style={[styles.contactButton, { backgroundColor: primaryColor }]}
           onPress={() => navigation.navigate('Support')}
         >
-          <Icon name="chatbox-outline" size={18} color="#FFFFFF" />
+          <Icon name="chatbox-outline" size={18} color={Colors.light.buttonText} />
           <ThemedText style={styles.contactButtonText}>자주 묻는 질문 보기</ThemedText>
         </Pressable>
       </Card>
@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
   },
   contactButtonText: {
     ...Typography.body,
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     fontWeight: '600',
   },
 });

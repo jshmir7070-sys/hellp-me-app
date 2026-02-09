@@ -43,7 +43,7 @@ export default function PaymentSettingsScreen() {
   const [showBankPicker, setShowBankPicker] = useState(false);
 
   const { data, isLoading, error } = useQuery<BankAccount | null>({
-    queryKey: ['/api/helpers/bank-account'],
+    queryKey: ['/api/helpers/me/bank-account'],
     enabled: isHelper,
     retry: false,
   });
@@ -60,11 +60,11 @@ export default function PaymentSettingsScreen() {
 
   const mutation = useMutation({
     mutationFn: async (payload: { bankName: string; accountNumber: string; accountHolder: string }) => {
-      const res = await apiRequest('POST', '/api/helpers/bank-account', payload);
+      const res = await apiRequest('POST', '/api/helpers/me/bank-account', payload);
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/helpers/bank-account'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/helpers/me/bank-account'] });
       if (Platform.OS !== 'web') {
         Alert.alert('알림', '정산 계좌가 저장되었습니다.');
       }
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveButtonText: {
-    color: '#fff',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },

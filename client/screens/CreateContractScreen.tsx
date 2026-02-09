@@ -40,9 +40,21 @@ export default function CreateContractScreen({ route, navigation }: Props) {
   const queryClient = useQueryClient();
   const { width: screenWidth } = useWindowDimensions();
   const [agreed, setAgreed] = useState(false);
+
+  // Phase 2: 개별 동의 항목
+  const [agreeTransportBroker, setAgreeTransportBroker] = useState(false);
+  const [agreePaymentStructure, setAgreePaymentStructure] = useState(false);
+  const [agreeBalanceRecalc, setAgreeBalanceRecalc] = useState(false);
+  const [agreeRefundPolicy, setAgreeRefundPolicy] = useState(false);
+  const [agreeContactShare, setAgreeContactShare] = useState(false);
+  const [agreeDirectDealProhibit, setAgreeDirectDealProhibit] = useState(false);
+  const [agreeLatePayment, setAgreeLatePayment] = useState(false); // 연체이자
+  const [agreeDebtCollection, setAgreeDebtCollection] = useState(false); // 채권추심
+  const [agreeJointGuarantee, setAgreeJointGuarantee] = useState(false); // 연대보증
+
   const [step, setStep] = useState<PaymentStep>('contract');
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
-  
+
   const [hasSignature, setHasSignature] = useState(false);
   const [signatureData, setSignatureData] = useState<string | null>(null);
   
@@ -94,10 +106,32 @@ export default function CreateContractScreen({ route, navigation }: Props) {
     vat: breakdown.vatAmount
   } : { total: 0, totalWithVat: 0, deposit: 0, balance: 0, vat: 0 };
 
+  // Phase 2: 모든 필수 항목 동의 확인
+  const allTermsAgreed = agreeTransportBroker &&
+                         agreePaymentStructure &&
+                         agreeBalanceRecalc &&
+                         agreeRefundPolicy &&
+                         agreeContactShare &&
+                         agreeDirectDealProhibit &&
+                         agreeLatePayment &&
+                         agreeDebtCollection &&
+                         (requesterProfile?.businessType === 'corporation' ? agreeJointGuarantee : true);
+
   const confirmMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest('POST', `/api/orders/${orderId}/confirm-contract`, {
-        agreed: true,
+        agreed: allTermsAgreed,
+        // Phase 2: 개별 동의 항목 전송
+        agreeTransportBroker,
+        agreePaymentStructure,
+        agreeBalanceRecalc,
+        agreeRefundPolicy,
+        agreeContactShare,
+        agreeDirectDealProhibit,
+        agreeLatePayment,
+        agreeDebtCollection,
+        agreeJointGuarantee: requesterProfile?.businessType === 'corporation' ? agreeJointGuarantee : null,
+        agreedAt: new Date().toISOString(),
         depositAmount: amounts.deposit,
         balancePaymentDate: format(balancePaymentDate, 'yyyy-MM-dd'),
         requestTaxInvoice,
@@ -376,7 +410,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
           </ThemedText>
         </View>
         
-        <View style={[styles.amountRow, { borderTopWidth: 1, borderTopColor: '#E0E0E0', paddingTop: Spacing.md }]}>
+        <View style={[styles.amountRow, { borderTopWidth: 1, borderTopColor: Colors.light.backgroundTertiary, paddingTop: Spacing.md }]}>
           <ThemedText style={[styles.label, { color: theme.text, fontWeight: '600' }]}>
             총 금액 (VAT 포함)
           </ThemedText>
@@ -385,7 +419,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
           </ThemedText>
         </View>
         
-        <View style={[styles.amountRow, styles.highlightRow, { backgroundColor: isDark ? '#1a365d' : '#EBF8FF' }]}>
+        <View style={[styles.amountRow, styles.highlightRow, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : BrandColors.helperLight }]}>
           <View>
             <ThemedText style={[styles.label, { color: BrandColors.requester }]}>
               계약금 (20%)
@@ -413,17 +447,17 @@ export default function CreateContractScreen({ route, navigation }: Props) {
           </ThemedText>
         </View>
         
-        <View style={[styles.amountRow, { borderTopWidth: 1, borderTopColor: '#E0E0E0', paddingTop: Spacing.md }]}>
+        <View style={[styles.amountRow, { borderTopWidth: 1, borderTopColor: Colors.light.backgroundTertiary, paddingTop: Spacing.md }]}>
           <View>
             <ThemedText style={[styles.label, { color: theme.text, fontWeight: '600' }]}>
-              잔금입금일 <ThemedText style={{ color: '#EF4444' }}>*</ThemedText>
+              잔금입금일 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
             <ThemedText style={[styles.hint, { color: Colors.light.tabIconDefault }]}>
               잔금 입금 예정일 (필수)
             </ThemedText>
           </View>
           <Pressable 
-            style={[styles.datePickerButton, { borderColor: isDark ? '#4A5568' : '#E0E0E0' }]}
+            style={[styles.datePickerButton, { borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundTertiary }]}
             onPress={() => setShowDatePicker(true)}
           >
             <Icon name="calendar-outline" size={18} color={BrandColors.requester} />
@@ -433,7 +467,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
           </Pressable>
         </View>
 
-        <View style={[styles.amountRow, { borderTopWidth: 1, borderTopColor: '#E0E0E0', paddingTop: Spacing.md }]}>
+        <View style={[styles.amountRow, { borderTopWidth: 1, borderTopColor: Colors.light.backgroundTertiary, paddingTop: Spacing.md }]}>
           <View style={{ flex: 1 }}>
             <ThemedText style={[styles.label, { color: theme.text, fontWeight: '600' }]}>
               세금계산서 발행 요청
@@ -443,25 +477,25 @@ export default function CreateContractScreen({ route, navigation }: Props) {
             </ThemedText>
           </View>
           <Pressable 
-            style={[styles.checkboxContainer, { borderColor: requestTaxInvoice ? BrandColors.requester : (isDark ? '#4A5568' : '#E0E0E0') }]}
+            style={[styles.checkboxContainer, { borderColor: requestTaxInvoice ? BrandColors.requester : (isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundTertiary) }]}
             onPress={() => setRequestTaxInvoice(!requestTaxInvoice)}
           >
             {requestTaxInvoice ? (
               <Icon name="checkbox" size={24} color={BrandColors.requester} />
             ) : (
-              <Icon name="square-outline" size={24} color={isDark ? '#4A5568' : '#9CA3AF'} />
+              <Icon name="square-outline" size={24} color={isDark ? 'Colors.light.textSecondary' : 'Colors.light.textTertiary'} />
             )}
           </Pressable>
         </View>
 
         {requestTaxInvoice && !requesterProfile?.businessNumber && (
-          <View style={[styles.warningBox, { backgroundColor: isDark ? '#7C2D12' : '#FEF3C7' }]}>
-            <Icon name="warning-outline" size={20} color="#D97706" />
+          <View style={[styles.warningBox, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : BrandColors.warningLight }]}>
+            <Icon name="warning-outline" size={20} color="BrandColors.warning" />
             <View style={{ flex: 1, marginLeft: Spacing.sm }}>
-              <ThemedText style={[styles.warningText, { color: '#92400E' }]}>
+              <ThemedText style={[styles.warningText, { color: BrandColors.warning }]}>
                 사업자정보가 등록되지 않았습니다
               </ThemedText>
-              <ThemedText style={[styles.warningHint, { color: '#B45309' }]}>
+              <ThemedText style={[styles.warningHint, { color: 'BrandColors.warning' }]}>
                 세금계산서 발행을 위해 나의정보에서 사업자정보를 등록해주세요
               </ThemedText>
             </View>
@@ -474,7 +508,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
           당사자 정보
         </ThemedText>
         
-        <View style={[styles.partySection, { backgroundColor: isDark ? '#1a365d' : '#EBF8FF', marginBottom: Spacing.md }]}>
+        <View style={[styles.partySection, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : BrandColors.helperLight, marginBottom: Spacing.md }]}>
           <ThemedText style={[styles.partyTitle, { color: BrandColors.requester }]}>플랫폼(회사)</ThemedText>
           <View style={styles.partyRow}>
             <ThemedText style={[styles.partyLabel, { color: Colors.light.tabIconDefault }]}>상호</ThemedText>
@@ -486,7 +520,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
           </View>
         </View>
 
-        <View style={[styles.partySection, { backgroundColor: isDark ? '#1c4532' : '#F0FFF4' }]}>
+        <View style={[styles.partySection, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : BrandColors.successLight }]}>
           <ThemedText style={[styles.partyTitle, { color: BrandColors.requester }]}>요청자(화주)</ThemedText>
           <View style={styles.partyRow}>
             <ThemedText style={[styles.partyLabel, { color: Colors.light.tabIconDefault }]}>상호/성명</ThemedText>
@@ -505,50 +539,141 @@ export default function CreateContractScreen({ route, navigation }: Props) {
 
       <Card variant="glass" padding="lg" style={styles.card}>
         <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
-          필수 동의사항
+          필수 동의사항 (모두 체크 필수)
         </ThemedText>
-        
+
         <View style={styles.termsList}>
-          <View style={styles.termItem}>
-            <Icon name="checkmark-circle-outline" size={16} color={BrandColors.requester} />
+          {/* 1. 운송주선 사업자 이해 */}
+          <Pressable style={styles.termItem} onPress={() => setAgreeTransportBroker(!agreeTransportBroker)}>
+            <View style={[
+              styles.checkbox,
+              { borderColor: agreeTransportBroker ? BrandColors.requester : Colors.light.tabIconDefault },
+              agreeTransportBroker && { backgroundColor: BrandColors.requester }
+            ]}>
+              {agreeTransportBroker ? <Icon name="checkmark-outline" size={14} color="#fff" /> : null}
+            </View>
             <ThemedText style={[styles.termText, { color: theme.text }]}>
               플랫폼이 "운송주선 사업자"이며, 직접 운송이 아닌 기사(헬퍼)가 수행함을 이해하고 동의합니다.
             </ThemedText>
-          </View>
-          <View style={styles.termItem}>
-            <Icon name="checkmark-circle-outline" size={16} color={BrandColors.requester} />
+          </Pressable>
+
+          {/* 2. 결제 구조 동의 */}
+          <Pressable style={styles.termItem} onPress={() => setAgreePaymentStructure(!agreePaymentStructure)}>
+            <View style={[
+              styles.checkbox,
+              { borderColor: agreePaymentStructure ? BrandColors.requester : Colors.light.tabIconDefault },
+              agreePaymentStructure && { backgroundColor: BrandColors.requester }
+            ]}>
+              {agreePaymentStructure ? <Icon name="checkmark-outline" size={14} color="#fff" /> : null}
+            </View>
             <ThemedText style={[styles.termText, { color: theme.text }]}>
               본 오더의 결제 구조가 "계약금 20% + 잔금 80%"임에 동의합니다.
             </ThemedText>
-          </View>
-          <View style={styles.termItem}>
-            <Icon name="checkmark-circle-outline" size={16} color={BrandColors.requester} />
+          </Pressable>
+
+          {/* 3. 잔금 재산정 동의 */}
+          <Pressable style={styles.termItem} onPress={() => setAgreeBalanceRecalc(!agreeBalanceRecalc)}>
+            <View style={[
+              styles.checkbox,
+              { borderColor: agreeBalanceRecalc ? BrandColors.requester : Colors.light.tabIconDefault },
+              agreeBalanceRecalc && { backgroundColor: BrandColors.requester }
+            ]}>
+              {agreeBalanceRecalc ? <Icon name="checkmark-outline" size={14} color="#fff" /> : null}
+            </View>
             <ThemedText style={[styles.termText, { color: theme.text }]}>
               잔금이 "마감자료(증빙) 기준"으로 재산정될 수 있음에 동의합니다.
             </ThemedText>
-          </View>
-          <View style={styles.termItem}>
-            <Icon name="checkmark-circle-outline" size={16} color={BrandColors.requester} />
+          </Pressable>
+
+          {/* 4. 환불 정책 동의 */}
+          <Pressable style={styles.termItem} onPress={() => setAgreeRefundPolicy(!agreeRefundPolicy)}>
+            <View style={[
+              styles.checkbox,
+              { borderColor: agreeRefundPolicy ? BrandColors.requester : Colors.light.tabIconDefault },
+              agreeRefundPolicy && { backgroundColor: BrandColors.requester }
+            ]}>
+              {agreeRefundPolicy ? <Icon name="checkmark-outline" size={14} color="#fff" /> : null}
+            </View>
             <ThemedText style={[styles.termText, { color: theme.text }]}>
               환불 정책에 동의합니다. (매칭 전: 100% 환불 / 매칭 후: 환불 불가)
             </ThemedText>
-          </View>
-          <View style={styles.termItem}>
-            <Icon name="checkmark-circle-outline" size={16} color={BrandColors.requester} />
+          </Pressable>
+
+          {/* 5. 연락처 제공 동의 */}
+          <Pressable style={styles.termItem} onPress={() => setAgreeContactShare(!agreeContactShare)}>
+            <View style={[
+              styles.checkbox,
+              { borderColor: agreeContactShare ? BrandColors.requester : Colors.light.tabIconDefault },
+              agreeContactShare && { backgroundColor: BrandColors.requester }
+            ]}>
+              {agreeContactShare ? <Icon name="checkmark-outline" size={14} color="#fff" /> : null}
+            </View>
             <ThemedText style={[styles.termText, { color: theme.text }]}>
               매칭 완료 시 기사에게 업무 수행 목적의 연락처가 제공될 수 있음에 동의합니다.
             </ThemedText>
-          </View>
-          <View style={styles.termItem}>
-            <Icon name="checkmark-circle-outline" size={16} color={BrandColors.requester} />
+          </Pressable>
+
+          {/* 6. 직거래 금지 동의 */}
+          <Pressable style={styles.termItem} onPress={() => setAgreeDirectDealProhibit(!agreeDirectDealProhibit)}>
+            <View style={[
+              styles.checkbox,
+              { borderColor: agreeDirectDealProhibit ? BrandColors.requester : Colors.light.tabIconDefault },
+              agreeDirectDealProhibit && { backgroundColor: BrandColors.requester }
+            ]}>
+              {agreeDirectDealProhibit ? <Icon name="checkmark-outline" size={14} color="#fff" /> : null}
+            </View>
             <ThemedText style={[styles.termText, { color: theme.text }]}>
               플랫폼 외 직거래 금지 및 위반 시 이용제한/손해배상에 동의합니다.
             </ThemedText>
-          </View>
+          </Pressable>
+
+          {/* 7. 연체이자 조항 동의 (NEW - Phase 2) */}
+          <Pressable style={styles.termItem} onPress={() => setAgreeLatePayment(!agreeLatePayment)}>
+            <View style={[
+              styles.checkbox,
+              { borderColor: agreeLatePayment ? BrandColors.requester : Colors.light.tabIconDefault },
+              agreeLatePayment && { backgroundColor: BrandColors.requester }
+            ]}>
+              {agreeLatePayment ? <Icon name="checkmark-outline" size={14} color="#fff" /> : null}
+            </View>
+            <ThemedText style={[styles.termText, { color: theme.text }]}>
+              잔금 미납 시 연체이자(연 15%, 일할 계산) 발생에 동의합니다.
+            </ThemedText>
+          </Pressable>
+
+          {/* 8. 채권추심 조항 동의 (NEW - Phase 2) */}
+          <Pressable style={styles.termItem} onPress={() => setAgreeDebtCollection(!agreeDebtCollection)}>
+            <View style={[
+              styles.checkbox,
+              { borderColor: agreeDebtCollection ? BrandColors.requester : Colors.light.tabIconDefault },
+              agreeDebtCollection && { backgroundColor: BrandColors.requester }
+            ]}>
+              {agreeDebtCollection ? <Icon name="checkmark-outline" size={14} color="#fff" /> : null}
+            </View>
+            <ThemedText style={[styles.termText, { color: theme.text }]}>
+              연체 시 독촉→서비스제한→신용등록→추심위탁→법적조치 진행에 동의합니다.
+            </ThemedText>
+          </Pressable>
+
+          {/* 9. 연대보증 조항 동의 (NEW - Phase 2, 법인만 해당) */}
+          {requesterProfile?.businessType === 'corporation' && (
+            <Pressable style={styles.termItem} onPress={() => setAgreeJointGuarantee(!agreeJointGuarantee)}>
+              <View style={[
+                styles.checkbox,
+                { borderColor: agreeJointGuarantee ? BrandColors.requester : Colors.light.tabIconDefault },
+                agreeJointGuarantee && { backgroundColor: BrandColors.requester }
+              ]}>
+                {agreeJointGuarantee ? <Icon name="checkmark-outline" size={14} color="#fff" /> : null}
+              </View>
+              <ThemedText style={[styles.termText, { color: theme.text }]}>
+                법인 대표자로서 연대보증 책임에 동의합니다.
+              </ThemedText>
+            </Pressable>
+          )}
         </View>
       </Card>
 
-      <Card variant="glass" padding="lg" style={[styles.card, { backgroundColor: isDark ? '#2d3748' : '#F7FAFC' }]}>
+      <Card variant="glass" padding="lg" style={[styles.card, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundRoot }]}>
         <ThemedText style={[styles.signDateText, { color: theme.tabIconDefault }]}>
           서명일: {format(new Date(), 'yyyy년 M월 d일', { locale: ko })}
         </ThemedText>
@@ -559,7 +684,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
         onPress={() => setAgreed(!agreed)}
       >
         <View style={[
-          styles.checkbox, 
+          styles.checkbox,
           { borderColor: agreed ? BrandColors.requester : Colors.light.tabIconDefault },
           agreed && { backgroundColor: BrandColors.requester }
         ]}>
@@ -573,8 +698,8 @@ export default function CreateContractScreen({ route, navigation }: Props) {
       <View style={styles.buttonContainer}>
         <Button
           onPress={handleProceedToSignature}
-          disabled={!agreed}
-          style={{ backgroundColor: agreed ? BrandColors.requester : Colors.light.tabIconDefault }}
+          disabled={!allTermsAgreed || !agreed}
+          style={{ backgroundColor: (allTermsAgreed && agreed) ? BrandColors.requester : Colors.light.tabIconDefault }}
         >
           다음: 전자서명
         </Button>
@@ -680,9 +805,9 @@ export default function CreateContractScreen({ route, navigation }: Props) {
             style={[
               styles.phoneInput,
               { 
-                backgroundColor: isDark ? '#1a1a2e' : '#F5F5F5',
+                backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundSecondary,
                 color: theme.text,
-                borderColor: isDark ? '#444' : '#E0E0E0',
+                borderColor: isDark ? '#444' : Colors.light.backgroundTertiary,
               }
             ]}
             placeholder="010-0000-0000"
@@ -716,9 +841,9 @@ export default function CreateContractScreen({ route, navigation }: Props) {
                 style={[
                   styles.phoneInput,
                   { 
-                    backgroundColor: isDark ? '#1a1a2e' : '#F5F5F5',
+                    backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundSecondary,
                     color: theme.text,
-                    borderColor: isVerified ? BrandColors.requester : (isDark ? '#444' : '#E0E0E0'),
+                    borderColor: isVerified ? BrandColors.requester : (isDark ? '#444' : Colors.light.backgroundTertiary),
                   }
                 ]}
                 placeholder="6자리 숫자"
@@ -794,7 +919,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
       </Card>
 
       <Card variant="glass" padding="lg" style={styles.card}>
-        <View style={[styles.paymentSummary, { backgroundColor: isDark ? '#1a365d' : '#EBF8FF' }]}>
+        <View style={[styles.paymentSummary, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : BrandColors.helperLight }]}>
           <ThemedText style={[styles.paymentLabel, { color: Colors.light.tabIconDefault }]}>
             결제 금액
           </ThemedText>
@@ -889,8 +1014,8 @@ export default function CreateContractScreen({ route, navigation }: Props) {
         
         <View style={styles.nextSteps}>
           <View style={styles.nextStepItem}>
-            <View style={[styles.nextStepNumber, { backgroundColor: '#FEF3C7' }]}>
-              <ThemedText style={{ color: '#D97706', fontWeight: '700' }}>1</ThemedText>
+            <View style={[styles.nextStepNumber, { backgroundColor: BrandColors.warningLight }]}>
+              <ThemedText style={{ color: 'BrandColors.warning', fontWeight: '700' }}>1</ThemedText>
             </View>
             <View style={styles.nextStepContent}>
               <ThemedText style={[styles.nextStepTitle, { color: theme.text }]}>
@@ -903,8 +1028,8 @@ export default function CreateContractScreen({ route, navigation }: Props) {
           </View>
           
           <View style={styles.nextStepItem}>
-            <View style={[styles.nextStepNumber, { backgroundColor: '#DBEAFE' }]}>
-              <ThemedText style={{ color: '#2563EB', fontWeight: '700' }}>2</ThemedText>
+            <View style={[styles.nextStepNumber, { backgroundColor: BrandColors.helperLight }]}>
+              <ThemedText style={{ color: 'BrandColors.primaryLight', fontWeight: '700' }}>2</ThemedText>
             </View>
             <View style={styles.nextStepContent}>
               <ThemedText style={[styles.nextStepTitle, { color: theme.text }]}>
@@ -917,8 +1042,8 @@ export default function CreateContractScreen({ route, navigation }: Props) {
           </View>
           
           <View style={styles.nextStepItem}>
-            <View style={[styles.nextStepNumber, { backgroundColor: '#D1FAE5' }]}>
-              <ThemedText style={{ color: '#059669', fontWeight: '700' }}>3</ThemedText>
+            <View style={[styles.nextStepNumber, { backgroundColor: BrandColors.successLight }]}>
+              <ThemedText style={{ color: 'BrandColors.success', fontWeight: '700' }}>3</ThemedText>
             </View>
             <View style={styles.nextStepContent}>
               <ThemedText style={[styles.nextStepTitle, { color: theme.text }]}>
@@ -1004,9 +1129,9 @@ export default function CreateContractScreen({ route, navigation }: Props) {
                   padding: 16,
                   fontSize: 18,
                   borderRadius: 8,
-                  border: `1px solid ${isDark ? '#4A5568' : '#E0E0E0'}`,
-                  backgroundColor: isDark ? '#2D3748' : '#FFFFFF',
-                  color: isDark ? '#FFFFFF' : '#1A202C',
+                  border: `1px solid ${isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundTertiary}`,
+                  backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.buttonText,
+                  color: isDark ? Colors.light.buttonText : Colors.light.text,
                   marginBottom: 16,
                 }}
               />
@@ -1122,7 +1247,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: Colors.light.backgroundTertiary,
   },
   label: {
     ...Typography.small,
@@ -1137,7 +1262,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: Colors.light.backgroundTertiary,
   },
   highlightRow: {
     marginHorizontal: -Spacing.lg,
@@ -1251,23 +1376,23 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: Colors.light.backgroundTertiary,
     justifyContent: 'center',
     alignItems: 'center',
   },
   activeStep: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: BrandColors.primaryLight,
   },
   completedStep: {
-    backgroundColor: '#059669',
+    backgroundColor: 'BrandColors.success',
   },
   stepLine: {
     width: 50,
     height: 2,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: Colors.light.backgroundTertiary,
   },
   completedLine: {
-    backgroundColor: '#059669',
+    backgroundColor: 'BrandColors.success',
   },
   stepNumber: {
     fontSize: 14,
@@ -1400,7 +1525,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     marginTop: Spacing.lg,
     padding: Spacing.md,
-    backgroundColor: '#D1FAE5',
+    backgroundColor: BrandColors.successLight,
     borderRadius: BorderRadius.sm,
   },
   verifiedText: {
@@ -1445,7 +1570,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   datePickerDoneText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     fontWeight: '600',
     fontSize: 16,
   },

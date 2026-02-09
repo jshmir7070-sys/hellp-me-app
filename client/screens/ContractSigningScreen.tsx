@@ -87,6 +87,24 @@ const CONTRACT_CONTENT = `운송주선 플랫폼 근무(업무수행) 기본계�
 제10조 (준거법/관할)
 
 본 계약은 대한민국 법령을 따르며, 분쟁 시 플랫폼 소재지 관할 법원을 전속 관할로 합니다.
+
+
+제11조 (서류 제출 의무) ⭐ Phase 2 추가
+
+기사는 플랫폼이 요구하는 서류(신분증, 차량등록증, 운전면허증, 보험증권 등)를 정해진 기한 내에 제출해야 합니다.
+서류 미제출 또는 지연 제출 시 계약 체결이 불가하거나 업무 배정이 제한될 수 있습니다.
+
+
+제12조 (차량 정보 관리 의무) ⭐ Phase 2 추가
+
+기사는 등록한 차량 정보(차종, 번호, 보험 등)를 최신 상태로 유지해야 하며, 변경 사항 발생 시 즉시 플랫폼에 고지해야 합니다.
+허위 차량 정보 등록 또는 미고지로 인한 사고 발생 시 모든 책임은 기사에게 있습니다.
+
+
+제13조 (허위 서류 제출 시 법적 책임) ⭐ Phase 2 추가
+
+기사가 허위 또는 위조된 서류를 제출할 경우, 계약은 즉시 해지되며 플랫폼은 손해배상을 청구할 수 있습니다.
+또한 관련 법령(문서위조죄, 사기죄 등)에 따라 형사 고소될 수 있음을 유념하시기 바랍니다.
 `;
 
 export default function ContractSigningScreen({ navigation }: ContractSigningScreenProps) {
@@ -103,6 +121,10 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
   const [agreePrivacy, setAgreePrivacy] = useState(false);
   const [agreeMarketing, setAgreeMarketing] = useState(false);
   const [agreePush, setAgreePush] = useState(false);
+  // Phase 2: 헬퍼 서류 관련 동의 항목
+  const [agreeDocObligation, setAgreeDocObligation] = useState(false);
+  const [agreeVehicleMgmt, setAgreeVehicleMgmt] = useState(false);
+  const [agreeFalseDoc, setAgreeFalseDoc] = useState(false);
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [signatureComplete, setSignatureComplete] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -123,7 +145,7 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
     try {
       const token = await AsyncStorage.getItem('auth_token');
       const response = await fetch(
-        new URL('/api/identity/request', getApiUrl()).toString(),
+        new URL('/api/auth/create-identity-verification', getApiUrl()).toString(),
         {
           method: 'POST',
           headers: {
@@ -164,7 +186,7 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
     }
   };
 
-  const allRequiredAgreed = agreeContract && agreeClosing && agreeAccident && agreeNoDirect && agreePrivacy;
+  const allRequiredAgreed = agreeContract && agreeClosing && agreeAccident && agreeNoDirect && agreePrivacy && agreeDocObligation && agreeVehicleMgmt && agreeFalseDoc;
 
   const canSubmit = () => {
     return hasReadContract && allRequiredAgreed && phoneVerified && signatureComplete;
@@ -189,6 +211,18 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
             contractSigned: true,
             phoneVerified: true,
             signedAt: new Date().toISOString(),
+            // 개별 동의 항목 (Phase 2)
+            agreeContract,
+            agreeClosing,
+            agreeAccident,
+            agreeNoDirect,
+            agreePrivacy,
+            agreeDocObligation,
+            agreeVehicleMgmt,
+            agreeFalseDoc,
+            // 선택 항목
+            agreeMarketing,
+            agreePush,
           }),
         }
       );
@@ -291,33 +325,37 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
               setAgreeAccident(newValue);
               setAgreeNoDirect(newValue);
               setAgreePrivacy(newValue);
+              // Phase 2
+              setAgreeDocObligation(newValue);
+              setAgreeVehicleMgmt(newValue);
+              setAgreeFalseDoc(newValue);
             }}
           >
             <View style={[
               styles.checkbox,
               { 
                 backgroundColor: allAgreed ? BrandColors.helper : 'transparent',
-                borderColor: allAgreed ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+                borderColor: allAgreed ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
               }
             ]}>
-              {allAgreed ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+              {allAgreed ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
             </View>
             <ThemedText style={[styles.checkboxLabel, { color: theme.text, fontWeight: '600' }]}>
               필수 항목 전체 동의
             </ThemedText>
           </Pressable>
 
-          <View style={[styles.divider, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]} />
+          <View style={[styles.divider, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]} />
 
           <Pressable style={styles.checkboxRow} onPress={() => setAgreeContract(!agreeContract)}>
             <View style={[
               styles.checkbox,
               { 
                 backgroundColor: agreeContract ? BrandColors.helper : 'transparent',
-                borderColor: agreeContract ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+                borderColor: agreeContract ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
               }
             ]}>
-              {agreeContract ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+              {agreeContract ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
             </View>
             <View style={styles.checkboxContent}>
               <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
@@ -334,10 +372,10 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
               styles.checkbox,
               { 
                 backgroundColor: agreeClosing ? BrandColors.helper : 'transparent',
-                borderColor: agreeClosing ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+                borderColor: agreeClosing ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
               }
             ]}>
-              {agreeClosing ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+              {agreeClosing ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
             </View>
             <View style={styles.checkboxContent}>
               <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
@@ -354,10 +392,10 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
               styles.checkbox,
               { 
                 backgroundColor: agreeAccident ? BrandColors.helper : 'transparent',
-                borderColor: agreeAccident ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+                borderColor: agreeAccident ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
               }
             ]}>
-              {agreeAccident ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+              {agreeAccident ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
             </View>
             <View style={styles.checkboxContent}>
               <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
@@ -374,10 +412,10 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
               styles.checkbox,
               { 
                 backgroundColor: agreeNoDirect ? BrandColors.helper : 'transparent',
-                borderColor: agreeNoDirect ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+                borderColor: agreeNoDirect ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
               }
             ]}>
-              {agreeNoDirect ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+              {agreeNoDirect ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
             </View>
             <View style={styles.checkboxContent}>
               <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
@@ -394,10 +432,10 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
               styles.checkbox,
               { 
                 backgroundColor: agreePrivacy ? BrandColors.helper : 'transparent',
-                borderColor: agreePrivacy ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+                borderColor: agreePrivacy ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
               }
             ]}>
-              {agreePrivacy ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+              {agreePrivacy ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
             </View>
             <View style={styles.checkboxContent}>
               <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
@@ -409,8 +447,69 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
             </View>
           </Pressable>
 
-          <View style={[styles.divider, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0', marginTop: Spacing.md }]} />
-          
+          {/* Phase 2: 헬퍼 서류 관련 동의 항목 */}
+          <Pressable style={styles.checkboxRow} onPress={() => setAgreeDocObligation(!agreeDocObligation)}>
+            <View style={[
+              styles.checkbox,
+              {
+                backgroundColor: agreeDocObligation ? BrandColors.helper : 'transparent',
+                borderColor: agreeDocObligation ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
+              }
+            ]}>
+              {agreeDocObligation ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
+            </View>
+            <View style={styles.checkboxContent}>
+              <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
+                (필수) 서류 제출 의무 및 미제출 시 계약 제한에 동의합니다
+              </ThemedText>
+              <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
+                신분증, 차량등록증, 운전면허증, 보험증권 등 기한 내 제출 필수
+              </ThemedText>
+            </View>
+          </Pressable>
+
+          <Pressable style={styles.checkboxRow} onPress={() => setAgreeVehicleMgmt(!agreeVehicleMgmt)}>
+            <View style={[
+              styles.checkbox,
+              {
+                backgroundColor: agreeVehicleMgmt ? BrandColors.helper : 'transparent',
+                borderColor: agreeVehicleMgmt ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
+              }
+            ]}>
+              {agreeVehicleMgmt ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
+            </View>
+            <View style={styles.checkboxContent}>
+              <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
+                (필수) 차량 정보 최신 유지 및 변경사항 즉시 고지 의무에 동의합니다
+              </ThemedText>
+              <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
+                허위 정보 등록 또는 미고지로 인한 사고 시 모든 책임은 기사 본인에게 있음
+              </ThemedText>
+            </View>
+          </Pressable>
+
+          <Pressable style={styles.checkboxRow} onPress={() => setAgreeFalseDoc(!agreeFalseDoc)}>
+            <View style={[
+              styles.checkbox,
+              {
+                backgroundColor: agreeFalseDoc ? BrandColors.helper : 'transparent',
+                borderColor: agreeFalseDoc ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
+              }
+            ]}>
+              {agreeFalseDoc ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
+            </View>
+            <View style={styles.checkboxContent}>
+              <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
+                (필수) 허위 서류 제출 시 계약 해지 및 법적 책임에 동의합니다
+              </ThemedText>
+              <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
+                문서위조죄, 사기죄 등으로 형사 고소될 수 있으며, 손해배상 청구 대상
+              </ThemedText>
+            </View>
+          </Pressable>
+
+          <View style={[styles.divider, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary, marginTop: Spacing.md }]} />
+
           <ThemedText style={[styles.optionalTitle, { color: theme.tabIconDefault }]}>
             선택 항목
           </ThemedText>
@@ -420,10 +519,10 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
               styles.checkbox,
               { 
                 backgroundColor: agreeMarketing ? BrandColors.helper : 'transparent',
-                borderColor: agreeMarketing ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+                borderColor: agreeMarketing ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
               }
             ]}>
-              {agreeMarketing ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+              {agreeMarketing ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
             </View>
             <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
               (선택) 마케팅/혜택 안내 수신 동의
@@ -435,10 +534,10 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
               styles.checkbox,
               { 
                 backgroundColor: agreePush ? BrandColors.helper : 'transparent',
-                borderColor: agreePush ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+                borderColor: agreePush ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
               }
             ]}>
-              {agreePush ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+              {agreePush ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
             </View>
             <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
               (선택) 푸시 알림 수신 동의
@@ -526,7 +625,7 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
           style={[
             styles.submitButton,
             { 
-              backgroundColor: canSubmit() ? BrandColors.helper : '#9CA3AF',
+              backgroundColor: canSubmit() ? BrandColors.helper : 'Colors.light.textTertiary',
               opacity: isSubmitting ? 0.7 : 1,
             }
           ]}
@@ -534,10 +633,10 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
           disabled={isSubmitting || !canSubmit()}
         >
           {isSubmitting ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={Colors.light.buttonText} />
           ) : (
             <>
-              <Icon name="document-text-outline" size={20} color="#FFFFFF" />
+              <Icon name="document-text-outline" size={20} color={Colors.light.buttonText} />
               <ThemedText style={styles.submitButtonText}>계약 체결 완료</ThemedText>
             </>
           )}
@@ -662,7 +761,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: Colors.light.backgroundTertiary,
   },
   submitButton: {
     flexDirection: 'row',
@@ -673,7 +772,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   submitButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     fontSize: 16,
     fontWeight: '600',
   },

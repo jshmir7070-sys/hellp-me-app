@@ -333,7 +333,7 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
                   {
                     backgroundColor: theme.backgroundDefault,
                     color: theme.text,
-                    borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                    borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                   },
                 ]}
                 placeholder="서명을 입력하세요"
@@ -357,10 +357,10 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
             disabled={signMutation.isPending || !isAgreed || !signature}
           >
             {signMutation.isPending ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
+              <ActivityIndicator color={Colors.light.buttonText} size="small" />
             ) : (
               <>
-                <Icon name="create-outline" size={20} color="#FFFFFF" />
+                <Icon name="create-outline" size={20} color={Colors.light.buttonText} />
                 <ThemedText style={styles.signButtonText}>계약서 서명하기</ThemedText>
               </>
             )}
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   backButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },
@@ -473,9 +473,9 @@ const styles = StyleSheet.create({
     height: 60,
     marginTop: Spacing.sm,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: Colors.light.backgroundTertiary,
     borderRadius: BorderRadius.sm,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.light.backgroundDefault,
   },
   terms: {
     ...Typography.small,
@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    borderTopColor: Colors.light.backgroundSecondary,
   },
   signButton: {
     flexDirection: 'row',
@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   signButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },

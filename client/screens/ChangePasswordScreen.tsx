@@ -12,7 +12,7 @@ import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/query-client";
-import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
+import { Spacing, BorderRadius, Typography, BrandColors, Colors } from "@/constants/theme";
 
 type ChangePasswordScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -33,8 +33,8 @@ export default function ChangePasswordScreen({ navigation }: ChangePasswordScree
   const isHelper = user?.role === "helper";
   const primaryColor = isHelper ? BrandColors.helper : BrandColors.requester;
   
-  const inputBgColor = isDark ? "#1F1F1F" : "#F5F5F5";
-  const borderColor = isDark ? "#333333" : "#E0E0E0";
+  const inputBgColor = isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundSecondary;
+  const borderColor = isDark ? Colors.dark.backgroundTertiary : Colors.light.backgroundTertiary;
 
   const validateForm = () => {
     if (!currentPassword) {
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     ...Typography.small,
-    color: "#EF4444",
+    color: "BrandColors.error",
     marginBottom: Spacing.md,
   },
   submitButton: {

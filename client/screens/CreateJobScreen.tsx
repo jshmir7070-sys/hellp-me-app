@@ -484,9 +484,21 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
 
       const otherPricing = (categoryPricing as any)?.other || {};
       const otherDefaultPrice = otherPricing.boxPrice || 1500;
+
+      // 일최저운임 검증
+      const unitPrice = parseInt(otherCourierForm.unitPrice) || otherDefaultPrice;
+      const boxCount = parseInt(otherCourierForm.boxCount) || 1;
+      const totalPrice = unitPrice * boxCount;
+      const minDailyFee = otherPricing.minDailyFee || 0;
+
+      if (minDailyFee > 0 && totalPrice < minDailyFee) {
+        showError(`일최저운임 미달입니다. 최소 ${minDailyFee.toLocaleString()}원 이상이어야 합니다. (현재: ${totalPrice.toLocaleString()}원)`);
+        return;
+      }
+
       orderData = {
         companyName: otherCourierForm.companyName || "기타택배",
-        pricePerUnit: parseInt(otherCourierForm.unitPrice) || otherDefaultPrice,
+        pricePerUnit: unitPrice,
         averageQuantity: otherCourierForm.boxCount,
         scheduledDate: otherCourierForm.requestDate,
         endDate: otherCourierForm.requestDateEnd || otherCourierForm.requestDate,
@@ -530,9 +542,19 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
       const filteredWaypoints = coldTruckForm.waypoints.filter(w => w.trim());
       const coldPricing = (categoryPricing as any)?.cold || {};
       const coldDefaultPrice = coldPricing.minDailyFee || 100000;
+
+      // 일최저단가 검증
+      const recommendedFee = parseInt(coldTruckForm.recommendedFee) || coldDefaultPrice;
+      const minDailyFee = coldPricing.minDailyFee || 0;
+
+      if (minDailyFee > 0 && recommendedFee < minDailyFee) {
+        showError(`일최저단가 미달입니다. 최소 ${minDailyFee.toLocaleString()}원 이상이어야 합니다. (현재: ${recommendedFee.toLocaleString()}원)`);
+        return;
+      }
+
       orderData = {
         companyName: coldTruckForm.company || "냉탑전용",
-        pricePerUnit: parseInt(coldTruckForm.recommendedFee) || coldDefaultPrice,
+        pricePerUnit: recommendedFee,
         averageQuantity: "1",
         scheduledDate: coldTruckForm.requestDate,
         endDate: coldTruckForm.requestDateEnd || coldTruckForm.requestDate,
@@ -612,7 +634,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
           styles.selectButton,
           {
             backgroundColor: theme.backgroundDefault,
-            borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+            borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
           },
         ]}
         onPress={() => openSelectModal(label, options, onSelect)}
@@ -649,7 +671,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
           {
             backgroundColor: theme.backgroundDefault,
             color: theme.text,
-            borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+            borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
           },
         ]}
         placeholder={placeholder}
@@ -735,7 +757,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
             styles.dateInput,
             {
               backgroundColor: theme.backgroundDefault,
-              borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+              borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
               justifyContent: 'center',
             },
           ]}
@@ -755,7 +777,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
             styles.dateInput,
             {
               backgroundColor: theme.backgroundDefault,
-              borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+              borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
               justifyContent: 'center',
             },
           ]}
@@ -791,7 +813,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
             styles.imageUploadButton,
             {
               backgroundColor: theme.backgroundDefault,
-              borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+              borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
             },
           ]}
           onPress={pickImage}
@@ -806,16 +828,16 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
   );
 
   const renderUrgentCheckbox = (checked: boolean, onChange: (value: boolean) => void) => (
-    <View style={[styles.urgentBox, { backgroundColor: isDark ? '#4C0519' : '#FEE2E2', borderColor: isDark ? '#9F1239' : '#FECACA' }]}>
+    <View style={[styles.urgentBox, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : BrandColors.errorLight, borderColor: isDark ? 'BrandColors.error' : 'BrandColors.errorLight' }]}>
       <Switch
         value={checked}
         onValueChange={onChange}
-        trackColor={{ false: '#D1D5DB', true: BrandColors.error }}
-        thumbColor={checked ? '#FFFFFF' : '#F3F4F6'}
+        trackColor={{ false: Colors.light.backgroundSecondary, true: BrandColors.error }}
+        thumbColor={checked ? Colors.light.buttonText : Colors.light.backgroundSecondary}
       />
       <View style={styles.urgentTextContainer}>
         <Icon name="warning-outline" size={16} color={BrandColors.error} />
-        <ThemedText style={[styles.urgentText, { color: isDark ? '#FCA5A5' : '#991B1B' }]}>
+        <ThemedText style={[styles.urgentText, { color: isDark ? Colors.dark.textSecondary : BrandColors.error }]}>
           긴급 오더로 등록 (추가 요금 발생)
         </ThemedText>
       </View>
@@ -832,7 +854,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
             styles.tab,
             {
               backgroundColor: activeTab === tab ? BrandColors.requester : theme.backgroundDefault,
-              borderColor: activeTab === tab ? BrandColors.requester : '#E0E0E0',
+              borderColor: activeTab === tab ? BrandColors.requester : Colors.light.backgroundTertiary,
             },
           ]}
           onPress={() => setActiveTab(tab)}
@@ -840,7 +862,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
           <ThemedText
             style={[
               styles.tabText,
-              { color: activeTab === tab ? '#FFFFFF' : theme.text },
+              { color: activeTab === tab ? Colors.light.buttonText : theme.text },
             ]}
           >
             {tab}
@@ -904,23 +926,23 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
         </View>
 
         {selectedCourierMinFee > 0 && currentUnitPrice > 0 && currentUnitPrice < selectedCourierMinFee ? (
-          <View style={[styles.noticeBox, { backgroundColor: '#FEF3C7', borderColor: '#F59E0B' }]}>
-            <ThemedText style={{ color: '#92400E', fontSize: 12 }}>
+          <View style={[styles.noticeBox, { backgroundColor: BrandColors.warningLight, borderColor: BrandColors.warning }]}>
+            <ThemedText style={{ color: BrandColors.warning, fontSize: 12 }}>
               최저단가({selectedCourierMinFee.toLocaleString()}원) 미만입니다. 확인해주세요.
             </ThemedText>
           </View>
         ) : null}
 
         {minTotalCalcResult.minApplied && currentQuantity > 0 ? (
-          <View style={[styles.noticeBox, { backgroundColor: '#DBEAFE', borderColor: '#3B82F6' }]}>
-            <ThemedText style={{ color: '#1E40AF', fontSize: 12 }}>
+          <View style={[styles.noticeBox, { backgroundColor: BrandColors.helperLight, borderColor: BrandColors.primaryLight }]}>
+            <ThemedText style={{ color: BrandColors.primaryLight, fontSize: 12 }}>
               {minTotalCalcResult.message}
             </ThemedText>
           </View>
         ) : null}
 
         {currentQuantity > 0 && currentUnitPrice > 0 ? (
-          <View style={[styles.priceBox, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : '#F3F4F6' }]}>
+          <View style={[styles.priceBox, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundSecondary }]}>
             <View style={styles.priceRow}>
               <ThemedText style={[styles.priceLabel, { color: Colors.light.tabIconDefault }]}>
                 예상 합계 (VAT별도)
@@ -938,7 +960,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
               </ThemedText>
             </View>
             {minTotalCalcResult.minApplied ? (
-              <ThemedText style={{ color: '#6B7280', fontSize: 11, marginTop: 4 }}>
+              <ThemedText style={{ color: Colors.light.textSecondary, fontSize: 11, marginTop: 4 }}>
                 (최저운임 적용: 단가 {currentUnitPrice.toLocaleString()}원 → {minTotalCalcResult.finalPricePerBox.toLocaleString()}원)
               </ThemedText>
             ) : null}
@@ -983,7 +1005,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
           <View style={styles.regionRow}>
             <Pressable
               testID="select-region-large"
-              style={[styles.regionButton, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+              style={[styles.regionButton, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
               onPress={() => openSelectModal("대분류", regionLargeOptions, (v) => setCourierForm({ ...courierForm, regionLarge: v, regionMedium: "", regionSmall: "" }))}
             >
               <ThemedText style={[styles.regionButtonText, { color: courierForm.regionLarge ? theme.text : Colors.light.tabIconDefault }]}>
@@ -992,7 +1014,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
             </Pressable>
             <Pressable
               testID="select-region-medium"
-              style={[styles.regionButton, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0', opacity: courierForm.regionLarge ? 1 : 0.5 }]}
+              style={[styles.regionButton, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary, opacity: courierForm.regionLarge ? 1 : 0.5 }]}
               onPress={() => courierForm.regionLarge && openSelectModal("중분류", regionMediumOptions, (v) => setCourierForm({ ...courierForm, regionMedium: v, regionSmall: "" }))}
               disabled={!courierForm.regionLarge}
             >
@@ -1002,7 +1024,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
             </Pressable>
             <Pressable
               testID="select-region-small"
-              style={[styles.regionButton, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0', opacity: courierForm.regionMedium ? 1 : 0.5 }]}
+              style={[styles.regionButton, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary, opacity: courierForm.regionMedium ? 1 : 0.5 }]}
               onPress={() => courierForm.regionMedium && openSelectModal("소분류", regionSmallOptions, (v) => setCourierForm({ ...courierForm, regionSmall: v }))}
               disabled={!courierForm.regionMedium}
             >
@@ -1048,7 +1070,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
               {
                 backgroundColor: theme.backgroundDefault,
                 color: theme.text,
-                borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
               },
             ]}
             placeholder="배송 가이드 입력"
@@ -1070,10 +1092,10 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
               styles.checkbox,
               { 
                 backgroundColor: courierForm.agreeToSubmit ? BrandColors.requester : 'transparent',
-                borderColor: courierForm.agreeToSubmit ? BrandColors.requester : '#D1D5DB',
+                borderColor: courierForm.agreeToSubmit ? BrandColors.requester : Colors.light.backgroundSecondary,
               }
             ]}>
-              {courierForm.agreeToSubmit ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+              {courierForm.agreeToSubmit ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
             </View>
             <ThemedText style={[styles.consentText, { color: theme.text }]}>
               오더를 등록하시겠습니까? (동의 시 체크) <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
@@ -1097,10 +1119,10 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
         styles.checkbox,
         { 
           backgroundColor: checked ? BrandColors.requester : 'transparent',
-          borderColor: checked ? BrandColors.requester : '#D1D5DB',
+          borderColor: checked ? BrandColors.requester : Colors.light.backgroundSecondary,
         }
       ]}>
-        {checked ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+        {checked ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
       </View>
       <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>{label}</ThemedText>
     </Pressable>
@@ -1159,14 +1181,15 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
         <ThemedText style={[styles.label, { color: theme.text }]}>
           단가 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
         </ThemedText>
-        <View style={[styles.priceDisplayBox, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : '#F9FAFB' }]}>
+        <View style={[styles.priceDisplayBox, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : 'Colors.light.backgroundRoot' }]}>
           <ThemedText style={[styles.priceDisplayText, { color: theme.text }]}>
-            당일: 박스당 2500원, 착지당 4000원
+            당일: 박스당 {((categoryPricing as any)?.other?.boxPrice || 2500).toLocaleString()}원, 착지당 {((categoryPricing as any)?.other?.destinationPrice || 4000).toLocaleString()}원
           </ThemedText>
         </View>
         <ThemedText style={[styles.hint, { color: Colors.light.tabIconDefault }]}>
-          당일: 박스당 2500원, 착지당 4000원 최저 (200원 단위로 상승){'\n'}
+          당일: 박스당 {((categoryPricing as any)?.other?.boxPrice || 2500).toLocaleString()}원, 착지당 {((categoryPricing as any)?.other?.destinationPrice || 4000).toLocaleString()}원 최저 (200원 단위로 상승){'\n'}
           야간: 박스당 3000원, 착지당 4500원 최저 (500원 단위로 상승)
+          {((categoryPricing as any)?.other?.minDailyFee ? `\n일최저운임: ${((categoryPricing as any).other.minDailyFee).toLocaleString()}원` : '')}
         </ThemedText>
       </View>
 
@@ -1197,7 +1220,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
         <View style={styles.regionRow}>
           <Pressable
             testID="select-region-large-other"
-            style={[styles.regionButton, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+            style={[styles.regionButton, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
             onPress={() => {
               const options = Object.keys(regionData);
               openSelectModal("대분류", options, (v) => setOtherCourierForm({ ...otherCourierForm, regionLarge: v, regionMedium: "", regionSmall: "" }));
@@ -1210,7 +1233,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
           </Pressable>
           <Pressable
             testID="select-region-medium-other"
-            style={[styles.regionButton, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+            style={[styles.regionButton, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
             onPress={() => {
               if (!otherCourierForm.regionLarge) {
                 showError("대분류를 먼저 선택해주세요");
@@ -1227,7 +1250,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
           </Pressable>
           <Pressable
             testID="select-region-small-other"
-            style={[styles.regionButton, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+            style={[styles.regionButton, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
             onPress={() => {
               if (!otherCourierForm.regionMedium) {
                 showError("중분류를 먼저 선택해주세요");
@@ -1283,7 +1306,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
             {
               backgroundColor: theme.backgroundDefault,
               color: theme.text,
-              borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+              borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
             },
           ]}
           placeholder="배송 가이드 입력"
@@ -1305,10 +1328,10 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
             styles.checkbox,
             { 
               backgroundColor: otherCourierForm.agreeToSubmit ? BrandColors.requester : 'transparent',
-              borderColor: otherCourierForm.agreeToSubmit ? BrandColors.requester : '#D1D5DB',
+              borderColor: otherCourierForm.agreeToSubmit ? BrandColors.requester : Colors.light.backgroundSecondary,
             }
           ]}>
-            {otherCourierForm.agreeToSubmit ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+            {otherCourierForm.agreeToSubmit ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
           </View>
           <ThemedText style={[styles.consentText, { color: theme.text }]}>
             오더를 등록하시겠습니까? (동의 시 체크) <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
@@ -1410,7 +1433,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
                 {
                   backgroundColor: theme.backgroundDefault,
                   color: theme.text,
-                  borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                  borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                 },
               ]}
               placeholder={`경유지 ${index + 1}`}
@@ -1443,7 +1466,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
                 {
                   backgroundColor: theme.backgroundDefault,
                   color: theme.text,
-                  borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                  borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                 },
               ]}
               placeholder="운임"
@@ -1462,7 +1485,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
                 {
                   backgroundColor: theme.backgroundDefault,
                   color: theme.text,
-                  borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                  borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                 },
               ]}
               placeholder="200000"
@@ -1473,6 +1496,11 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
             />
           </View>
         </View>
+        {((categoryPricing as any)?.cold?.minDailyFee) && (
+          <ThemedText style={[styles.hint, { color: Colors.light.tabIconDefault, marginTop: 4 }]}>
+            일최저단가: {((categoryPricing as any).cold.minDailyFee).toLocaleString()}원
+          </ThemedText>
+        )}
       </View>
 
       {renderUrgentCheckbox(coldTruckForm.isUrgent, (v) => setColdTruckForm({ ...coldTruckForm, isUrgent: v }))}
@@ -1486,7 +1514,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
             {
               backgroundColor: theme.backgroundDefault,
               color: theme.text,
-              borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+              borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
             },
           ]}
           placeholder="배송 가이드 입력"
@@ -1508,10 +1536,10 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
             styles.checkbox,
             { 
               backgroundColor: coldTruckForm.agreeToSubmit ? BrandColors.requester : 'transparent',
-              borderColor: coldTruckForm.agreeToSubmit ? BrandColors.requester : '#D1D5DB',
+              borderColor: coldTruckForm.agreeToSubmit ? BrandColors.requester : Colors.light.backgroundSecondary,
             }
           ]}>
-            {coldTruckForm.agreeToSubmit ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+            {coldTruckForm.agreeToSubmit ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
           </View>
           <ThemedText style={[styles.consentText, { color: theme.text }]}>
             오더를 등록하시겠습니까? (동의 시 체크) <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
@@ -1562,7 +1590,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
               (activeTab === "냉탑전용" && !coldTruckForm.agreeToSubmit)}
           >
             {createJobMutation.isPending ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
+              <ActivityIndicator color={Colors.light.buttonText} size="small" />
             ) : (
               <ThemedText style={styles.submitButtonText}>요 청</ThemedText>
             )}
@@ -1571,7 +1599,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
             testID="button-cancel"
             style={[
               styles.cancelButton,
-              { borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' },
+              { borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary },
             ]}
             onPress={() => navigation.goBack()}
           >
@@ -1602,7 +1630,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
               keyExtractor={(item) => item}
               renderItem={({ item }) => (
                 <Pressable
-                  style={[styles.modalOption, { borderBottomColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+                  style={[styles.modalOption, { borderBottomColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
                   onPress={() => handleSelectOption(item)}
                 >
                   <ThemedText style={[styles.modalOptionText, { color: theme.text }]}>
@@ -1863,7 +1891,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: Colors.light.backgroundTertiary,
   },
   submitButton: {
     height: 52,
@@ -1872,7 +1900,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },
@@ -1892,7 +1920,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: Colors.light.backgroundTertiary,
   },
   modalTitle: {
     ...Typography.h4,
@@ -1953,7 +1981,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: Colors.light.backgroundTertiary,
   },
   datePickerTitle: {
     ...Typography.body,
@@ -2022,7 +2050,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.xs,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: Colors.light.backgroundTertiary,
     borderRadius: BorderRadius.xs,
   },
   consentSection: {
@@ -2054,7 +2082,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.light.backgroundDefault,
     borderWidth: 1,
   },
   cancelButtonText: {

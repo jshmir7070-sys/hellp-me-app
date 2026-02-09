@@ -158,7 +158,7 @@ export default function SettlementScreen({ navigation }: SettlementScreenProps) 
           <ThemedText
             style={[
               styles.dayText,
-              { color: isSelected ? '#FFFFFF' : theme.text },
+              { color: isSelected ? Colors.light.buttonText : theme.text },
               isWorkDay && !isSelected && { color: BrandColors.helper, fontWeight: '700' },
             ]}
           >
@@ -218,14 +218,14 @@ export default function SettlementScreen({ navigation }: SettlementScreenProps) 
                 <ThemedText style={[styles.summaryValue, { color: theme.text }]}>{formatCurrency(summaryData.totalAmount)}</ThemedText>
               </View>
               <View style={styles.summaryItem}>
-                <ThemedText style={[styles.summaryLabel, { color: '#F59E0B' }]}>수수료 ({summaryData.commissionRate || 0}%)</ThemedText>
-                <ThemedText style={[styles.summaryValue, { color: '#F59E0B' }]}>-{formatCurrency(summaryData.commissionAmount || 0)}</ThemedText>
+                <ThemedText style={[styles.summaryLabel, { color: BrandColors.warning }]}>수수료 ({summaryData.commissionRate || 0}%)</ThemedText>
+                <ThemedText style={[styles.summaryValue, { color: BrandColors.warning }]}>-{formatCurrency(summaryData.commissionAmount || 0)}</ThemedText>
               </View>
             </View>
             <View style={styles.summaryRow}>
               <View style={styles.summaryItem}>
-                <ThemedText style={[styles.summaryLabel, { color: '#EF4444' }]}>차감액</ThemedText>
-                <ThemedText style={[styles.summaryValue, { color: '#EF4444' }]}>-{formatCurrency(summaryData.deductions)}</ThemedText>
+                <ThemedText style={[styles.summaryLabel, { color: BrandColors.error }]}>차감액</ThemedText>
+                <ThemedText style={[styles.summaryValue, { color: BrandColors.error }]}>-{formatCurrency(summaryData.deductions)}</ThemedText>
               </View>
               <View style={styles.summaryItem} />
             </View>
@@ -259,7 +259,7 @@ export default function SettlementScreen({ navigation }: SettlementScreenProps) 
               key={day}
               style={[
                 styles.weekdayText,
-                { color: idx === 0 ? '#EF4444' : idx === 6 ? BrandColors.helper : theme.tabIconDefault },
+                { color: idx === 0 ? BrandColors.error : idx === 6 ? BrandColors.helper : theme.tabIconDefault },
               ]}
             >
               {day}

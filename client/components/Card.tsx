@@ -169,7 +169,7 @@ export function Card({
     );
   }
 
-  // Glass variant
+  // Glass variant (Toss-style)
   if (variant === "glass") {
     const Component = onPress && pressable ? AnimatedPressable : AnimatedView;
     return (
@@ -180,36 +180,49 @@ export function Card({
         disabled={disabled}
         style={[
           styles.card,
-          styles.glassCard,
           {
+            backgroundColor: isDark
+              ? PremiumColors.glassDarkMedium
+              : PremiumColors.glassMedium,
+            borderColor: PremiumColors.borderLight,
+            borderRadius: BorderRadius.sm,
             padding: paddingValue,
             opacity: disabled ? 0.5 : 1,
             borderWidth: borderless ? 0 : 1,
           },
           Platform.select({
-            ios: PremiumShadows.medium.ios,
-            android: PremiumShadows.medium.android,
+            ios: PremiumShadows.small.ios,
+            android: PremiumShadows.small.android,
           }),
           animatedStyle,
           style,
         ]}
       >
-        <BlurView
-          intensity={Platform.OS === 'ios' ? 20 : 40}
-          style={StyleSheet.absoluteFill}
-        />
+        {Platform.OS === 'ios' && (
+          <BlurView
+            intensity={isDark ? 30 : 60}
+            tint={isDark ? 'dark' : 'light'}
+            style={StyleSheet.absoluteFill}
+          />
+        )}
         <View style={styles.glassContent}>
           {header && <View style={styles.header}>{header}</View>}
 
           {(title || description) && (
             <View style={styles.headerText}>
               {title && (
-                <ThemedText type="h4" style={[styles.cardTitle, { color: '#FFFFFF' }]}>
+                <ThemedText type="h4" style={styles.cardTitle}>
                   {title}
                 </ThemedText>
               )}
               {description && (
-                <ThemedText type="small" style={[styles.cardDescription, { color: 'rgba(255, 255, 255, 0.8)' }]}>
+                <ThemedText
+                  type="small"
+                  style={[
+                    styles.cardDescription,
+                    { color: isDark ? 'rgba(255, 255, 255, 0.7)' : theme.textSecondary }
+                  ]}
+                >
                   {description}
                 </ThemedText>
               )}
@@ -478,13 +491,9 @@ const styles = StyleSheet.create({
   cardDescription: {
     opacity: 0.7,
   },
-  glassCard: {
-    backgroundColor: PremiumColors.glassMedium,
-    borderColor: PremiumColors.borderLight,
-    overflow: 'hidden',
-  },
   glassContent: {
     position: 'relative',
+    overflow: 'hidden',
   },
   outlineCard: {
     backgroundColor: 'transparent',

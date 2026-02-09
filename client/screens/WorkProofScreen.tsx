@@ -189,7 +189,7 @@ export default function WorkProofScreen({ navigation, route }: WorkProofScreenPr
             onPress={handleTakePhoto}
             testID="button-take-photo"
           >
-            <Icon name="camera-outline" size={20} color="#FFFFFF" />
+            <Icon name="camera-outline" size={20} color={Colors.light.buttonText} />
             <ThemedText style={styles.actionButtonText}>사진 촬영</ThemedText>
           </Pressable>
           <Pressable
@@ -213,11 +213,11 @@ export default function WorkProofScreen({ navigation, route }: WorkProofScreenPr
                   <Image source={{ uri: image.uri }} style={styles.previewImage} />
                   {image.uploaded ? (
                     <View style={[styles.uploadBadge, { backgroundColor: BrandColors.success }]}>
-                      <Icon name="checkmark-outline" size={14} color="#FFFFFF" />
+                      <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} />
                     </View>
                   ) : image.error ? (
                     <View style={[styles.uploadBadge, { backgroundColor: BrandColors.error }]}>
-                      <Icon name="close-outline" size={14} color="#FFFFFF" />
+                      <Icon name="close-outline" size={14} color={Colors.light.buttonText} />
                     </View>
                   ) : null}
                   <Pressable
@@ -225,7 +225,7 @@ export default function WorkProofScreen({ navigation, route }: WorkProofScreenPr
                     onPress={() => handleRemoveImage(index)}
                     testID={`button-remove-${index}`}
                   >
-                    <Icon name="close-outline" size={16} color="#FFFFFF" />
+                    <Icon name="close-outline" size={16} color={Colors.light.buttonText} />
                   </Pressable>
                 </View>
               ))}
@@ -251,7 +251,7 @@ export default function WorkProofScreen({ navigation, route }: WorkProofScreenPr
                 onPress={handleUploadAll}
                 testID="button-upload-all"
               >
-                <Icon name="cloud-upload-outline" size={20} color="#FFFFFF" />
+                <Icon name="cloud-upload-outline" size={20} color={Colors.light.buttonText} />
                 <ThemedText style={styles.uploadButtonText}>업로드하기</ThemedText>
               </Pressable>
             )}
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   actionButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   uploadButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },
@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   backButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },

@@ -154,7 +154,7 @@ function HelperScanView({
           style={[styles.scanButton, { backgroundColor: primaryColor }]}
           onPress={handleScanQR}
         >
-          <Icon name="crop-free" size={24} color="#FFFFFF" />
+          <Icon name="crop-free" size={24} color={Colors.light.buttonText} />
           <ThemedText style={styles.scanButtonText}>QR 스캔하기</ThemedText>
         </Pressable>
       </Card>
@@ -213,10 +213,10 @@ function HelperScanView({
           disabled={manualCode.length !== 12 || isVerifying}
         >
           {isVerifying ? (
-            <ActivityIndicator size="small" color="#FFFFFF" />
+            <ActivityIndicator size="small" color={Colors.light.buttonText} />
           ) : (
             <>
-              <Icon name="checkmark-circle-outline" size={20} color="#FFFFFF" />
+              <Icon name="checkmark-circle-outline" size={20} color={Colors.light.buttonText} />
               <ThemedText style={styles.verifyButtonText}>출근 확인</ThemedText>
             </>
           )}
@@ -297,13 +297,13 @@ function RequesterQRView({
           헬퍼에게 이 QR을 보여주세요
         </ThemedText>
 
-        <View style={[styles.qrCodeContainer, { backgroundColor: '#FFFFFF' }]}>
+        <View style={[styles.qrCodeContainer, { backgroundColor: theme.backgroundDefault }]}>
           {qrCode ? (
             <QRCode
               value={qrCode}
               size={160}
-              color="#000000"
-              backgroundColor="#FFFFFF"
+              color="Colors.dark.text"
+              backgroundColor={Colors.light.buttonText}
             />
           ) : (
             <View style={styles.qrPlaceholder}>
@@ -334,11 +334,11 @@ function RequesterQRView({
             style={[styles.qrActionButton, { backgroundColor: primaryColor }]}
             onPress={handleCopy}
           >
-            <Icon name="copy-outline" size={20} color="#FFFFFF" />
+            <Icon name="copy-outline" size={20} color={Colors.light.buttonText} />
             <ThemedText style={styles.qrActionButtonText}>코드 복사</ThemedText>
           </Pressable>
           <Pressable 
-            style={[styles.qrActionButton, { backgroundColor: theme.backgroundDefault, borderWidth: 1, borderColor: '#E0E0E0' }]}
+            style={[styles.qrActionButton, { backgroundColor: theme.backgroundDefault, borderWidth: 1, borderColor: Colors.light.backgroundTertiary }]}
             onPress={handleShare}
           >
             <Icon name="share-outline" size={20} color={theme.text} />
@@ -439,7 +439,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   qrActionButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.small,
     fontWeight: '600',
   },
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   scanButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },
@@ -539,7 +539,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   verifyButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },

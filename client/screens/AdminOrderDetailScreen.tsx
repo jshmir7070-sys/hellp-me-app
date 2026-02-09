@@ -312,8 +312,8 @@ export default function AdminOrderDetailScreen({ route }: AdminOrderDetailScreen
             {evidence.incidentEvidence.map((incident, index) => (
               <View key={incident.id} style={[styles.incidentItem, { borderBottomColor: theme.backgroundTertiary }]}>
                 <View style={styles.incidentHeader}>
-                  <View style={[styles.incidentTypeBadge, { backgroundColor: '#FEE2E2' }]}>
-                    <ThemedText style={[styles.incidentTypeText, { color: '#DC2626' }]}>
+                  <View style={[styles.incidentTypeBadge, { backgroundColor: BrandColors.errorLight }]}>
+                    <ThemedText style={[styles.incidentTypeText, { color: BrandColors.error }]}>
                       {incident.type === 'damage' ? '파손' :
                        incident.type === 'loss' ? '분실' :
                        incident.type === 'misdelivery' ? '오배송' :
@@ -527,7 +527,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   imageIndexText: {
-    color: '#fff',
+    color: Colors.light.buttonText,
     fontSize: 10,
     fontWeight: '700',
   },

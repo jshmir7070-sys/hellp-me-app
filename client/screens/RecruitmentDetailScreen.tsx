@@ -243,10 +243,10 @@ export default function RecruitmentDetailScreen({ navigation, route }: Recruitme
           disabled={applyMutation.isPending}
         >
           {applyMutation.isPending ? (
-            <ActivityIndicator color="#FFFFFF" />
+            <ActivityIndicator color={Colors.light.buttonText} />
           ) : (
             <>
-              <Icon name="send-outline" size={20} color="#FFFFFF" />
+              <Icon name="send-outline" size={20} color={Colors.light.buttonText} />
               <ThemedText style={styles.applyButtonText}>지원하기</ThemedText>
             </>
           )}
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
   },
   backButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },
@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
     paddingTop: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: Colors.light.backgroundTertiary,
   },
   salaryValue: {
     ...Typography.h4,
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: Colors.light.backgroundTertiary,
   },
   applyButton: {
     flexDirection: 'row',
@@ -374,7 +374,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
   },
   applyButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '700',
   },

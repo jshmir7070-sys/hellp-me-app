@@ -1,49 +1,105 @@
 {
   "expo": {
-    "name": "hellpme",
+    "name": "헬프미",
     "slug": "hellpme",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./client/assets/images/icon.png",
     "scheme": "hellpme",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./client/assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFFFFF"
+    },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.hellpme.app"
+      "bundleIdentifier": "com.hellpme.app",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "QR코드 스캔 및 서류 촬영을 위해 카메라 접근이 필요합니다.",
+        "NSPhotoLibraryUsageDescription": "서류 및 증빙 이미지 업로드를 위해 사진 라이브러리 접근이 필요합니다.",
+        "NSLocationWhenInUseUsageDescription": "배송 위치 확인 및 경로 안내를 위해 위치 정보가 필요합니다.",
+        "CFBundleAllowMixedLocalizations": true
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./client/assets/images/adaptive-icon.png",
+        "backgroundImage": "./client/assets/images/adaptive-icon-bg.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.hellpme.app"
+      "package": "com.hellpme.app",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_MEDIA_IMAGES",
+        "VIBRATE"
+      ]
     },
     "web": {
+      "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./client/assets/images/favicon.png"
     },
     "plugins": [
+      "expo-font",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./client/assets/images/splash.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#FFFFFF",
           "dark": {
+            "image": "./client/assets/images/splash.png",
             "backgroundColor": "#000000"
           }
         }
       ],
-      "expo-web-browser"
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "QR코드 스캔 및 서류 촬영을 위해 카메라 접근이 필요합니다."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "서류 및 증빙 이미지 업로드를 위해 사진 라이브러리 접근이 필요합니다."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "배송 위치 확인 및 경로 안내를 위해 위치 정보가 필요합니다."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./client/assets/images/notification-icon.png",
+          "color": "#1E40AF"
+        }
+      ],
+      "expo-web-browser",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "reactCompiler": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_PROJECT_ID"
+      }
     }
   }
 }

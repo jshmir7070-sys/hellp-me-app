@@ -610,14 +610,14 @@ export function ClosingInputScreen({ route, navigation }: any) {
             style={[styles.imageButton, { backgroundColor: BrandColors.helper }]}
             onPress={() => pickImage('DELIVERY_HISTORY', 'library')}
           >
-            <Icon name="image-outline" size={18} color="#FFFFFF" />
+            <Icon name="image-outline" size={18} color={Colors.light.buttonText} />
             <ThemedText style={styles.imageButtonText}>집배송 이력 캡쳐 업로드</ThemedText>
           </Pressable>
           <Pressable
             style={[styles.imageButton, { backgroundColor: BrandColors.helper }]}
             onPress={() => pickImage('DELIVERY_HISTORY', 'camera')}
           >
-            <Icon name="camera-outline" size={18} color="#FFFFFF" />
+            <Icon name="camera-outline" size={18} color={Colors.light.buttonText} />
             <ThemedText style={styles.imageButtonText}>집배송 이력 사진 촬영</ThemedText>
           </Pressable>
         </View>
@@ -631,7 +631,7 @@ export function ClosingInputScreen({ route, navigation }: any) {
                   style={styles.removeButton}
                   onPress={() => removeImage('DELIVERY_HISTORY', index)}
                 >
-                  <Icon name="close-outline" size={16} color="#FFFFFF" />
+                  <Icon name="close-outline" size={16} color={Colors.light.buttonText} />
                 </Pressable>
               </View>
             ))}
@@ -685,7 +685,7 @@ export function ClosingInputScreen({ route, navigation }: any) {
                   style={styles.removeButton}
                   onPress={() => removeImage('ETC', index)}
                 >
-                  <Icon name="close-outline" size={16} color="#FFFFFF" />
+                  <Icon name="close-outline" size={16} color={Colors.light.buttonText} />
                 </Pressable>
               </View>
             ))}
@@ -705,7 +705,7 @@ export function ClosingInputScreen({ route, navigation }: any) {
         disabled={isPending || !isValid}
       >
         {isPending ? (
-          <ActivityIndicator color="#FFFFFF" />
+          <ActivityIndicator color={Colors.light.buttonText} />
         ) : (
           <ThemedText style={styles.submitButtonText}>마감 제출</ThemedText>
         )}
@@ -848,7 +848,7 @@ const styles = StyleSheet.create({
   requiredBadgeText: {
     ...Typography.small,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     fontSize: 10,
   },
   optionalBadge: {
@@ -878,7 +878,7 @@ const styles = StyleSheet.create({
   imageButtonText: {
     ...Typography.small,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
   },
   imageButtonSecondary: {
     flex: 1,
@@ -942,7 +942,7 @@ const styles = StyleSheet.create({
   submitButtonText: {
     ...Typography.body,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
   },
   countInputRow: {
     flexDirection: 'row',

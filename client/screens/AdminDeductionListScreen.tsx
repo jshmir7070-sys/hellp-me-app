@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
   tabs: {
     flexDirection: "row",
     borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
+    borderBottomColor: Colors.light.backgroundTertiary,
   },
   tab: {
     flex: 1,
@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
   },
   confirmButtonText: {
-    color: "#FFFFFF",
+    color: Colors.light.buttonText,
     fontWeight: "600",
     fontSize: 14,
   },

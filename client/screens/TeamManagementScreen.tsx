@@ -56,8 +56,8 @@ export default function TeamManagementScreen() {
   const queryClient = useQueryClient();
   const primaryColor = BrandColors.helper;
   
-  const borderColor = isDark ? '#4B5563' : '#E5E7EB';
-  const inputBgColor = isDark ? '#1F2937' : '#F9FAFB';
+  const borderColor = isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary;
+  const inputBgColor = isDark ? 'Colors.dark.backgroundSecondary' : 'Colors.light.backgroundRoot';
   
   const [showQrScanner, setShowQrScanner] = useState(false);
   const [manualToken, setManualToken] = useState("");
@@ -347,16 +347,16 @@ export default function TeamManagementScreen() {
 
       {!isLeader ? (
         <Pressable
-          style={[styles.leaveButton, { borderColor: "#dc3545" }]}
+          style={[styles.leaveButton, { borderColor: "BrandColors.error" }]}
           onPress={handleLeaveTeam}
           disabled={leaveTeamMutation.isPending}
         >
           {leaveTeamMutation.isPending ? (
-            <ActivityIndicator size="small" color="#dc3545" />
+            <ActivityIndicator size="small" color="BrandColors.error" />
           ) : (
             <>
-              <Icon name="exit-outline" size={20} color="#dc3545" />
-              <ThemedText style={[styles.leaveButtonText, { color: "#dc3545", marginLeft: Spacing.sm }]}>
+              <Icon name="exit-outline" size={20} color="BrandColors.error" />
+              <ThemedText style={[styles.leaveButtonText, { color: "BrandColors.error", marginLeft: Spacing.sm }]}>
                 팀 탈퇴
               </ThemedText>
             </>

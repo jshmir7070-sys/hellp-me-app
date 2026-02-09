@@ -18,7 +18,7 @@ import { OrderCard } from "@/components/order/OrderCard";
 import { EditOrderModal } from "@/components/order/EditOrderModal";
 import { JobDetailModal } from "@/components/order/JobDetailModal";
 import { adaptHelperMyOrder, adaptRequesterOrder, type OrderCardDTO } from "@/adapters/orderCardAdapter";
-import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
+import { Spacing, BorderRadius, Typography, BrandColors, Colors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 
 interface Applicant {
@@ -343,7 +343,14 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   );
 }
 
-const ORDER_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
+const ORDER_COLORS = [
+  BrandColors.primaryLight,
+  BrandColors.success,
+  BrandColors.warning,
+  BrandColors.error,
+  BrandColors.scheduled,
+  BrandColors.requester,
+];
 
 function SimpleCalendar({ 
   theme, 
@@ -504,7 +511,7 @@ function SimpleCalendar({
           <View key={day} style={styles.weekdayCell}>
             <ThemedText style={[
               styles.weekdayText, 
-              { color: idx === 0 ? '#EF4444' : idx === 6 ? '#3B82F6' : theme.tabIconDefault }
+              { color: idx === 0 ? BrandColors.error : idx === 6 ? BrandColors.primaryLight : theme.tabIconDefault }
             ]}>
               {day}
             </ThemedText>
@@ -530,8 +537,8 @@ function SimpleCalendar({
                   ]}>
                     <ThemedText style={[
                       styles.dayText,
-                      { color: dayIdx === 0 ? '#EF4444' : dayIdx === 6 ? '#3B82F6' : theme.text },
-                      isSelected(day) && { color: '#FFFFFF' },
+                      { color: dayIdx === 0 ? BrandColors.error : dayIdx === 6 ? BrandColors.primaryLight : theme.text },
+                      isSelected(day) && { color: theme.buttonText },
                     ]}>
                       {day}
                     </ThemedText>
@@ -866,7 +873,7 @@ function RequesterDashboard({
                           onPress={() => handleApplicantPress(applicant, order.id)}
                         >
                           <LinearGradient
-                            colors={[BrandColors.helper, '#1976D2']}
+                            colors={[BrandColors.helper, BrandColors.primary]}
                             start={{ x: 0, y: 0 }}
                             end={{ x: 1, y: 1 }}
                             style={styles.fbMiniCover}
@@ -882,12 +889,12 @@ function RequesterDashboard({
                                 <Icon name="person" size={20} color={BrandColors.helper} />
                               )}
                             </View>
-                            <ThemedText style={[styles.fbMiniName, { color: '#1A1A1A' }]} numberOfLines={1}>
+                            <ThemedText style={[styles.fbMiniName, { color: theme.text }]} numberOfLines={1}>
                               {applicant.helperNickname || applicant.helperName || "헬퍼"}
                             </ThemedText>
                             <View style={styles.fbMiniRatingRow}>
                               <Icon name="star" size={12} color={BrandColors.warning} />
-                              <ThemedText style={[styles.fbMiniRatingText, { color: '#666666' }]}>
+                              <ThemedText style={[styles.fbMiniRatingText, { color: theme.textSecondary }]}>
                                 {applicant.averageRating?.toFixed(1) || "-"}
                               </ThemedText>
                             </View>
@@ -936,7 +943,7 @@ function RequesterDashboard({
         onRequestClose={() => setApplicantModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.fbProfileModal, { backgroundColor: '#FFFFFF' }]}>
+          <View style={[styles.fbProfileModal, { backgroundColor: theme.backgroundDefault }]}>
             {selectedApplicant ? (
               <>
                 <ScrollView 
@@ -949,12 +956,12 @@ function RequesterDashboard({
                     onPress={() => setApplicantModalVisible(false)}
                   >
                     <View style={styles.fbCloseButtonBg}>
-                      <Icon name="close" size={20} color="#FFFFFF" />
+                      <Icon name="close" size={20} color={theme.buttonText} />
                     </View>
                   </Pressable>
 
                   <LinearGradient
-                    colors={[BrandColors.helper, '#1565C0']}
+                    colors={[BrandColors.helper, BrandColors.primaryDark]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
                     style={styles.fbCoverPhoto}
@@ -979,53 +986,53 @@ function RequesterDashboard({
                       </View>
                     </View>
 
-                    <ThemedText style={[styles.fbProfileName, { color: '#1A1A1A' }]}>
+                    <ThemedText style={[styles.fbProfileName, { color: theme.text }]}>
                       {selectedApplicant.helperNickname || selectedApplicant.helperName}
                     </ThemedText>
                     
                     {selectedApplicant.category ? (
-                      <ThemedText style={[styles.fbProfileCategory, { color: '#666666' }]}>
+                      <ThemedText style={[styles.fbProfileCategory, { color: theme.textSecondary }]}>
                         {selectedApplicant.category}
                       </ThemedText>
                     ) : null}
 
                     <View style={styles.fbRatingRow}>
                       <View style={styles.starsRow}>{renderStars(selectedApplicant.averageRating)}</View>
-                      <ThemedText style={[styles.fbRatingValue, { color: '#1A1A1A' }]}>
+                      <ThemedText style={[styles.fbRatingValue, { color: theme.text }]}>
                         {selectedApplicant.averageRating ? selectedApplicant.averageRating.toFixed(1) : '-'}
                       </ThemedText>
-                      <ThemedText style={[styles.fbReviewCount, { color: '#666666' }]}>
+                      <ThemedText style={[styles.fbReviewCount, { color: theme.textSecondary }]}>
                         ({selectedApplicant.reviewCount}건)
                       </ThemedText>
                     </View>
                   </View>
 
                   {selectedApplicant.message ? (
-                    <View style={[styles.fbSectionContainer, { backgroundColor: '#FFFFFF' }]}>
+                    <View style={[styles.fbSectionContainer, { backgroundColor: theme.backgroundDefault }]}>
                       <View style={styles.fbSectionHeader}>
                         <Icon name="chatbubble-outline" size={18} color={BrandColors.helper} />
-                        <ThemedText style={[styles.fbSectionTitle, { color: '#1A1A1A' }]}>지원 메시지</ThemedText>
+                        <ThemedText style={[styles.fbSectionTitle, { color: theme.text }]}>지원 메시지</ThemedText>
                       </View>
-                      <View style={[styles.fbMessageCard, { backgroundColor: '#F5F5F5' }]}>
-                        <ThemedText style={[styles.fbMessageText, { color: '#1A1A1A' }]}>
+                      <View style={[styles.fbMessageCard, { backgroundColor: theme.backgroundSecondary }]}>
+                        <ThemedText style={[styles.fbMessageText, { color: theme.text }]}>
                           {selectedApplicant.message}
                         </ThemedText>
                       </View>
                     </View>
                   ) : null}
 
-                  <View style={[styles.fbSectionContainer, { backgroundColor: '#FFFFFF' }]}>
+                  <View style={[styles.fbSectionContainer, { backgroundColor: theme.backgroundDefault }]}>
                     <View style={styles.fbSectionHeader}>
                       <Icon name="star-outline" size={18} color={BrandColors.warning} />
-                      <ThemedText style={[styles.fbSectionTitle, { color: '#1A1A1A' }]}>리뷰</ThemedText>
-                      <ThemedText style={[styles.fbReviewCountBadge, { color: '#666666' }]}>
+                      <ThemedText style={[styles.fbSectionTitle, { color: theme.text }]}>리뷰</ThemedText>
+                      <ThemedText style={[styles.fbReviewCountBadge, { color: theme.textSecondary }]}>
                         {selectedApplicant.reviewCount || 0}건
                       </ThemedText>
                     </View>
                     {selectedApplicant.reviews && selectedApplicant.reviews.length > 0 ? (
                       <>
                         {selectedApplicant.reviews.map((review) => (
-                          <View key={review.id} style={[styles.fbReviewCard, { backgroundColor: '#F5F5F5' }]}>
+                          <View key={review.id} style={[styles.fbReviewCard, { backgroundColor: theme.backgroundSecondary }]}>
                             <View style={styles.fbReviewHeader}>
                               <View style={styles.miniStarsRow}>
                                 {[1, 2, 3, 4, 5].map((i) => (
@@ -1037,12 +1044,12 @@ function RequesterDashboard({
                                   />
                                 ))}
                               </View>
-                              <ThemedText style={[styles.fbReviewDate, { color: '#666666' }]}>
+                              <ThemedText style={[styles.fbReviewDate, { color: theme.textSecondary }]}>
                                 {new Date(review.createdAt).toLocaleDateString('ko-KR')}
                               </ThemedText>
                             </View>
                             {review.comment ? (
-                              <ThemedText style={[styles.fbReviewComment, { color: '#1A1A1A' }]}>
+                              <ThemedText style={[styles.fbReviewComment, { color: theme.text }]}>
                                 {review.comment}
                               </ThemedText>
                             ) : null}
@@ -1050,20 +1057,20 @@ function RequesterDashboard({
                         ))}
                       </>
                     ) : (
-                      <View style={[styles.fbEmptyReview, { backgroundColor: '#F5F5F5' }]}>
-                        <Icon name="chatbubble-ellipses-outline" size={24} color="#CCCCCC" />
-                        <ThemedText style={{ color: '#999999', marginTop: 8 }}>아직 리뷰가 없습니다</ThemedText>
+                      <View style={[styles.fbEmptyReview, { backgroundColor: theme.backgroundSecondary }]}>
+                        <Icon name="chatbubble-ellipses-outline" size={24} color={theme.border} />
+                        <ThemedText style={{ color: theme.textTertiary, marginTop: 8 }}>아직 리뷰가 없습니다</ThemedText>
                       </View>
                     )}
                   </View>
                 </ScrollView>
 
-                <View style={[styles.fbButtonContainerFixed, { backgroundColor: '#FFFFFF' }]}>
+                <View style={[styles.fbButtonContainerFixed, { backgroundColor: theme.backgroundDefault }]}>
                   <Pressable
-                    style={[styles.fbButton, styles.fbButtonOutline, { borderColor: '#CCCCCC' }]}
+                    style={[styles.fbButton, styles.fbButtonOutline, { borderColor: theme.border }]}
                     onPress={() => setApplicantModalVisible(false)}
                   >
-                    <ThemedText style={[styles.fbButtonText, { color: '#1A1A1A' }]}>닫기</ThemedText>
+                    <ThemedText style={[styles.fbButtonText, { color: theme.text }]}>닫기</ThemedText>
                   </Pressable>
                   <Pressable
                     style={[styles.fbButton, styles.fbButtonPrimary]}
@@ -1071,7 +1078,7 @@ function RequesterDashboard({
                     disabled={selectHelperMutation.isPending}
                   >
                     {selectHelperMutation.isPending ? (
-                      <ActivityIndicator size="small" color="#fff" />
+                      <ActivityIndicator size="small" color={theme.buttonText} />
                     ) : (
                       <ThemedText style={styles.fbButtonPrimaryText}>선택하기</ThemedText>
                     )}
@@ -1180,7 +1187,7 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     height: 40,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: Colors.light.backgroundTertiary,
   },
   statValue: {
     ...Typography.h3,
@@ -1207,7 +1214,7 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   addOrderButtonText: {
-    color: '#fff',
+    color: Colors.light.buttonText,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -1302,7 +1309,7 @@ const styles = StyleSheet.create({
   },
   moreIndicator: {
     fontSize: 8,
-    color: '#6B7280',
+    color: Colors.light.tabIconDefault,
     textAlign: 'center',
   },
   emptyCard: {
@@ -1341,7 +1348,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   actionButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },
@@ -1503,7 +1510,7 @@ const styles = StyleSheet.create({
   },
   miniHelperPhone: {
     fontSize: 12,
-    color: '#888',
+    color: Colors.light.textTertiary,
     marginTop: 2,
   },
   miniHelperRating: {
@@ -1517,7 +1524,7 @@ const styles = StyleSheet.create({
   },
   miniHelperRatingText: {
     fontSize: 12,
-    color: '#888',
+    color: Colors.light.textTertiary,
     fontWeight: '600',
   },
   moreApplicantsCard: {
@@ -1540,7 +1547,7 @@ const styles = StyleSheet.create({
   moreApplicantsText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#007BFF',
+    color: BrandColors.primary,
   },
   noApplicantRow: {
     paddingVertical: Spacing.sm,
@@ -1732,7 +1739,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: -45,
     paddingHorizontal: Spacing.lg,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.light.backgroundDefault,
     paddingBottom: Spacing.md,
   },
   fbAvatarWrapper: {
@@ -1742,9 +1749,9 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    backgroundColor: '#E3F2FD',
+    backgroundColor: BrandColors.helperLight,
     borderWidth: 4,
-    borderColor: '#FFFFFF',
+    borderColor: Colors.light.backgroundDefault,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
@@ -1841,7 +1848,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
     paddingBottom: Spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#EEEEEE',
+    borderTopColor: Colors.light.divider,
   },
   fbButton: {
     flex: 1,
@@ -1865,7 +1872,7 @@ const styles = StyleSheet.create({
   fbButtonPrimaryText: {
     ...Typography.body,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
   },
   fbMiniCardsRow: {
     flexDirection: 'column',
@@ -1881,7 +1888,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.light.backgroundDefault,
   },
   fbMiniCover: {
     height: 32,
@@ -1890,15 +1897,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: Spacing.sm,
     marginTop: -18,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.light.backgroundDefault,
   },
   fbMiniAvatarCircle: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#E3F2FD',
+    backgroundColor: BrandColors.helperLight,
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: Colors.light.backgroundDefault,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: Spacing.xs,

@@ -135,7 +135,7 @@ export default function FindEmailScreen({ navigation }: FindEmailScreenProps) {
                     {
                       backgroundColor: theme.backgroundDefault,
                       color: theme.text,
-                      borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                      borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                     },
                   ]}
                   placeholder="이름을 입력하세요"
@@ -155,7 +155,7 @@ export default function FindEmailScreen({ navigation }: FindEmailScreenProps) {
                     {
                       backgroundColor: theme.backgroundDefault,
                       color: theme.text,
-                      borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                      borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                     },
                   ]}
                   placeholder="010-1234-5678"
@@ -178,7 +178,7 @@ export default function FindEmailScreen({ navigation }: FindEmailScreenProps) {
                 disabled={isLoading}
               >
                 {isLoading ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator color={Colors.light.buttonText} />
                 ) : (
                   <ThemedText style={styles.submitButtonText}>아이디 찾기</ThemedText>
                 )}
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   submitButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   resultButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },

@@ -347,17 +347,17 @@ export default function SupportScreen({ navigation }: SupportScreenProps) {
         </ThemedText>
         <View style={styles.contactButtons}>
           <Pressable 
-            style={[styles.contactButton, { backgroundColor: '#FEE500' }]}
+            style={[styles.contactButton, { backgroundColor: 'BrandColors.warning' }]}
             onPress={handleKakao}
           >
-            <Icon name="chatbox-outline" size={18} color="#3C1E1E" />
-            <ThemedText style={[styles.contactButtonText, { color: '#3C1E1E' }]}>카카오톡 상담</ThemedText>
+            <Icon name="chatbox-outline" size={18} color="Colors.dark.backgroundSecondary" />
+            <ThemedText style={[styles.contactButtonText, { color: 'Colors.dark.backgroundSecondary' }]}>카카오톡 상담</ThemedText>
           </Pressable>
           <Pressable 
             style={[styles.contactButton, { backgroundColor: primaryColor }]}
             onPress={handleEmail}
           >
-            <Icon name="mail-outline" size={18} color="#FFFFFF" />
+            <Icon name="mail-outline" size={18} color={Colors.light.buttonText} />
             <ThemedText style={styles.contactButtonTextWhite}>이메일 문의</ThemedText>
           </Pressable>
         </View>
@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
   },
   contactButtonTextWhite: {
     ...Typography.body,
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     fontWeight: '600',
   },
   contactInfo: {

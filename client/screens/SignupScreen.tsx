@@ -414,7 +414,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
             <Image source={logoImage} style={styles.logo} resizeMode="contain" />
           </View>
 
-          <ThemedText style={[styles.stepTitle, { color: '#FFFFFF' }]}>
+          <ThemedText style={[styles.stepTitle, { color: theme.buttonText }]}>
             어떤 서비스가 필요하신가요?
           </ThemedText>
           <ThemedText style={[styles.stepSubtitle, { color: 'rgba(255,255,255,0.8)' }]}>
@@ -460,7 +460,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
               이미 계정이 있으신가요?
             </ThemedText>
             <Pressable onPress={() => navigation.navigate('Login')}>
-              <ThemedText style={[styles.loginLink, { color: '#FFFFFF' }]}>로그인</ThemedText>
+              <ThemedText style={[styles.loginLink, { color: theme.buttonText }]}>로그인</ThemedText>
             </Pressable>
           </View>
           </View>
@@ -491,7 +491,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
           <Image source={logoImage} style={styles.logoSmall} resizeMode="contain" />
         </View>
 
-        <ThemedText style={[styles.formTitle, { color: '#FFFFFF', textAlign: 'center' }]}>
+        <ThemedText style={[styles.formTitle, { color: Colors.light.buttonText, textAlign: 'center' }]}>
           {selectedRole === 'helper' ? '헬퍼' : '요청자'} 회원가입
         </ThemedText>
 
@@ -528,7 +528,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                     {
                       backgroundColor: theme.backgroundDefault,
                       color: theme.text,
-                      borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                      borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                     },
                   ]}
                   placeholder="example@email.com"
@@ -553,7 +553,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                 disabled={emailChecking || !email}
               >
                 {emailChecking ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <ActivityIndicator color={Colors.light.buttonText} size="small" />
                 ) : (
                   <ThemedText style={styles.checkButtonText}>중복확인</ThemedText>
                 )}
@@ -571,7 +571,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                   {
                     backgroundColor: theme.backgroundDefault,
                     color: theme.text,
-                    borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                    borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                   },
                 ]}
                 placeholder="8자리 이상"
@@ -607,7 +607,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                   {
                     backgroundColor: theme.backgroundDefault,
                     color: theme.text,
-                    borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                    borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                   },
                 ]}
                 placeholder="비밀번호를 다시 입력해주세요"
@@ -637,7 +637,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                 {
                   backgroundColor: theme.backgroundDefault,
                   color: theme.text,
-                  borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                  borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                 },
               ]}
               placeholder="이름을 입력하세요"
@@ -667,7 +667,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                 {
                   backgroundColor: theme.backgroundDefault,
                   color: theme.text,
-                  borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                  borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                 },
               ]}
               placeholder="상세주소 (동/호수 등)"
@@ -696,7 +696,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                   {
                     backgroundColor: theme.backgroundDefault,
                     color: theme.text,
-                    borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                    borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                   },
                 ]}
                 placeholder="010-0000-0000"
@@ -713,7 +713,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                 disabled={isSendingCode || isPhoneVerified}
               >
                 {isSendingCode ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <ActivityIndicator color={Colors.light.buttonText} size="small" />
                 ) : (
                   <ThemedText style={styles.checkButtonText}>
                     {isPhoneVerified ? '완료' : '인증요청'}
@@ -734,7 +734,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                     {
                       backgroundColor: theme.backgroundDefault,
                       color: theme.text,
-                      borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                      borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                     },
                   ]}
                   placeholder="6자리 인증번호"
@@ -752,7 +752,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                   disabled={isVerifyingCode || isPhoneVerified}
                 >
                   {isVerifyingCode ? (
-                    <ActivityIndicator color="#FFFFFF" size="small" />
+                    <ActivityIndicator color={Colors.light.buttonText} size="small" />
                   ) : (
                     <ThemedText style={styles.checkButtonText}>확인</ThemedText>
                   )}
@@ -773,7 +773,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
               </ThemedText>
             </Pressable>
 
-            <View style={[styles.agreementDivider, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]} />
+            <View style={[styles.agreementDivider, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]} />
 
             <View style={styles.agreementRow}>
               <Pressable style={styles.agreementCheckArea} onPress={() => handleSingleAgreement('terms', !agreements.terms)}>
@@ -920,7 +920,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
 function CheckBox({ checked, accentColor }: { checked: boolean; accentColor: string }) {
   return (
     <View style={[styles.checkbox, checked && { backgroundColor: accentColor, borderColor: accentColor }]}>
-      {checked ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+      {checked ? <Icon name="checkmark-outline" size={14} color={Colors.light.buttonText} /> : null}
     </View>
   );
 }
@@ -1114,7 +1114,7 @@ const styles = StyleSheet.create({
     minWidth: 90,
   },
   checkButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.small,
     fontWeight: '600',
   },
@@ -1168,7 +1168,7 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 4,
     borderWidth: 2,
-    borderColor: '#CCCCCC',
+    borderColor: Colors.light.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1191,7 +1191,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   signupButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },
@@ -1228,7 +1228,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xl,
     paddingBottom: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: Colors.light.backgroundTertiary,
   },
   modalTitle: {
     ...Typography.h3,
@@ -1253,7 +1253,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalCloseButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },

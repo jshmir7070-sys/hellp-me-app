@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveButtonText: {
-    color: '#fff',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },

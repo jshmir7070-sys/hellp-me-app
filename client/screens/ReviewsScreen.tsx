@@ -60,7 +60,7 @@ export default function ReviewsScreen({ navigation }: Props) {
             key={star}
             name="star-outline"
             size={16}
-            color={star <= rating ? '#FFB800' : '#E0E0E0'}
+            color={star <= rating ? 'BrandColors.warning' : Colors.light.backgroundTertiary}
             style={{ marginRight: 2 }}
           />
         ))}

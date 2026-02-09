@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#e0e0e0",
+    borderTopColor: "Colors.light.backgroundTertiary",
     paddingTop: Spacing.sm,
   },
   dateText: {

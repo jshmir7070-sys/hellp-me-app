@@ -5,18 +5,24 @@ const tintColorDark = "#3B82F6";
 
 export const Colors = {
   light: {
-    text: "#111827",
+    text: "#191F28",
+    textSecondary: "#4E5968",
+    textTertiary: "#8B95A1",
     buttonText: "#FFFFFF",
     tabIconDefault: "#6B7280",
     tabIconSelected: tintColorLight,
     link: "#1E40AF",
-    backgroundRoot: "#FFFFFF",
-    backgroundDefault: "#F3F4F6",
+    backgroundRoot: "#F2F4F6",
+    backgroundDefault: "#FFFFFF",
     backgroundSecondary: "#E5E7EB",
     backgroundTertiary: "#D1D5DB",
+    border: "#E5E8EB",
+    divider: "#F2F4F6",
   },
   dark: {
     text: "#F9FAFB",
+    textSecondary: "#9CA3AF",
+    textTertiary: "#6B7280",
     buttonText: "#FFFFFF",
     tabIconDefault: "#9CA3AF",
     tabIconSelected: tintColorDark,
@@ -25,6 +31,8 @@ export const Colors = {
     backgroundDefault: "#1F2937",
     backgroundSecondary: "#374151",
     backgroundTertiary: "#4B5563",
+    border: "#374151",
+    divider: "#1F2937",
   },
 };
 
@@ -175,20 +183,20 @@ export const PremiumGradients = {
  * Glass effect, borders, shadows
  */
 export const PremiumColors = {
-  // Glass effect colors
+  // Glass effect colors (Toss-style for light backgrounds)
   glassLight: 'rgba(255, 255, 255, 0.1)',
-  glassMedium: 'rgba(255, 255, 255, 0.15)',
-  glassStrong: 'rgba(255, 255, 255, 0.2)',
-  glassUltra: 'rgba(255, 255, 255, 0.3)',
+  glassMedium: 'rgba(255, 255, 255, 0.82)',
+  glassStrong: 'rgba(255, 255, 255, 0.9)',
+  glassUltra: 'rgba(255, 255, 255, 0.95)',
 
   // Glass effect for dark mode
   glassDarkLight: 'rgba(255, 255, 255, 0.05)',
   glassDarkMedium: 'rgba(255, 255, 255, 0.08)',
   glassDarkStrong: 'rgba(255, 255, 255, 0.12)',
 
-  // Border colors
-  borderLight: 'rgba(255, 255, 255, 0.1)',
-  borderMedium: 'rgba(255, 255, 255, 0.2)',
+  // Border colors (Toss-style subtle borders)
+  borderLight: 'rgba(0, 0, 0, 0.06)',
+  borderMedium: 'rgba(0, 0, 0, 0.12)',
   borderAccent: 'rgba(247, 151, 30, 0.3)',
   borderGlow: 'rgba(102, 126, 234, 0.5)',
 
@@ -210,17 +218,17 @@ export const PremiumShadows = {
   small: Platform.select({
     ios: {
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.1,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
       shadowRadius: 8,
     },
     android: {
-      elevation: 4,
+      elevation: 2,
     },
     default: {
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.1,
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.06,
       shadowRadius: 8,
     },
   }),
@@ -228,8 +236,26 @@ export const PremiumShadows = {
   medium: Platform.select({
     ios: {
       shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+    },
+    android: {
+      elevation: 4,
+    },
+    default: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.08,
+      shadowRadius: 12,
+    },
+  }),
+
+  large: Platform.select({
+    ios: {
+      shadowColor: '#000',
       shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.15,
+      shadowOpacity: 0.12,
       shadowRadius: 16,
     },
     android: {
@@ -238,26 +264,8 @@ export const PremiumShadows = {
     default: {
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.15,
+      shadowOpacity: 0.12,
       shadowRadius: 16,
-    },
-  }),
-
-  large: Platform.select({
-    ios: {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 16 },
-      shadowOpacity: 0.2,
-      shadowRadius: 24,
-    },
-    android: {
-      elevation: 16,
-    },
-    default: {
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 16 },
-      shadowOpacity: 0.2,
-      shadowRadius: 24,
     },
   }),
 

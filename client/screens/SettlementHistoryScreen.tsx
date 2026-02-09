@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
     marginTop: Spacing.lg,
   },
   confirmButtonText: {
-    color: '#fff',
+    color: Colors.light.buttonText,
     fontWeight: '600',
   },
   emptyCard: {

@@ -193,7 +193,7 @@ export default function ApplicantListScreen({ route, navigation }: Props) {
               </Button>
             ) : isSelected ? (
               <Badge variant="gradient" color="green" size="md">
-                <Icon name="checkmark-circle" size={16} color="#FFFFFF" />
+                <Icon name="checkmark-circle" size={16} color={Colors.light.buttonText} />
               </Badge>
             ) : null}
           </View>
@@ -241,7 +241,7 @@ export default function ApplicantListScreen({ route, navigation }: Props) {
               onPress={() => setDetailModalVisible(false)}
             >
               <View style={styles.closeButtonBg}>
-                <Icon name="close" size={20} color="#FFFFFF" />
+                <Icon name="close" size={20} color={Colors.light.buttonText} />
               </View>
             </Pressable>
 
@@ -251,7 +251,7 @@ export default function ApplicantListScreen({ route, navigation }: Props) {
               showsVerticalScrollIndicator={false}
             >
               <LinearGradient
-                colors={[BrandColors.helper, '#1565C0']}
+                colors={[BrandColors.helper, 'BrandColors.primaryLight']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={[styles.coverPhoto, { height: COVER_HEIGHT }]}
@@ -600,7 +600,7 @@ const styles = StyleSheet.create({
   },
   avatarWrapper: {
     borderWidth: 4,
-    borderColor: "#FFFFFF",
+    borderColor: Colors.light.buttonText,
     borderRadius: 54,
     elevation: 4,
   },

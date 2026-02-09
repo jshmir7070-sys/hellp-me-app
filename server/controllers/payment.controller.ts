@@ -151,6 +151,76 @@ export class PaymentController {
       res.status(500).json({ success: false, error: (error as Error).message });
     }
   }
+
+  // ================================
+  // Overdue Management (Phase 2)
+  // ================================
+
+  // Admin - Get Overdue Payments
+  async getOverduePayments(req: Request, res: Response) {
+    try {
+      const { status, minDays } = req.query;
+      const overduePayments = await paymentService.getOverduePayments({
+        status: status as string,
+        minDays: minDays ? parseInt(minDays as string) : undefined,
+      });
+      res.json({ success: true, data: overduePayments });
+    } catch (error) {
+      logger.error('Failed to get overdue payments', error as Error);
+      res.status(500).json({ success: false, error: 'Failed to get overdue payments' });
+    }
+  }
+
+  // Admin - Send Reminder
+  async sendPaymentReminder(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      const { message } = req.body;
+      const result = await paymentService.sendPaymentReminder(id, message);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error('Failed to send payment reminder', error as Error);
+      res.status(500).json({ success: false, error: (error as Error).message });
+    }
+  }
+
+  // Admin - Restrict Service
+  async restrictService(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      const { reason } = req.body;
+      const result = await paymentService.restrictService(id, reason);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error('Failed to restrict service', error as Error);
+      res.status(500).json({ success: false, error: (error as Error).message });
+    }
+  }
+
+  // Admin - Start Collection
+  async startCollection(req: Request, res: Response) {
+    try {
+      const id = parseInt(req.params.id);
+      const { agency, notes } = req.body;
+      const result = await paymentService.startCollection(id, agency, notes);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error('Failed to start collection', error as Error);
+      res.status(500).json({ success: false, error: (error as Error).message });
+    }
+  }
+
+  // User - Get My Overdue Payments
+  async getMyOverduePayments(req: AuthenticatedRequest, res: Response) {
+    try {
+      const userId = req.user.id;
+      const overduePayments = await paymentService.getMyOverduePayments(userId);
+      res.json({ success: true, data: overduePayments });
+    } catch (error) {
+      logger.error('Failed to get my overdue payments', error as Error);
+      res.status(500).json({ success: false, error: 'Failed to get overdue payments' });
+    }
+  }
 }
 
 export const paymentController = new PaymentController();

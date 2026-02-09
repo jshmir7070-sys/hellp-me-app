@@ -385,7 +385,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.light.backgroundDefault,
   },
   loadingText: {
     ...Typography.body,
@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   backButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },
@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
   },
   retryButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },

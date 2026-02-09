@@ -83,7 +83,7 @@ export default function RecruitmentScreen({ navigation }: RecruitmentScreenProps
               style={[
                 styles.filterChipText,
                 {
-                  color: selectedFilter === filter ? '#FFFFFF' : theme.text,
+                  color: selectedFilter === filter ? Colors.light.buttonText : theme.text,
                 },
               ]}
             >

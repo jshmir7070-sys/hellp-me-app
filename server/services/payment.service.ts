@@ -703,6 +703,176 @@ class PaymentService {
 
     return updated;
   }
+
+  // ================================
+  // Overdue Management (Phase 2)
+  // ================================
+
+  /**
+   * 연체 결제 목록 조회 (관리자용)
+   */
+  async getOverduePayments(filters: {
+    status?: string;
+    minDays?: number;
+  }): Promise<Payment[]> {
+    logger.info('Getting overdue payments', filters);
+
+    const conditions: any[] = [];
+
+    // 연체 상태 필터
+    if (filters.status) {
+      conditions.push(eq(storage.payments.overdueStatus, filters.status));
+    } else {
+      // 기본: 정상 상태 제외
+      conditions.push(eq(storage.payments.overdueStatus, 'overdue'));
+    }
+
+    // 최소 연체 일수 필터
+    if (filters.minDays) {
+      conditions.push(gte(storage.payments.overdueDays, filters.minDays));
+    }
+
+    const payments = await db
+      .select()
+      .from(storage.payments)
+      .where(and(...conditions))
+      .orderBy(desc(storage.payments.overdueDays));
+
+    return payments;
+  }
+
+  /**
+   * 결제 독촉 발송
+   */
+  async sendPaymentReminder(paymentId: number, message?: string): Promise<Payment> {
+    logger.info('Sending payment reminder', { paymentId, message });
+
+    const payment = await this.getPaymentById(paymentId);
+    if (!payment) {
+      throw new Error('Payment not found');
+    }
+
+    if (payment.status === 'completed') {
+      throw new Error('Cannot send reminder for completed payment');
+    }
+
+    // 독촉 발송 횟수 증가 및 타임스탬프 업데이트
+    const updated = await db
+      .update(storage.payments)
+      .set({
+        reminderSentCount: (payment.reminderSentCount || 0) + 1,
+        lastReminderSentAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(storage.payments.id, paymentId))
+      .returning();
+
+    // TODO: 실제 알림 발송 로직 (푸시/이메일/SMS)
+    logger.info('Payment reminder sent', {
+      paymentId,
+      count: updated[0].reminderSentCount,
+    });
+
+    return updated[0];
+  }
+
+  /**
+   * 서비스 이용 제한
+   */
+  async restrictService(paymentId: number, reason?: string): Promise<Payment> {
+    logger.info('Restricting service', { paymentId, reason });
+
+    const payment = await this.getPaymentById(paymentId);
+    if (!payment) {
+      throw new Error('Payment not found');
+    }
+
+    if (payment.status === 'completed') {
+      throw new Error('Cannot restrict service for completed payment');
+    }
+
+    // 서비스 제한 시작
+    const updated = await db
+      .update(storage.payments)
+      .set({
+        overdueStatus: 'overdue',
+        serviceRestrictedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(storage.payments.id, paymentId))
+      .returning();
+
+    // TODO: 실제 서비스 제한 로직 (주문 접수 차단 등)
+    logger.info('Service restricted', { paymentId });
+
+    return updated[0];
+  }
+
+  /**
+   * 채권 추심 위탁
+   */
+  async startCollection(
+    paymentId: number,
+    agency?: string,
+    notes?: string
+  ): Promise<Payment> {
+    logger.info('Starting collection', { paymentId, agency, notes });
+
+    const payment = await this.getPaymentById(paymentId);
+    if (!payment) {
+      throw new Error('Payment not found');
+    }
+
+    if (payment.status === 'completed') {
+      throw new Error('Cannot start collection for completed payment');
+    }
+
+    // 채권 추심 시작
+    const updated = await db
+      .update(storage.payments)
+      .set({
+        overdueStatus: 'collection',
+        collectionStartedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(storage.payments.id, paymentId))
+      .returning();
+
+    // TODO: 실제 추심 위탁 로직 (외부 추심 기관 연동)
+    logger.info('Collection started', { paymentId, agency });
+
+    return updated[0];
+  }
+
+  /**
+   * 내 연체 결제 조회 (사용자용)
+   */
+  async getMyOverduePayments(userId: number): Promise<Payment[]> {
+    logger.info('Getting my overdue payments', { userId });
+
+    const payments = await db
+      .select()
+      .from(storage.payments)
+      .where(
+        and(
+          eq(storage.payments.userId, userId),
+          eq(storage.payments.overdueStatus, 'overdue')
+        )
+      )
+      .orderBy(desc(storage.payments.overdueDays));
+
+    return payments;
+  }
+
+  /**
+   * 연체이자 계산 (연 15%, 일할 계산)
+   */
+  calculateLateInterest(principalAmount: number, overdueDays: number): number {
+    const annualRate = 0.15; // 15%
+    const dailyRate = annualRate / 365;
+    const interest = principalAmount * dailyRate * overdueDays;
+    return Math.round(interest * 100) / 100; // 소수점 2자리
+  }
 }
 
 export const paymentService = new PaymentService();

@@ -73,14 +73,14 @@ const INCIDENT_TYPE_LABELS: Record<string, string> = {
 };
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
-  pending: { label: '접수됨', color: '#F59E0B', bg: '#FEF3C7' },
-  requested: { label: '접수됨', color: '#F59E0B', bg: '#FEF3C7' },
-  submitted: { label: '접수됨', color: '#F59E0B', bg: '#FEF3C7' },
-  reviewing: { label: '검토중', color: '#3B82F6', bg: '#DBEAFE' },
-  investigating: { label: '조사중', color: '#3B82F6', bg: '#DBEAFE' },
-  resolved: { label: '해결됨', color: '#10B981', bg: '#D1FAE5' },
-  rejected: { label: '반려', color: '#EF4444', bg: '#FEE2E2' },
-  closed: { label: '종료', color: '#6B7280', bg: '#F3F4F6' },
+  pending: { label: '접수됨', color: BrandColors.warning, bg: BrandColors.warningLight },
+  requested: { label: '접수됨', color: BrandColors.warning, bg: BrandColors.warningLight },
+  submitted: { label: '접수됨', color: BrandColors.warning, bg: BrandColors.warningLight },
+  reviewing: { label: '검토중', color: BrandColors.primaryLight, bg: BrandColors.helperLight },
+  investigating: { label: '조사중', color: BrandColors.primaryLight, bg: BrandColors.helperLight },
+  resolved: { label: '해결됨', color: BrandColors.success, bg: BrandColors.successLight },
+  rejected: { label: '반려', color: BrandColors.error, bg: BrandColors.errorLight },
+  closed: { label: '종료', color: Colors.light.textSecondary, bg: Colors.light.backgroundSecondary },
 };
 
 const HELPER_STATUS_LABELS: Record<string, string> = {
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: Colors.light.backgroundSecondary,
     justifyContent: 'center',
     alignItems: 'center',
   },

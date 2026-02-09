@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import Checkbox from 'expo-checkbox';
 
 import { ThemedText } from '@/components/ThemedText';
@@ -19,6 +20,28 @@ const logoImage = require('../assets/images/hellpme-logo.png');
 const SAVED_EMAIL_KEY = 'saved_email';
 const AUTO_LOGIN_KEY = 'auto_login';
 const SAVED_PASSWORD_KEY = 'saved_password';
+
+// SecureStore helpers for password (iOS Keychain / Android Keystore)
+async function secureGetPassword(): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    return AsyncStorage.getItem(SAVED_PASSWORD_KEY);
+  }
+  return SecureStore.getItemAsync(SAVED_PASSWORD_KEY);
+}
+
+async function secureSetPassword(password: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    return AsyncStorage.setItem(SAVED_PASSWORD_KEY, password);
+  }
+  return SecureStore.setItemAsync(SAVED_PASSWORD_KEY, password);
+}
+
+async function secureRemovePassword(): Promise<void> {
+  if (Platform.OS === 'web') {
+    return AsyncStorage.removeItem(SAVED_PASSWORD_KEY);
+  }
+  return SecureStore.deleteItemAsync(SAVED_PASSWORD_KEY);
+}
 
 type LoginScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -52,7 +75,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       const [savedEmail, savedAutoLogin, savedPassword] = await Promise.all([
         AsyncStorage.getItem(SAVED_EMAIL_KEY),
         AsyncStorage.getItem(AUTO_LOGIN_KEY),
-        AsyncStorage.getItem(SAVED_PASSWORD_KEY),
+        secureGetPassword(), // Use SecureStore for password
       ]);
 
       if (savedEmail) {
@@ -84,10 +107,10 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
       if (autoLogin) {
         await AsyncStorage.setItem(AUTO_LOGIN_KEY, 'true');
-        await AsyncStorage.setItem(SAVED_PASSWORD_KEY, password);
+        await secureSetPassword(password); // Use SecureStore for password
       } else {
         await AsyncStorage.removeItem(AUTO_LOGIN_KEY);
-        await AsyncStorage.removeItem(SAVED_PASSWORD_KEY);
+        await secureRemovePassword(); // Use SecureStore for password
       }
     } catch (e) {
       console.error('Failed to save settings:', e);
@@ -143,7 +166,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           {/* Logo Section */}
           <View style={styles.logoContainer}>
             <Image source={logoImage} style={styles.logo} resizeMode="contain" />
-            <ThemedText style={[styles.subtitle, { color: '#FFFFFF' }]}>
+            <ThemedText style={[styles.subtitle, { color: theme.buttonText }]}>
               프리미엄 물류 플랫폼
             </ThemedText>
           </View>

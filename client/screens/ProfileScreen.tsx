@@ -387,7 +387,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               description={(requesterProfile as any)?.businessNumber ? `사업자번호: ${(requesterProfile as any).businessNumber}` : '세금계산서 발행을 위해 등록해주세요'}
               theme={theme}
               badge={!(requesterProfile as any)?.businessNumber ? '미등록' : undefined}
-              badgeColor="#EF4444"
+              badgeColor="BrandColors.error"
               onPress={() => navigation.navigate('BusinessRegistration')}
             />
           </View>
@@ -627,7 +627,7 @@ function MenuItem({
           <View style={styles.labelRow}>
             <ThemedText style={[styles.menuItemLabel, { color: theme.text }]}>{label}</ThemedText>
             {badge ? (
-              <View style={[styles.badgeContainer, { backgroundColor: badgeColor || '#EF4444' }]}>
+              <View style={[styles.badgeContainer, { backgroundColor: badgeColor || BrandColors.error }]}>
                 <ThemedText style={styles.badgeText}>{badge}</ThemedText>
               </View>
             ) : null}
@@ -707,7 +707,7 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     height: 32,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: Colors.light.backgroundTertiary,
   },
   statValue: {
     ...Typography.h4,
@@ -762,7 +762,7 @@ const styles = StyleSheet.create({
   badgeText: {
     ...Typography.small,
     fontSize: 10,
-    color: '#fff',
+    color: Colors.light.buttonText,
     fontWeight: '600',
   },
   teamCard: {

@@ -281,7 +281,7 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
                 배송 완료
               </ThemedText>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: '#E0E0E0' }]}
+                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: Colors.light.backgroundTertiary }]}
                 value={deliveredCount}
                 onChangeText={setDeliveredCount}
                 keyboardType="numeric"
@@ -295,7 +295,7 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
                 반품
               </ThemedText>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: '#E0E0E0' }]}
+                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: Colors.light.backgroundTertiary }]}
                 value={returnedCount}
                 onChangeText={setReturnedCount}
                 keyboardType="numeric"
@@ -309,7 +309,7 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
                 기타({etcPricePerUnit.toLocaleString()}원)
               </ThemedText>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: '#E0E0E0' }]}
+                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: Colors.light.backgroundTertiary }]}
                 value={etcCount}
                 onChangeText={setEtcCount}
                 keyboardType="numeric"
@@ -339,14 +339,14 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
             extraCosts.map((cost, index) => (
               <View key={index} style={styles.extraCostRow}>
                 <TextInput
-                  style={[styles.extraCostInput, styles.extraCostCode, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: '#E0E0E0' }]}
+                  style={[styles.extraCostInput, styles.extraCostCode, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: Colors.light.backgroundTertiary }]}
                   value={cost.code}
                   onChangeText={(v) => updateExtraCost(index, "code", v)}
                   placeholder="항목명"
                   placeholderTextColor={theme.tabIconDefault}
                 />
                 <TextInput
-                  style={[styles.extraCostInput, styles.extraCostAmount, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: '#E0E0E0' }]}
+                  style={[styles.extraCostInput, styles.extraCostAmount, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: Colors.light.backgroundTertiary }]}
                   value={cost.amount ? String(cost.amount) : ""}
                   onChangeText={(v) => updateExtraCost(index, "amount", v)}
                   keyboardType="numeric"
@@ -395,7 +395,7 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
                   <Image source={{ uri }} style={styles.imagePreview} />
                   <Pressable onPress={() => removeDeliveryHistoryImage(index)} style={styles.imageRemoveButton}>
                     <View style={styles.imageRemoveIcon}>
-                      <Icon name="close-outline" size={14} color="#FFFFFF" />
+                      <Icon name="close-outline" size={14} color={Colors.light.buttonText} />
                     </View>
                   </Pressable>
                 </View>
@@ -438,7 +438,7 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
                   <Image source={{ uri }} style={styles.imagePreview} />
                   <Pressable onPress={() => removeEtcImage(index)} style={styles.imageRemoveButton}>
                     <View style={styles.imageRemoveIcon}>
-                      <Icon name="close-outline" size={14} color="#FFFFFF" />
+                      <Icon name="close-outline" size={14} color={Colors.light.buttonText} />
                     </View>
                   </Pressable>
                 </View>
@@ -452,7 +452,7 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
             메모
           </ThemedText>
           <TextInput
-            style={[styles.memoInput, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: '#E0E0E0' }]}
+            style={[styles.memoInput, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: Colors.light.backgroundTertiary }]}
             value={memo}
             onChangeText={setMemo}
             placeholder="특이사항이나 메모를 입력해주세요"
@@ -483,7 +483,7 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
           disabled={submitMutation.isPending}
         >
           {submitMutation.isPending ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
+            <ActivityIndicator color={Colors.light.buttonText} size="small" />
           ) : (
             <ThemedText style={styles.submitButtonText}>마감자료 제출</ThemedText>
           )}
@@ -524,7 +524,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.xs,
   },
   optionalBadge: {
-    backgroundColor: "#F0F0F0",
+    backgroundColor: "Colors.light.backgroundSecondary",
   },
   requiredBadgeText: {
     ...Typography.small,
@@ -667,7 +667,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
     paddingHorizontal: Spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: "#E0E0E0",
+    borderTopColor: Colors.light.backgroundTertiary,
   },
   submitButton: {
     paddingVertical: Spacing.lg,
@@ -675,7 +675,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   submitButtonText: {
-    color: "#FFFFFF",
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: "600",
   },

@@ -390,7 +390,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
                   resizeMode="cover"
                 />
                 <View style={styles.mapOverlay}>
-                  <Icon name="arrow-expand" size={20} color="#FFFFFF" />
+                  <Icon name="arrow-expand" size={20} color={Colors.light.buttonText} />
                   <ThemedText style={styles.mapOverlayText}>탭하여 확대</ThemedText>
                 </View>
               </Pressable>
@@ -444,8 +444,8 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
         {closingReport?.status === 'rejected' && closingReport.rejectReason ? (
           <Card variant="glass" padding="lg" style={StyleSheet.flatten([styles.requirementsCard, styles.rejectedCard])}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm }}>
-              <Icon name="alert-circle-outline" size={18} color="#EF4444" />
-              <ThemedText style={[styles.sectionTitle, { color: '#EF4444' }]}>마감자료 반려</ThemedText>
+              <Icon name="alert-circle-outline" size={18} color="BrandColors.error" />
+              <ThemedText style={[styles.sectionTitle, { color: BrandColors.error }]}>마감자료 반려</ThemedText>
             </View>
             {closingReport.rejectCategory ? (
               <ThemedText style={[styles.requirements, { color: theme.tabIconDefault, marginBottom: Spacing.xs }]}>
@@ -475,7 +475,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
               ]}
               onPress={() => navigation.navigate('QRScanner' as any, { orderId: String(order.id), type: 'start_work' })}
             >
-              <Icon name="camera-outline" size={20} color="#FFFFFF" />
+              <Icon name="camera-outline" size={20} color={Colors.light.buttonText} />
               <ThemedText style={styles.applyButtonText}>QR 체크인</ThemedText>
             </Pressable>
             <Pressable
@@ -488,7 +488,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
               disabled={startWorkMutation.isPending}
             >
               {startWorkMutation.isPending ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
+                <ActivityIndicator color={Colors.light.buttonText} size="small" />
               ) : (
                 <ThemedText style={styles.applyButtonText}>QR 없이 시작</ThemedText>
               )}
@@ -517,7 +517,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
               disabled={applyMutation.isPending}
             >
               {applyMutation.isPending ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
+                <ActivityIndicator color={Colors.light.buttonText} size="small" />
               ) : (
                 <ThemedText style={styles.applyButtonText}>신청</ThemedText>
               )}
@@ -569,7 +569,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
               style={styles.modalCloseButton}
               onPress={() => setMapModalVisible(false)}
             >
-              <Icon name="close-outline" size={24} color="#FFFFFF" />
+              <Icon name="close-outline" size={24} color={Colors.light.buttonText} />
             </Pressable>
           </View>
         </Pressable>
@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   backButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },
@@ -680,7 +680,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.xs,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: Colors.light.backgroundTertiary,
   },
   mapButtonText: {
     ...Typography.body,
@@ -688,7 +688,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: Colors.light.backgroundTertiary,
     marginVertical: Spacing.md,
   },
   guideCard: {
@@ -733,7 +733,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   rejectedCard: {
-    borderColor: '#EF4444',
+    borderColor: BrandColors.error,
     borderWidth: 1,
   },
   requirements: {
@@ -748,7 +748,7 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
     paddingHorizontal: Spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: Colors.light.backgroundTertiary,
   },
   footerRow: {
     flexDirection: 'row',
@@ -770,7 +770,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   applyButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },
@@ -788,7 +788,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 180,
     borderRadius: BorderRadius.sm,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: 'Colors.light.backgroundSecondary',
   },
   mapOverlay: {
     position: 'absolute',
@@ -803,7 +803,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.xs,
   },
   mapOverlayText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     fontSize: 12,
     fontWeight: '500',
   },

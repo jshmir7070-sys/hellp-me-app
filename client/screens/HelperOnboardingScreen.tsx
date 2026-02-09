@@ -406,7 +406,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
           <View style={styles.formGroup}>
             <ThemedText style={[styles.label, { color: theme.text }]}>사업자등록번호 <ThemedText style={styles.required}>*</ThemedText></ThemedText>
             <TextInput
-              style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+              style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
               placeholder="000-00-00000"
               placeholderTextColor={Colors.light.tabIconDefault}
               value={businessInfo.businessNumber}
@@ -418,7 +418,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
             <View style={[styles.formGroup, { flex: 1 }]}>
               <ThemedText style={[styles.label, { color: theme.text }]}>상호명 <ThemedText style={styles.required}>*</ThemedText></ThemedText>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
                 placeholder="상호명"
                 placeholderTextColor={Colors.light.tabIconDefault}
                 value={businessInfo.businessName}
@@ -428,7 +428,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
             <View style={[styles.formGroup, { flex: 1, marginLeft: Spacing.md }]}>
               <ThemedText style={[styles.label, { color: theme.text }]}>대표자명 <ThemedText style={styles.required}>*</ThemedText></ThemedText>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
                 placeholder="대표자"
                 placeholderTextColor={Colors.light.tabIconDefault}
                 value={businessInfo.representativeName}
@@ -440,7 +440,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
           <View style={styles.formGroup}>
             <ThemedText style={[styles.label, { color: theme.text }]}>사업장 주소 <ThemedText style={styles.required}>*</ThemedText></ThemedText>
             <TextInput
-              style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+              style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
               placeholder="사업장 주소"
               placeholderTextColor={Colors.light.tabIconDefault}
               value={businessInfo.businessAddress}
@@ -452,7 +452,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
             <View style={[styles.formGroup, { flex: 1 }]}>
               <ThemedText style={[styles.label, { color: theme.text }]}>업태 <ThemedText style={styles.required}>*</ThemedText></ThemedText>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
                 placeholder="운수업"
                 placeholderTextColor={Colors.light.tabIconDefault}
                 value={businessInfo.businessType}
@@ -462,7 +462,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
             <View style={[styles.formGroup, { flex: 1, marginLeft: Spacing.md }]}>
               <ThemedText style={[styles.label, { color: theme.text }]}>업종 <ThemedText style={styles.required}>*</ThemedText></ThemedText>
               <TextInput
-                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+                style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
                 placeholder="화물운송"
                 placeholderTextColor={Colors.light.tabIconDefault}
                 value={businessInfo.businessCategory}
@@ -474,7 +474,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
           <View style={styles.formGroup}>
             <ThemedText style={[styles.label, { color: theme.text }]}>이메일 <ThemedText style={styles.required}>*</ThemedText></ThemedText>
             <TextInput
-              style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+              style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
               placeholder="example@email.com"
               placeholderTextColor={Colors.light.tabIconDefault}
               keyboardType="email-address"
@@ -506,14 +506,14 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
                     styles.vehicleTypeButton,
                     { 
                       backgroundColor: vehicleInfo.vehicleType === type.id ? BrandColors.helper : theme.backgroundDefault,
-                      borderColor: vehicleInfo.vehicleType === type.id ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+                      borderColor: vehicleInfo.vehicleType === type.id ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
                     }
                   ]}
                   onPress={() => setVehicleInfo(prev => ({ ...prev, vehicleType: type.id }))}
                 >
                   <ThemedText style={[
                     styles.vehicleTypeText,
-                    { color: vehicleInfo.vehicleType === type.id ? '#FFFFFF' : theme.text }
+                    { color: vehicleInfo.vehicleType === type.id ? Colors.light.buttonText : theme.text }
                   ]}>
                     {type.label}
                   </ThemedText>
@@ -533,12 +533,12 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
                       styles.regionButton,
                       { 
                         backgroundColor: vehicleInfo.region === region ? BrandColors.helper : theme.backgroundDefault,
-                        borderColor: vehicleInfo.region === region ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+                        borderColor: vehicleInfo.region === region ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
                       }
                     ]}
                     onPress={() => setVehicleInfo(prev => ({ ...prev, region }))}
                   >
-                    <ThemedText style={{ color: vehicleInfo.region === region ? '#FFFFFF' : theme.text, fontSize: 12 }}>
+                    <ThemedText style={{ color: vehicleInfo.region === region ? Colors.light.buttonText : theme.text, fontSize: 12 }}>
                       {region}
                     </ThemedText>
                   </Pressable>
@@ -547,7 +547,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
             </View>
             <View style={styles.plateInputRow}>
               <TextInput
-                style={[styles.plateInput, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+                style={[styles.plateInput, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
                 placeholder="12"
                 placeholderTextColor={Colors.light.tabIconDefault}
                 keyboardType="number-pad"
@@ -563,19 +563,19 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
                       styles.letterButton,
                       { 
                         backgroundColor: vehicleInfo.plateLetter === letter ? BrandColors.helper : theme.backgroundDefault,
-                        borderColor: vehicleInfo.plateLetter === letter ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+                        borderColor: vehicleInfo.plateLetter === letter ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary),
                       }
                     ]}
                     onPress={() => setVehicleInfo(prev => ({ ...prev, plateLetter: letter }))}
                   >
-                    <ThemedText style={{ color: vehicleInfo.plateLetter === letter ? '#FFFFFF' : theme.text, fontSize: 14 }}>
+                    <ThemedText style={{ color: vehicleInfo.plateLetter === letter ? Colors.light.buttonText : theme.text, fontSize: 14 }}>
                       {letter}
                     </ThemedText>
                   </Pressable>
                 ))}
               </View>
               <TextInput
-                style={[styles.plateInput, styles.plateInputLarge, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
+                style={[styles.plateInput, styles.plateInputLarge, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary }]}
                 placeholder="0000"
                 placeholderTextColor={Colors.light.tabIconDefault}
                 keyboardType="number-pad"
@@ -601,7 +601,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
           style={[
             styles.submitButton,
             { 
-              backgroundColor: canSubmit() ? BrandColors.helper : '#9CA3AF',
+              backgroundColor: canSubmit() ? BrandColors.helper : 'Colors.light.textTertiary',
               opacity: isSubmitting ? 0.7 : 1,
             }
           ]}
@@ -609,7 +609,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
           disabled={isSubmitting || !canSubmit()}
         >
           <ThemedText style={styles.submitButtonText}>다음: 계약서 서명</ThemedText>
-          <Icon name="arrow-forward-outline" size={20} color="#FFFFFF" />
+          <Icon name="arrow-forward-outline" size={20} color={Colors.light.buttonText} />
         </Pressable>
       </View>
     </View>
@@ -847,7 +847,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.md,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    borderTopColor: Colors.light.backgroundTertiary,
   },
   submitButton: {
     flexDirection: 'row',
@@ -858,7 +858,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   submitButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     fontSize: 16,
     fontWeight: '600',
   },

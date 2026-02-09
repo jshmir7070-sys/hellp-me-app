@@ -6,6 +6,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { notificationWS } from "./websocket";
+import { overdueScheduler } from "./schedulers/overdue-scheduler";
 import { randomUUID } from "crypto";
 
 const app = express();
@@ -259,6 +260,9 @@ function checkEnvironmentVariables() {
 
   // Expo app uses separate Metro bundler, so we just serve static landing page
   serveStatic(app);
+
+  // Start overdue payment scheduler (Phase 2)
+  overdueScheduler.start();
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.

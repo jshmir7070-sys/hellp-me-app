@@ -206,7 +206,7 @@ export default function WithdrawAccountScreen({ navigation }: WithdrawAccountScr
 const styles = StyleSheet.create({
   warningCard: {
     marginBottom: Spacing['2xl'],
-    backgroundColor: '#FEF2F2',
+    backgroundColor: 'BrandColors.errorLight',
   },
   warningHeader: {
     flexDirection: 'row',
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: Colors.light.backgroundTertiary,
     marginHorizontal: Spacing.lg,
   },
   passwordCard: {},
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   },
   withdrawButtonText: {
     ...Typography.body,
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     fontWeight: '600',
   },
   cancelButton: {

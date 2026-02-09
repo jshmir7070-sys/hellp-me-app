@@ -319,9 +319,9 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
             style={[
               styles.input,
               {
-                backgroundColor: isDark ? Colors.dark.backgroundSecondary : '#F3F4F6',
+                backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundSecondary,
                 color: theme.tabIconDefault,
-                borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
               },
             ]}
             value={name}
@@ -337,7 +337,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
               {
                 backgroundColor: theme.backgroundDefault,
                 color: theme.text,
-                borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
               },
             ]}
             placeholder="닉네임을 입력하세요 (요청자에게 표시)"
@@ -368,7 +368,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
               {
                 backgroundColor: theme.backgroundDefault,
                 color: theme.text,
-                borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
               },
             ]}
             placeholder="상세주소 (동/호수 등)"
@@ -395,7 +395,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
                 {
                   backgroundColor: theme.backgroundDefault,
                   color: theme.text,
-                  borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                  borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                 },
               ]}
               placeholder="010-0000-0000"
@@ -415,7 +415,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
                 disabled={isSendingCode || isPhoneVerified}
               >
                 {isSendingCode ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <ActivityIndicator color={Colors.light.buttonText} size="small" />
                 ) : (
                   <ThemedText style={styles.verifyButtonText}>
                     {isPhoneVerified ? '완료' : '인증'}
@@ -439,7 +439,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
                   {
                     backgroundColor: theme.backgroundDefault,
                     color: theme.text,
-                    borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                    borderColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundTertiary,
                   },
                 ]}
                 placeholder="6자리 인증번호"
@@ -455,7 +455,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
                 disabled={isVerifyingCode}
               >
                 {isVerifyingCode ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
+                  <ActivityIndicator color={Colors.light.buttonText} size="small" />
                 ) : (
                   <ThemedText style={styles.verifyButtonText}>확인</ThemedText>
                 )}
@@ -475,7 +475,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
         disabled={isSaving}
       >
         {isSaving ? (
-          <ActivityIndicator color="#FFFFFF" />
+          <ActivityIndicator color={Colors.light.buttonText} />
         ) : (
           <ThemedText style={styles.saveButtonText}>저장하기</ThemedText>
         )}
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
   },
   verifyButtonText: {
     ...Typography.body,
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     fontWeight: '600',
   },
   verifiedBadge: {
@@ -609,7 +609,7 @@ const styles = StyleSheet.create({
   },
   saveButtonText: {
     ...Typography.body,
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     fontWeight: '600',
   },
   buttonDisabled: {

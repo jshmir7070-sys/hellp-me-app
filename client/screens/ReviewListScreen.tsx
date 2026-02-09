@@ -39,7 +39,7 @@ export default function ReviewListScreen() {
             key={star}
             name="star-outline"
             size={16}
-            color={star <= rating ? '#FBBF24' : theme.tabIconDefault}
+            color={star <= rating ? 'BrandColors.warning' : theme.tabIconDefault}
             style={{ marginRight: 2 }}
           />
         ))}

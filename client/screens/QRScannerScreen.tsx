@@ -286,7 +286,7 @@ export default function QRScannerScreen({ navigation, route }: QRScannerScreenPr
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: '#000000' }]}>
+    <View style={[styles.container, { backgroundColor: 'Colors.dark.text' }]}>
       <CameraView
         style={styles.camera}
         facing="back"
@@ -299,7 +299,7 @@ export default function QRScannerScreen({ navigation, route }: QRScannerScreenPr
       <View style={[styles.overlay, { paddingTop: insets.top }]}>
         <View style={styles.header}>
           <Pressable style={styles.closeButton} onPress={() => navigation.goBack()}>
-            <Icon name="close-outline" size={24} color="#FFFFFF" />
+            <Icon name="close-outline" size={24} color={Colors.light.buttonText} />
           </Pressable>
           <ThemedText style={styles.headerTitle}>
             {scanType === 'start_work' ? '출근 체크인' : scanType === 'checkin' ? '출근 체크인' : '퇴근 체크아웃'}
@@ -323,7 +323,7 @@ export default function QRScannerScreen({ navigation, route }: QRScannerScreenPr
                 QR 코드를 사각형 안에 맞춰주세요
               </ThemedText>
               {isProcessing ? (
-                <ActivityIndicator color="#FFFFFF" style={styles.processingIndicator} />
+                <ActivityIndicator color={Colors.light.buttonText} style={styles.processingIndicator} />
               ) : null}
             </>
           ) : scanStatus === 'success' ? (
@@ -379,7 +379,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   headerTitle: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.h4,
   },
   headerSpacer: {
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 40,
     height: 40,
-    borderColor: '#FFFFFF',
+    borderColor: Colors.light.buttonText,
   },
   cornerTopLeft: {
     top: 0,
@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     textAlign: 'center',
   },
@@ -453,7 +453,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   statusText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     textAlign: 'center',
   },
@@ -485,7 +485,7 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.sm,
   },
   backButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },
@@ -511,7 +511,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   permissionButtonText: {
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     ...Typography.body,
     fontWeight: '600',
   },

@@ -55,8 +55,8 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
               <Switch
                 value={pushNotifications}
                 onValueChange={setPushNotifications}
-                trackColor={{ false: '#E0E0E0', true: primaryColor }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: Colors.light.backgroundTertiary, true: primaryColor }}
+                thumbColor=Colors.light.buttonText
               />
             }
           />
@@ -69,8 +69,8 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
               <Switch
                 value={emailNotifications}
                 onValueChange={setEmailNotifications}
-                trackColor={{ false: '#E0E0E0', true: primaryColor }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: Colors.light.backgroundTertiary, true: primaryColor }}
+                thumbColor=Colors.light.buttonText
               />
             }
           />
@@ -83,8 +83,8 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
               <Switch
                 value={smsNotifications}
                 onValueChange={setSmsNotifications}
-                trackColor={{ false: '#E0E0E0', true: primaryColor }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: Colors.light.backgroundTertiary, true: primaryColor }}
+                thumbColor=Colors.light.buttonText
               />
             }
           />
@@ -103,8 +103,8 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
               <Switch
                 value={isDark}
                 onValueChange={handleDarkModeToggle}
-                trackColor={{ false: '#E0E0E0', true: primaryColor }}
-                thumbColor="#FFFFFF"
+                trackColor={{ false: Colors.light.backgroundTertiary, true: primaryColor }}
+                thumbColor=Colors.light.buttonText
               />
             }
           />
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: Colors.light.backgroundTertiary,
     marginHorizontal: Spacing.lg,
   },
   versionText: {

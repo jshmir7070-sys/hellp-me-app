@@ -28,5 +28,14 @@ export function registerPaymentRoutes(app: Express) {
   app.post('/api/admin/payments/:id/retry', adminAuth, paymentController.retryPayment.bind(paymentController));
   app.get('/api/admin/refunds', adminAuth, paymentController.getRefunds.bind(paymentController));
 
-  console.log('✅ Payment routes registered (12 endpoints)');
+  // Admin - Overdue Management (Phase 2)
+  app.get('/api/admin/payments/overdue', adminAuth, paymentController.getOverduePayments.bind(paymentController));
+  app.post('/api/admin/payments/:id/send-reminder', adminAuth, paymentController.sendPaymentReminder.bind(paymentController));
+  app.post('/api/admin/payments/:id/restrict', adminAuth, paymentController.restrictService.bind(paymentController));
+  app.post('/api/admin/payments/:id/collection', adminAuth, paymentController.startCollection.bind(paymentController));
+
+  // User - My Overdue Payments
+  app.get('/api/payments/my-overdue', requireAuth, paymentController.getMyOverduePayments.bind(paymentController));
+
+  console.log('✅ Payment routes registered (17 endpoints)');
 }

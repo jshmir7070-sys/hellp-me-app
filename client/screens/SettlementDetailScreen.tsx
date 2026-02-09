@@ -212,10 +212,10 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
         
         {(workDetail.commissionAmount ?? 0) > 0 ? (
           <View style={styles.amountRow}>
-            <ThemedText style={[styles.amountLabel, { color: '#F59E0B' }]}>
+            <ThemedText style={[styles.amountLabel, { color: BrandColors.warning }]}>
               수수료 ({workDetail.commissionRate || 0}%)
             </ThemedText>
-            <ThemedText style={[styles.amountValue, { color: '#F59E0B' }]}>
+            <ThemedText style={[styles.amountValue, { color: BrandColors.warning }]}>
               -{formatCurrency(workDetail.commissionAmount || 0)}
             </ThemedText>
           </View>

@@ -147,13 +147,13 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
 
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.label, { color: theme.text }]}>
-              사업자등록번호 <ThemedText style={{ color: '#EF4444' }}>*</ThemedText>
+              사업자등록번호 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
             <TextInput
               style={[styles.input, { 
-                backgroundColor: isDark ? '#374151' : '#F9FAFB',
+                backgroundColor: isDark ? 'Colors.dark.textSecondary' : 'Colors.light.backgroundRoot',
                 color: theme.text,
-                borderColor: isDark ? '#4B5563' : '#E5E7EB'
+                borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary
               }]}
               value={businessNumber}
               onChangeText={(text) => setBusinessNumber(formatBusinessNumber(text))}
@@ -166,13 +166,13 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
 
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.label, { color: theme.text }]}>
-              상호명 <ThemedText style={{ color: '#EF4444' }}>*</ThemedText>
+              상호명 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
             <TextInput
               style={[styles.input, { 
-                backgroundColor: isDark ? '#374151' : '#F9FAFB',
+                backgroundColor: isDark ? 'Colors.dark.textSecondary' : 'Colors.light.backgroundRoot',
                 color: theme.text,
-                borderColor: isDark ? '#4B5563' : '#E5E7EB'
+                borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary
               }]}
               value={businessName}
               onChangeText={setBusinessName}
@@ -183,13 +183,13 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
 
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.label, { color: theme.text }]}>
-              대표자명 <ThemedText style={{ color: '#EF4444' }}>*</ThemedText>
+              대표자명 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
             <TextInput
               style={[styles.input, { 
-                backgroundColor: isDark ? '#374151' : '#F9FAFB',
+                backgroundColor: isDark ? 'Colors.dark.textSecondary' : 'Colors.light.backgroundRoot',
                 color: theme.text,
-                borderColor: isDark ? '#4B5563' : '#E5E7EB'
+                borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary
               }]}
               value={representativeName}
               onChangeText={setRepresentativeName}
@@ -200,13 +200,13 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
 
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.label, { color: theme.text }]}>
-              사업장 주소 <ThemedText style={{ color: '#EF4444' }}>*</ThemedText>
+              사업장 주소 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
             <TextInput
               style={[styles.input, { 
-                backgroundColor: isDark ? '#374151' : '#F9FAFB',
+                backgroundColor: isDark ? 'Colors.dark.textSecondary' : 'Colors.light.backgroundRoot',
                 color: theme.text,
-                borderColor: isDark ? '#4B5563' : '#E5E7EB'
+                borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary
               }]}
               value={address}
               onChangeText={setAddress}
@@ -217,13 +217,13 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
 
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.label, { color: theme.text }]}>
-              업태 <ThemedText style={{ color: '#EF4444' }}>*</ThemedText>
+              업태 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
             <TextInput
               style={[styles.input, { 
-                backgroundColor: isDark ? '#374151' : '#F9FAFB',
+                backgroundColor: isDark ? 'Colors.dark.textSecondary' : 'Colors.light.backgroundRoot',
                 color: theme.text,
-                borderColor: isDark ? '#4B5563' : '#E5E7EB'
+                borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary
               }]}
               value={businessType}
               onChangeText={setBusinessType}
@@ -234,13 +234,13 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
 
           <View style={styles.inputGroup}>
             <ThemedText style={[styles.label, { color: theme.text }]}>
-              업종 <ThemedText style={{ color: '#EF4444' }}>*</ThemedText>
+              업종 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
             <TextInput
               style={[styles.input, { 
-                backgroundColor: isDark ? '#374151' : '#F9FAFB',
+                backgroundColor: isDark ? 'Colors.dark.textSecondary' : 'Colors.light.backgroundRoot',
                 color: theme.text,
-                borderColor: isDark ? '#4B5563' : '#E5E7EB'
+                borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary
               }]}
               value={businessCategory}
               onChangeText={setBusinessCategory}
@@ -310,7 +310,7 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     ...Typography.body,
-    color: '#fff',
+    color: Colors.light.buttonText,
     fontWeight: '600',
   },
 });

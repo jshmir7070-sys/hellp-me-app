@@ -301,12 +301,12 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
               <Icon 
                 name={type.icon as any} 
                 size={20} 
-                color={incidentType === type.value ? '#FFFFFF' : theme.text} 
+                color={incidentType === type.value ? Colors.light.buttonText : theme.text} 
               />
               <ThemedText 
                 style={[
                   styles.typeLabel, 
-                  { color: incidentType === type.value ? '#FFFFFF' : theme.text }
+                  { color: incidentType === type.value ? Colors.light.buttonText : theme.text }
                 ]}
               >
                 {type.label}
@@ -480,7 +480,7 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
                 style={styles.removePhotoButton}
                 onPress={() => removePhoto(index)}
               >
-                <Icon name="close-circle" size={22} color="#ff4444" />
+                <Icon name="close-circle" size={22} color="BrandColors.error" />
               </Pressable>
             </View>
           ))}
@@ -529,7 +529,7 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
                   resizeMode="cover"
                 />
                 <View style={[styles.imageBadge, { backgroundColor: BrandColors.helper }]}>
-                  <Icon name="checkmark-outline" size={10} color="#FFFFFF" />
+                  <Icon name="checkmark-outline" size={10} color={Colors.light.buttonText} />
                 </View>
               </Pressable>
             ))}
@@ -551,10 +551,10 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
         disabled={submitMutation.isPending || !incidentType || description.length < 10 || !trackingNumber.trim() || !deliveryAddress.trim() || !customerName.trim() || !customerPhone.trim()}
       >
         {submitMutation.isPending ? (
-          <ActivityIndicator color="#FFFFFF" />
+          <ActivityIndicator color={Colors.light.buttonText} />
         ) : (
           <>
-            <Icon name="warning-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+            <Icon name="warning-outline" size={20} color={Colors.light.buttonText} style={{ marginRight: 8 }} />
             <ThemedText style={styles.submitButtonText}>화물사고 접수</ThemedText>
           </>
         )}
@@ -609,7 +609,7 @@ const styles = StyleSheet.create({
   },
   orderNumberText: {
     ...Typography.small,
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
     fontWeight: '600',
   },
   orderLabel: {
@@ -707,7 +707,7 @@ const styles = StyleSheet.create({
   submitButtonText: {
     ...Typography.body,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: Colors.light.buttonText,
   },
   attachmentHeader: {
     flexDirection: 'row',

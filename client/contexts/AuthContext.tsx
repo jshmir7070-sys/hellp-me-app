@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 import { apiRequest, getApiUrl, isApiConfigured, getApiConfigError } from '@/lib/query-client';
 
 export type UserRole = 'helper' | 'requester' | 'admin' | 'superadmin' | null;
@@ -27,6 +29,7 @@ interface AuthContextType extends AuthState {
   logout: () => Promise<void>;
   selectRole: (role: UserRole) => Promise<{ success: boolean; error?: string }>;
   refreshUser: () => Promise<void>;
+  getToken: () => Promise<string | null>;
 }
 
 interface SignupData {
@@ -42,6 +45,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const TOKEN_KEY = 'auth_token';
 const REFRESH_TOKEN_KEY = 'refresh_token';
+
+// SecureStore 헬퍼 함수 (웹에서는 AsyncStorage 폴백)
+async function secureGet(key: string): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    return AsyncStorage.getItem(key);
+  }
+  return SecureStore.getItemAsync(key);
+}
+
+async function secureSet(key: string, value: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    return AsyncStorage.setItem(key, value);
+  }
+  return SecureStore.setItemAsync(key, value);
+}
+
+async function secureRemove(key: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    return AsyncStorage.removeItem(key);
+  }
+  return SecureStore.deleteItemAsync(key);
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({
@@ -63,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const token = await AsyncStorage.getItem(TOKEN_KEY);
+      const token = await secureGet(TOKEN_KEY);
       if (!token) {
         setState({ user: null, isLoading: false, isAuthenticated: false });
         return;
@@ -84,8 +109,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isAuthenticated: true,
         });
       } else {
-        await AsyncStorage.removeItem(TOKEN_KEY);
-        await AsyncStorage.removeItem(REFRESH_TOKEN_KEY);
+        await secureRemove(TOKEN_KEY);
+        await secureRemove(REFRESH_TOKEN_KEY);
         setState({ user: null, isLoading: false, isAuthenticated: false });
       }
     } catch (error) {
@@ -114,9 +139,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: data.message || '로그인에 실패했습니다' };
       }
 
-      await AsyncStorage.setItem(TOKEN_KEY, data.token);
+      await secureSet(TOKEN_KEY, data.token);
       if (data.refreshToken) {
-        await AsyncStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
+        await secureSet(REFRESH_TOKEN_KEY, data.refreshToken);
       }
 
       setState({
@@ -147,9 +172,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: data.message || '회원가입에 실패했습니다' };
       }
 
-      await AsyncStorage.setItem(TOKEN_KEY, data.token);
+      await secureSet(TOKEN_KEY, data.token);
       if (data.refreshToken) {
-        await AsyncStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
+        await secureSet(REFRESH_TOKEN_KEY, data.refreshToken);
       }
 
       setState({
@@ -167,7 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function selectRole(role: UserRole) {
     try {
-      const token = await AsyncStorage.getItem(TOKEN_KEY);
+      const token = await secureGet(TOKEN_KEY);
       if (!token) {
         return { success: false, error: '인증이 필요합니다' };
       }
@@ -202,7 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     try {
-      const token = await AsyncStorage.getItem(TOKEN_KEY);
+      const token = await secureGet(TOKEN_KEY);
       if (token) {
         const baseUrl = getApiUrl();
         await fetch(new URL('/api/auth/logout', baseUrl).href, {
@@ -215,8 +240,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      await AsyncStorage.removeItem(TOKEN_KEY);
-      await AsyncStorage.removeItem(REFRESH_TOKEN_KEY);
+      await secureRemove(TOKEN_KEY);
+      await secureRemove(REFRESH_TOKEN_KEY);
       setState({
         user: null,
         isLoading: false,
@@ -229,6 +254,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await checkAuthStatus();
   }
 
+  // 외부에서 토큰을 가져올 수 있도록 헬퍼 함수 제공
+  async function getToken(): Promise<string | null> {
+    return secureGet(TOKEN_KEY);
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -238,6 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         selectRole,
         refreshUser,
+        getToken,
       }}
     >
       {children}
