@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
 import { useTheme } from '@/hooks/useTheme';
-import { Spacing, BorderRadius, Typography, BrandColors } from '@/constants/theme';
+import { Spacing, BorderRadius, Typography, BrandColors, Colors } from "@/constants/theme";
 import { getApiUrl } from '@/lib/query-client';
 
 type IdentityVerificationScreenProps = {

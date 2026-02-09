@@ -19,7 +19,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Icon } from "@/components/Icon";
 import { useTheme } from "@/hooks/useTheme";
-import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
+import { Spacing, BorderRadius, BrandColors, Colors } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
 
 interface RefundItem {

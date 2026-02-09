@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo  Hellp Me - Metro Bundler Starter
+echo  Hellp Me - Metro Bundler (LAN Mode)
 echo ========================================
 echo.
 
@@ -13,11 +13,12 @@ if exist .expo rd /s /q .expo
 if exist node_modules\.cache rd /s /q node_modules\.cache
 echo Cache cleaned!
 
-echo [3/4] Starting Metro Bundler...
-echo This may take 1-3 minutes on first run...
+echo [3/4] Starting Metro Bundler with LAN...
+echo Make sure your phone and PC are on the same WiFi!
+echo Scan the QR code with Expo Go app on your phone.
 echo.
 
 set EXPO_NO_GIT_STATUS=1
-npx expo start --clear --offline
+npx expo start --clear --lan
 
 pause

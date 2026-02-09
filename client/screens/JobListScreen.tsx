@@ -16,7 +16,7 @@ import { OrderCard } from "@/components/order/OrderCard";
 import { JobDetailModal } from "@/components/order/JobDetailModal";
 import { adaptHelperRecruitmentOrder, adaptHelperApplicationOrder, type OrderCardDTO } from "@/adapters/orderCardAdapter";
 import { apiRequest } from "@/lib/query-client";
-import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
+import { Spacing, BorderRadius, Typography, BrandColors, Colors } from "@/constants/theme";
 
 type JobListScreenProps = {
   navigation: NativeStackNavigationProp<any>;

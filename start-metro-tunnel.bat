@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo  Hellp Me - Metro Bundler Starter
+echo  Hellp Me - Metro Bundler (Tunnel Mode)
 echo ========================================
 echo.
 
@@ -13,11 +13,12 @@ if exist .expo rd /s /q .expo
 if exist node_modules\.cache rd /s /q node_modules\.cache
 echo Cache cleaned!
 
-echo [3/4] Starting Metro Bundler...
-echo This may take 1-3 minutes on first run...
+echo [3/4] Starting Metro Bundler with Tunnel...
+echo This will create a QR code for remote access.
+echo Scan the QR code with Expo Go app on your phone.
 echo.
 
 set EXPO_NO_GIT_STATUS=1
-npx expo start --clear --offline
+npx expo start --clear --tunnel
 
 pause

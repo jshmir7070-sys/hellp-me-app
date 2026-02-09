@@ -10,7 +10,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
-import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
+import { Spacing, BorderRadius, Typography, BrandColors, Colors } from "@/constants/theme";
 
 type SettingsScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -56,7 +56,7 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
                 value={pushNotifications}
                 onValueChange={setPushNotifications}
                 trackColor={{ false: Colors.light.backgroundTertiary, true: primaryColor }}
-                thumbColor=Colors.light.buttonText
+                thumbColor={Colors.light.buttonText}
               />
             }
           />
@@ -70,7 +70,7 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
                 value={emailNotifications}
                 onValueChange={setEmailNotifications}
                 trackColor={{ false: Colors.light.backgroundTertiary, true: primaryColor }}
-                thumbColor=Colors.light.buttonText
+                thumbColor={Colors.light.buttonText}
               />
             }
           />
@@ -84,7 +84,7 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
                 value={smsNotifications}
                 onValueChange={setSmsNotifications}
                 trackColor={{ false: Colors.light.backgroundTertiary, true: primaryColor }}
-                thumbColor=Colors.light.buttonText
+                thumbColor={Colors.light.buttonText}
               />
             }
           />
@@ -104,7 +104,7 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
                 value={isDark}
                 onValueChange={handleDarkModeToggle}
                 trackColor={{ false: Colors.light.backgroundTertiary, true: primaryColor }}
-                thumbColor=Colors.light.buttonText
+                thumbColor={Colors.light.buttonText}
               />
             }
           />

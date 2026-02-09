@@ -21,7 +21,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
-import { Spacing, Typography, BorderRadius, BrandColors } from "@/constants/theme";
+import { Spacing, Typography, BorderRadius, BrandColors, Colors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
 
 const { width: screenWidth } = Dimensions.get('window');

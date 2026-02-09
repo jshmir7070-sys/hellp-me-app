@@ -13,7 +13,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { OrderCard } from "@/components/order/OrderCard";
 import { adaptHelperMyOrder, type OrderCardDTO } from "@/adapters/orderCardAdapter";
-import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
+import { Spacing, BorderRadius, Typography, BrandColors, Colors } from "@/constants/theme";
 import { apiRequest, getApiUrl, getAuthToken } from "@/lib/query-client";
 
 type ClosingStackParamList = {

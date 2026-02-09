@@ -26,7 +26,7 @@ import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
 import { Badge } from "@/components/Badge";
 import { Avatar } from "@/components/Avatar";
-import { Spacing, BorderRadius, Typography, BrandColors, PremiumGradients } from "@/constants/theme";
+import { Spacing, BorderRadius, Typography, BrandColors, PremiumGradients, Colors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 
 interface Review {

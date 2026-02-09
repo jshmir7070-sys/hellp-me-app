@@ -9,7 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
-import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
+import { Spacing, BorderRadius, BrandColors, Colors } from "@/constants/theme";
 
 type ProfileStackParamList = {
   IncidentList: undefined;
