@@ -304,6 +304,11 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
           scrollIndicatorInsets={{ bottom: insets.bottom }}
           data={applicationOrders}
           keyExtractor={(item) => item.orderId}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          updateCellsBatchingPeriod={50}
+          initialNumToRender={10}
+          windowSize={5}
           renderItem={renderItem}
           ListHeaderComponent={renderApplicationsHeader}
           ListEmptyComponent={renderApplicationsEmpty}
@@ -337,6 +342,11 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         data={filteredOrders}
         keyExtractor={(item) => item.orderId}
+        removeClippedSubviews={true}
+        maxToRenderPerBatch={10}
+        updateCellsBatchingPeriod={50}
+        initialNumToRender={10}
+        windowSize={5}
         renderItem={renderItem}
         ListHeaderComponent={renderJobsHeader}
         ListEmptyComponent={renderJobsEmpty}
