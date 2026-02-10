@@ -268,33 +268,22 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
       {isHelper ? (
         <>
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>서류 관리</ThemedText>
-            
+          <CategorySection title="업무" icon="briefcase-outline">
             <MenuItem
               icon="document-text-outline"
               label="서류 제출"
               description="사업자등록증, 운전면허증, 차량등록증"
-              
               onPress={() => navigation.navigate('HelperOnboarding')}
             />
-          </View>
-
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>QR 체크인</ThemedText>
-            
             <MenuItem
               icon="camera-outline"
               label="요청자 QR 스캔"
               description="요청자의 QR을 스캔하여 출근 기록"
-              
               onPress={() => navigation.navigate('QRCheckin')}
             />
-          </View>
+          </CategorySection>
 
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>팀 관리</ThemedText>
-            
+          <CategorySection title="팀 관리" icon="people-outline">
             {team ? (
               <Card variant="glass" padding="md" style={styles.teamCard}>
                 <View style={styles.teamInfo}>
@@ -321,184 +310,143 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                 icon="people-outline"
                 label="팀 생성하기"
                 description="팀을 만들어 함께 일해보세요"
-                
                 onPress={() => navigation.navigate('CreateTeam')}
               />
             )}
-          </View>
+          </CategorySection>
 
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>정산</ThemedText>
-            
+          <CategorySection title="정산" icon="card-outline">
             <MenuItem
               icon="card-outline"
               label="정산 계좌"
               description={profile?.bankName ? `${profile.bankName} ${profile.accountNumber?.slice(-4) || ''}` : '계좌를 등록해주세요'}
-              
               onPress={() => navigation.navigate('PaymentSettings')}
             />
-          </View>
+          </CategorySection>
 
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>이력</ThemedText>
-            
+          <CategorySection title="이력" icon="document-text-outline">
             <MenuItem
               icon="document-text-outline"
               label="수행 이력"
               description="완료된 배송 업무를 확인하세요"
-              
               onPress={() => navigation.navigate('HelperHistory')}
             />
-          </View>
+          </CategorySection>
 
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>이의제기/사고</ThemedText>
-            
+          <CategorySection title="이의제기 및 사고" icon="alert-circle-outline" collapsible defaultExpanded={false}>
             <MenuItem
               icon="warning-outline"
               label="이의제기 접수"
               description="정산 오류, 수량 차이 등 접수"
-              
               onPress={() => navigation.navigate('HelperDisputeSubmit')}
             />
             <MenuItem
               icon="list-outline"
               label="이의제기 내역"
               description="접수한 이의제기 현황 확인"
-              
               onPress={() => navigation.navigate('HelperDisputeList')}
             />
             <MenuItem
               icon="alert-circle-outline"
               label="사고 내역"
               description="접수된 화물사고 확인 및 응답"
-              
               onPress={() => navigation.navigate('HelperIncidentList')}
             />
-          </View>
+          </CategorySection>
 
         </>
       ) : (
         <>
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>사업자 정보</ThemedText>
-            
+          <CategorySection title="사업자 정보" icon="business-outline">
             <MenuItem
               icon="business-outline"
               label="사업자정보 등록"
               description={(requesterProfile as any)?.businessNumber ? `사업자번호: ${(requesterProfile as any).businessNumber}` : '세금계산서 발행을 위해 등록해주세요'}
-              
               badge={!(requesterProfile as any)?.businessNumber ? '미등록' : undefined}
-              badgeColor="BrandColors.error"
+              badgeColor={BrandColors.error}
               onPress={() => navigation.navigate('BusinessRegistration')}
             />
-          </View>
+          </CategorySection>
 
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>QR 체크인</ThemedText>
-            
+          <CategorySection title="업무" icon="briefcase-outline">
             <MenuItem
               icon="grid-outline"
               label="내 QR 보기"
               description="헬퍼 출근 확인용 QR 코드"
-              
               onPress={() => navigation.navigate('QRCheckin')}
             />
-          </View>
+          </CategorySection>
 
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>결제</ThemedText>
-            
+          <CategorySection title="결제" icon="card-outline">
             <MenuItem
               icon="card-outline"
               label="결제 수단"
               description="결제 카드 및 계좌를 관리하세요"
-              
               onPress={() => navigation.navigate('PaymentSettings')}
             />
             <MenuItem
               icon="refresh-outline"
               label="환불 계좌"
               description={profile?.bankName ? `${profile.bankName} ${profile.accountNumber?.slice(-4) || ''}` : '환불받을 계좌를 등록하세요'}
-              
               onPress={() => navigation.navigate('RefundAccount')}
             />
-          </View>
+          </CategorySection>
 
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>이의제기/사고</ThemedText>
-            
+          <CategorySection title="이력 및 이의제기" icon="document-text-outline" collapsible defaultExpanded={false}>
+            <MenuItem
+              icon="document-text-outline"
+              label="사용 이력"
+              description="완료된 오더 내역을 확인하세요"
+              onPress={() => navigation.navigate('RequesterHistory')}
+            />
             <MenuItem
               icon="list-outline"
               label="이의제기 내역"
               description="접수한 이의제기 현황 확인"
-              
               onPress={() => navigation.navigate('RequesterDisputeList')}
             />
             <MenuItem
               icon="alert-circle-outline"
               label="사고 내역"
               description="화물사고 접수 현황 확인"
-              
               onPress={() => navigation.navigate('IncidentList')}
             />
-          </View>
-
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>이력</ThemedText>
-            
-            <MenuItem
-              icon="document-text-outline"
-              label="사용 이력"
-              description="완료된 오더 내역을 확인하세요"
-              
-              onPress={() => navigation.navigate('RequesterHistory')}
-            />
-          </View>
+          </CategorySection>
         </>
       )}
 
-      <View style={styles.menuSection}>
-        <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>설정</ThemedText>
-        
+      <CategorySection title="설정" icon="settings-outline">
         <MenuItem
           icon="settings-outline"
           label="앱 설정"
-          
           onPress={() => navigation.navigate('Settings')}
         />
-      </View>
+      </CategorySection>
 
-      <View style={styles.menuSection}>
-        <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>지원</ThemedText>
-        
+      <CategorySection title="지원" icon="help-circle-outline" collapsible defaultExpanded={false}>
         <MenuItem
           icon="help-circle-outline"
           label="사용 가이드"
           description="앱 사용법 안내"
-          
           onPress={() => navigation.navigate('Help')}
         />
         <MenuItem
           icon="help-circle-outline"
           label="자주 묻는 질문"
           description="FAQ"
-          
           onPress={() => navigation.navigate('Support')}
         />
         <MenuItem
           icon="document-text-outline"
           label="이용약관"
-          
           onPress={() => navigation.navigate('Policy', { type: 'terms' })}
         />
         <MenuItem
           icon="shield-outline"
           label="개인정보 처리방침"
-          
           onPress={() => navigation.navigate('Policy', { type: 'privacy' })}
         />
-      </View>
+      </CategorySection>
 
       <Pressable
         testID="button-logout"
