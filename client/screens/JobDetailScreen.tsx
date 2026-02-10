@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, Linking, Image, Modal, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useHeaderHeight } from "@react-navigation/elements";
 import { Icon } from "@/components/Icon";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -64,6 +65,7 @@ interface ClosingReport {
 
 export default function JobDetailScreen({ navigation, route }: JobDetailScreenProps) {
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const { user } = useAuth();
   const { jobId } = route.params;
@@ -284,7 +286,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <ScrollView
         contentContainerStyle={{
-          paddingTop: Spacing.lg,
+          paddingTop: headerHeight + Spacing.lg + 94,
           paddingBottom: insets.bottom + 80,
           paddingHorizontal: Spacing.lg,
         }}

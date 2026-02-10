@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, Pressable, Platform, Linking, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHeaderHeight } from "@react-navigation/elements";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { CameraView } from 'expo-camera';
@@ -30,6 +31,7 @@ type QRScannerScreenProps = {
 
 export default function QRScannerScreen({ navigation, route }: QRScannerScreenProps) {
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -210,7 +212,7 @@ export default function QRScannerScreen({ navigation, route }: QRScannerScreenPr
   if (Platform.OS === 'web') {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
+        <View style={[styles.content, { paddingTop: headerHeight + Spacing.xl }]}>
           <Card variant="glass" padding="xl" style={styles.webCard}>
             <View style={[styles.iconContainer, { backgroundColor: BrandColors.helperLight }]}>
               <Icon name="cellphone" size={48} color={BrandColors.helper} />
@@ -245,7 +247,7 @@ export default function QRScannerScreen({ navigation, route }: QRScannerScreenPr
   if (!hasPermission) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
+        <View style={[styles.content, { paddingTop: headerHeight + Spacing.xl }]}>
           <Card variant="glass" padding="xl" style={styles.permissionCard}>
             <View style={[styles.iconContainer, { backgroundColor: BrandColors.errorLight }]}>
               <Icon name="camera-off-outline" size={48} color={BrandColors.error} />

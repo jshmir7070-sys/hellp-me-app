@@ -229,7 +229,7 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.lg,
+        paddingTop: headerHeight + Spacing.lg + 94,
         paddingBottom: insets.bottom + 120,
         paddingHorizontal: Spacing.lg,
       }}

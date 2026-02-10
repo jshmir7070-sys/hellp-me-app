@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, TextInput, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHeaderHeight } from "@react-navigation/elements";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -48,6 +49,7 @@ interface Contract {
 
 export default function ContractScreen({ navigation, route }: ContractScreenProps) {
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -154,7 +156,7 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <ScrollView
         contentContainerStyle={{
-          paddingTop: Spacing.lg,
+          paddingTop: headerHeight + Spacing.lg + 94,
           paddingBottom: insets.bottom + 100,
           paddingHorizontal: Spacing.lg,
         }}

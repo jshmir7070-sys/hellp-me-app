@@ -183,7 +183,7 @@ export default function ClosingDetailScreen({ route, navigation }: ClosingDetail
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={{
-          paddingTop: headerHeight + Spacing.lg,
+          paddingTop: headerHeight + Spacing.lg + 94,
           paddingHorizontal: Spacing.lg,
           paddingBottom: insets.bottom + Spacing.xl + 80,
         }}

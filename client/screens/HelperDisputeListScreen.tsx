@@ -139,7 +139,7 @@ export default function HelperDisputeListScreen({ navigation }: HelperDisputeLis
         renderItem={renderItem}
         ListEmptyComponent={renderEmpty}
         contentContainerStyle={{
-          paddingTop: headerHeight + Spacing.lg,
+          paddingTop: headerHeight + Spacing.lg + 94,
           paddingBottom: insets.bottom + Spacing.xl + 80,
           paddingHorizontal: Spacing.lg,
           flexGrow: 1,

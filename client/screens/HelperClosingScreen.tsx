@@ -75,7 +75,7 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.lg,
+        paddingTop: headerHeight + Spacing.lg + 94,
         paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
         flexGrow: 1,
@@ -413,7 +413,7 @@ export function ClosingInputScreen({ route, navigation }: any) {
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.lg,
+        paddingTop: headerHeight + Spacing.lg + 94,
         paddingBottom: insets.bottom + 100,
         paddingHorizontal: Spacing.lg,
       }}

@@ -60,7 +60,7 @@ export function SafeScrollView({
   const tabBarHeight = useBottomTabBarHeight();
 
   const computedContentContainerStyle: ViewStyle = {
-    paddingTop: topPadding + (includeHeaderHeight ? headerHeight : 0),
+    paddingTop: topPadding + (includeHeaderHeight ? headerHeight + 94 : 0),
     paddingBottom: bottomPadding + bottomButtonHeight + (includeTabBarHeight ? tabBarHeight : 0) + insets.bottom,
     ...(contentContainerStyle as ViewStyle),
   };

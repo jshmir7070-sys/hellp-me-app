@@ -96,7 +96,7 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
     <ScrollView
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
       contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.lg,
+        paddingTop: headerHeight + Spacing.lg + 94,
         paddingBottom: insets.bottom + Spacing.xl + 60,
         paddingHorizontal: Spacing.lg,
       }}

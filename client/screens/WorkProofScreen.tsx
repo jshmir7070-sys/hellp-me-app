@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { View, StyleSheet, Pressable, Platform, ActivityIndicator, Image, ScrollView, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHeaderHeight } from "@react-navigation/elements";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
@@ -33,6 +34,7 @@ type ProofImage = {
 
 export default function WorkProofScreen({ navigation, route }: WorkProofScreenProps) {
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const { user } = useAuth();
 
@@ -138,7 +140,7 @@ export default function WorkProofScreen({ navigation, route }: WorkProofScreenPr
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
         <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + Spacing.xl }]}
+          contentContainerStyle={[styles.content, { paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }]}
         >
           <Card variant="glass" padding="xl" style={styles.webCard}>
             <View style={[styles.iconContainer, { backgroundColor: BrandColors.helperLight }]}>
@@ -168,7 +170,7 @@ export default function WorkProofScreen({ navigation, route }: WorkProofScreenPr
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }
+          { paddingTop: headerHeight + Spacing.lg + 94, paddingBottom: insets.bottom + Spacing.xl }
         ]}
       >
         <Card variant="glass" padding="xl" style={styles.headerCard}>

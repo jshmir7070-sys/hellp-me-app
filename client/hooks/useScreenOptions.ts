@@ -14,7 +14,7 @@ export function useScreenOptions({
   const { theme, isDark } = useTheme();
 
   return {
-    headerTitleAlign: "left", // Toss-style left alignment
+    headerTitleAlign: "center", // Center alignment for logo
     headerTransparent: transparent,
     headerBlurEffect: isDark ? "dark" : "light",
     headerTintColor: theme.text,

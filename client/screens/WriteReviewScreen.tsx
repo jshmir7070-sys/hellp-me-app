@@ -128,7 +128,7 @@ export default function WriteReviewScreen({ navigation, route }: WriteReviewScre
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
-      contentContainerStyle={{ paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + 120 }}
+      contentContainerStyle={{ paddingTop: headerHeight + Spacing.lg + 94, paddingBottom: insets.bottom + 120 }}
     >
       <View style={styles.content}>
         <Card variant="glass" padding="md" style={styles.orderCard}>

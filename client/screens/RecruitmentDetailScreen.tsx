@@ -1,6 +1,7 @@
 import React from "react";
 import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, Linking } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useHeaderHeight } from "@react-navigation/elements";
 import { Icon } from "@/components/Icon";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -33,6 +34,7 @@ interface Recruitment {
 
 export default function RecruitmentDetailScreen({ navigation, route }: RecruitmentDetailScreenProps) {
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const { recruitmentId } = route.params;
   const queryClient = useQueryClient();
@@ -134,7 +136,7 @@ export default function RecruitmentDetailScreen({ navigation, route }: Recruitme
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <ScrollView
         contentContainerStyle={{
-          paddingTop: Spacing.lg,
+          paddingTop: headerHeight + Spacing.lg + 94,
           paddingBottom: insets.bottom + 100,
           paddingHorizontal: Spacing.lg,
         }}

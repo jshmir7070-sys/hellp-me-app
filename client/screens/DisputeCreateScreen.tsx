@@ -88,7 +88,7 @@ export default function DisputeCreateScreen({ navigation, route }: DisputeCreate
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
-      contentContainerStyle={{ paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }}
+      contentContainerStyle={{ paddingTop: headerHeight + Spacing.lg + 94, paddingBottom: insets.bottom + Spacing.xl }}
     >
       <View style={styles.content}>
         <Card variant="glass" padding="lg" style={styles.section}>

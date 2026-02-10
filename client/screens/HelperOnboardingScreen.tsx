@@ -387,7 +387,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
         contentContainerStyle={[
           styles.content, 
           { 
-            paddingTop: headerHeight + Spacing.lg,
+            paddingTop: headerHeight + Spacing.lg + 94,
             paddingBottom: insets.bottom + 100,
           }
         ]}

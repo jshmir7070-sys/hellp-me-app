@@ -12,6 +12,7 @@ import {
   Modal,
 } from 'react-native';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useHeaderHeight } from "@react-navigation/elements";
 import { Icon } from "@/components/Icon";
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CommonActions } from '@react-navigation/native';
@@ -36,6 +37,7 @@ type Props = NativeStackScreenProps<ContractsStackParamList, 'CreateContract'>;
 
 export default function CreateContractScreen({ route, navigation }: Props) {
   const { orderId } = route.params;
+  const headerHeight = useHeaderHeight();
   const { theme, isDark } = useTheme();
   const queryClient = useQueryClient();
   const { width: screenWidth } = useWindowDimensions();
@@ -1077,9 +1079,9 @@ export default function CreateContractScreen({ route, navigation }: Props) {
 
   return (
     <ThemedView style={styles.container}>
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, { paddingTop: headerHeight + Spacing.lg + 94 }]}
         showsVerticalScrollIndicator={false}
       >
         {renderStepIndicator()}
@@ -1218,7 +1220,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing['2xl'],
   },
   card: {

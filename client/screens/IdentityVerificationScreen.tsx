@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, StyleSheet, Pressable, ActivityIndicator, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHeaderHeight } from "@react-navigation/elements";
 import { WebView, WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -38,6 +39,7 @@ interface VerificationResult {
 
 export default function IdentityVerificationScreen({ navigation, route }: IdentityVerificationScreenProps) {
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const webViewRef = useRef<WebView>(null);
 
@@ -212,7 +214,7 @@ export default function IdentityVerificationScreen({ navigation, route }: Identi
   if (Platform.OS === 'web') {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
+        <View style={[styles.content, { paddingTop: headerHeight + Spacing.xl }]}>
           <Card variant="glass" padding="xl" style={styles.webCard}>
             <View style={[styles.iconContainer, { backgroundColor: BrandColors.helperLight }]}>
               <Icon name="shield-outline" size={48} color={BrandColors.helper} />
@@ -251,7 +253,7 @@ export default function IdentityVerificationScreen({ navigation, route }: Identi
   if (status === 'success') {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
+        <View style={[styles.content, { paddingTop: headerHeight + Spacing.xl }]}>
           <Card variant="glass" padding="xl" style={styles.successCard}>
             <View style={[styles.iconContainer, { backgroundColor: BrandColors.requesterLight }]}>
               <Icon name="checkmark-circle-outline" size={48} color={BrandColors.requester} />
@@ -271,7 +273,7 @@ export default function IdentityVerificationScreen({ navigation, route }: Identi
   if (status === 'failed' || !verificationUrl) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
+        <View style={[styles.content, { paddingTop: headerHeight + Spacing.xl }]}>
           <Card variant="glass" padding="xl" style={styles.errorCard}>
             <View style={[styles.iconContainer, { backgroundColor: BrandColors.errorLight }]}>
               <Icon name="alert-circle-outline" size={48} color={BrandColors.error} />

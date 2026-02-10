@@ -1554,7 +1554,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={{ paddingTop: headerHeight + Spacing.lg, paddingHorizontal: Spacing.lg }}>
+      <View style={{ paddingTop: headerHeight + Spacing.lg + 94, paddingHorizontal: Spacing.lg }}>
         {renderTabs()}
       </View>
       <ScrollView
