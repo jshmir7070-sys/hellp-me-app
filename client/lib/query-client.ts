@@ -1,11 +1,17 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 const TOKEN_KEY = 'auth_token';
 
 async function getToken(): Promise<string | null> {
   try {
-    return await AsyncStorage.getItem(TOKEN_KEY);
+    // 웹에서는 AsyncStorage, 네이티브에서는 SecureStore 사용
+    if (Platform.OS === 'web') {
+      return await AsyncStorage.getItem(TOKEN_KEY);
+    }
+    return await SecureStore.getItemAsync(TOKEN_KEY);
   } catch {
     return null;
   }

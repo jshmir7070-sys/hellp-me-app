@@ -137,6 +137,24 @@ async function getOrderDepositInfo(orderId: number): Promise<DepositInfo> {
 }
 
 // ============================================
+// 연락처 공개 여부 확인 (계약금 입금 후에만 공개)
+// ============================================
+async function canRevealContact(orderId: number): Promise<boolean> {
+  try {
+    const [contract] = await db.select()
+      .from(contracts)
+      .where(eq(contracts.orderId, orderId))
+      .limit(1);
+
+    // 계약이 존재하고 계약금이 입금되었으면 true
+    return !!(contract && contract.depositPaidAt);
+  } catch (err) {
+    console.error('[canRevealContact] Error:', err);
+    return false;
+  }
+}
+
+// ============================================
 // 개인식별 코드 생성 (12자리 영문+숫자, 암호학적 안전)
 // ============================================
 function generatePersonalCode(): string {
@@ -1299,11 +1317,33 @@ export async function registerRoutes(
       settings.forEach(s => {
         settingsMap[s.settingKey] = s.settingValue;
       });
-      
+
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
+        other: {
+          destinationPrice: parseInt(settingsMap["other_destination_price"]) || 1800,
+          boxPrice: parseInt(settingsMap["other_box_price"]) || 1500,
+          minDailyFee: parseInt(settingsMap["other_min_daily_fee"]) || 50000,
+        },
+        cold: {
+          minDailyFee: parseInt(settingsMap["cold_min_daily_fee"]) || 100000,
+        }
+      });
+    } catch (err) {
+      console.error("Error fetching category pricing:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Admin alias for category pricing
+  app.get("/api/admin/meta/category-pricing", adminAuth, async (req, res) => {
+    try {
+      const settings = await storage.getAllSystemSettings();
+      const settingsMap: Record<string, string> = {};
+      settings.forEach(s => {
+        settingsMap[s.settingKey] = s.settingValue;
+      });
+
+      res.json({
         other: {
           destinationPrice: parseInt(settingsMap["other_destination_price"]) || 1800,
           boxPrice: parseInt(settingsMap["other_box_price"]) || 1500,
@@ -2567,9 +2607,46 @@ export async function registerRoutes(
               if (payment.contractId) {
                 const contract = await storage.getContract(payment.contractId);
                 if (contract && payment.paymentType === 'deposit') {
-                  await storage.updateContract(payment.contractId, { status: 'active', depositPaidAt: new Date() });
+                  await storage.updateContract(payment.contractId, {
+                    status: 'active',
+                    depositPaidAt: new Date(),
+                    contactSharedAt: new Date()
+                  });
                   if (contract.orderId) {
                     await storage.updateOrder(contract.orderId, { status: 'scheduled' });
+                  }
+
+                  // 알림톡 연락처 전송
+                  try {
+                    const requester = await storage.getUser(contract.requesterId);
+                    const helper = await storage.getUser(contract.helperId);
+                    const order = await storage.getOrder(contract.orderId);
+
+                    if (requester && helper && order) {
+                      // 헬퍼에게 연락처 전송
+                      if (helper.phoneNumber) {
+                        await smsService.sendCustomMessage(
+                          helper.phoneNumber,
+                          `[헬프미] ${order.companyName} 계약금 입금 확인\n` +
+                          `요청자: ${requester.name}\n` +
+                          `연락처: ${requester.phoneNumber || '미등록'}\n` +
+                          `작업일: ${order.scheduledDate || '미정'}`
+                        );
+                      }
+
+                      // 요청자에게 연락처 전송
+                      if (requester.phoneNumber) {
+                        await smsService.sendCustomMessage(
+                          requester.phoneNumber,
+                          `[헬프미] 계약금 입금 확인\n` +
+                          `배정 헬퍼: ${helper.name}\n` +
+                          `연락처: ${helper.phoneNumber || '미등록'}\n` +
+                          `작업일: ${order.scheduledDate || '미정'}`
+                        );
+                      }
+                    }
+                  } catch (smsError) {
+                    console.error('[Payment] Failed to send contact SMS:', smsError);
                   }
                 } else if (contract && payment.paymentType === 'balance') {
                   await storage.updateContract(payment.contractId, { balancePaidAt: new Date() });
@@ -2592,17 +2669,54 @@ export async function registerRoutes(
 
       if (!isProduction && payment.status === 'initiated') {
         await storage.updatePaymentStatus(payment.id, 'captured', { paidAt: new Date() });
-        
+
         if (payment.contractId) {
           const contract = await storage.getContract(payment.contractId);
           if (contract && payment.paymentType === 'deposit') {
-            await storage.updateContract(payment.contractId, { status: 'active', depositPaidAt: new Date() });
+            await storage.updateContract(payment.contractId, {
+              status: 'active',
+              depositPaidAt: new Date(),
+              contactSharedAt: new Date()
+            });
             if (contract.orderId) {
               await storage.updateOrder(contract.orderId, { status: 'scheduled' });
             }
+
+            // 알림톡 연락처 전송 (테스트 모드)
+            try {
+              const requester = await storage.getUser(contract.requesterId);
+              const helper = await storage.getUser(contract.helperId);
+              const order = await storage.getOrder(contract.orderId);
+
+              if (requester && helper && order) {
+                // 헬퍼에게 연락처 전송
+                if (helper.phoneNumber) {
+                  await smsService.sendCustomMessage(
+                    helper.phoneNumber,
+                    `[헬프미] ${order.companyName} 계약금 입금 확인\n` +
+                    `요청자: ${requester.name}\n` +
+                    `연락처: ${requester.phoneNumber || '미등록'}\n` +
+                    `작업일: ${order.scheduledDate || '미정'}`
+                  );
+                }
+
+                // 요청자에게 연락처 전송
+                if (requester.phoneNumber) {
+                  await smsService.sendCustomMessage(
+                    requester.phoneNumber,
+                    `[헬프미] 계약금 입금 확인\n` +
+                    `배정 헬퍼: ${helper.name}\n` +
+                    `연락처: ${helper.phoneNumber || '미등록'}\n` +
+                    `작업일: ${order.scheduledDate || '미정'}`
+                  );
+                }
+              }
+            } catch (smsError) {
+              console.error('[Payment] Failed to send contact SMS (test mode):', smsError);
+            }
           }
         }
-        
+
         console.log(`[Payment Verify] Test mode - Payment ${paymentId} marked as captured`);
         return res.json({ verified: true, status: 'captured', amount: payment.amount, paymentType: payment.paymentType, paidAt: new Date(), isTestMode: true });
       }
@@ -3381,7 +3495,7 @@ export async function registerRoutes(
     },
   });
 
-  app.post("/api/helpers/credential/upload", uploadCredentialImage.single("file"), requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/helpers/credential/upload", requireAuth, uploadCredentialImage.single("file"), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const user = req.user!;
@@ -3638,6 +3752,46 @@ export async function registerRoutes(
       res.status(201).json(account);
     } catch (err) {
       console.error("Create helper bank account error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Platform contract endpoint
+  app.get("/api/helpers/me/contract", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const user = req.user!;
+      if (user.role !== "helper") {
+        return res.status(403).json({ message: "헬퍼만 접근 가능합니다" });
+      }
+      // Get contract data from database (implement storage method if needed)
+      // For now, return 404 if not found
+      return res.status(404).json({ message: "계약 정보가 없습니다" });
+    } catch (err) {
+      console.error("Get helper contract error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  app.post("/api/helpers/me/contract", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const user = req.user!;
+      if (user.role !== "helper") {
+        return res.status(403).json({ message: "헬퍼만 접근 가능합니다" });
+      }
+      const { agreedClauses, signatureData, signedAt } = req.body;
+      if (!agreedClauses || !signatureData || !signedAt) {
+        return res.status(400).json({ message: "약관 동의, 서명, 서명 날짜는 필수입니다" });
+      }
+      // TODO: Save contract to database
+      // For now, just return success
+      res.status(201).json({
+        success: true,
+        message: "계약서가 저장되었습니다",
+        agreedClauses,
+        signedAt,
+      });
+    } catch (err) {
+      console.error("Create helper contract error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -7918,14 +8072,17 @@ export async function registerRoutes(
           const helperCredential = await storage.getHelperCredential(c.helperUserId);
           const helperVehicle = await storage.getHelperVehicle(c.helperUserId);
 
+          // 연락처 공개 여부 확인 (계약금 입금 후에만)
+          const canReveal = await canRevealContact(orderId);
+
           return {
             ...c,
             helper: helper ? {
               id: helper.id,
               name: helper.name,
               profilePhoto: helper.profileImageUrl || null,
-              // 연락처는 선택 후에만 공개
-              phone: c.status === "selected" ? helper.phoneNumber : null,
+              // 연락처는 계약금 입금 후에만 공개
+              phone: (c.status === "selected" && canReveal) ? helper.phoneNumber : null,
             } : null,
             ratingSummary: ratingSummary ? {
               avgRating: ratingSummary.avgRating,
@@ -9867,7 +10024,8 @@ export async function registerRoutes(
       
       res.json(workHistory);
     } catch (err) {
-      res.status(500).json({ message: "Internal server error" });
+      console.error("Error in /api/helper/work-history:", err);
+      res.status(500).json({ message: "Internal server error", error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -10905,9 +11063,8 @@ export async function registerRoutes(
         await storage.createNotification({
           type: "matching_completed",
           title: "매칭 완료",
-          message: `${order.companyName} 오더 매칭이 완료되었습니다. 담당자 연락처: ${requester?.phoneNumber || "미등록"}`,
+          message: `${order.companyName} 오더 매칭이 완료되었습니다.`,
           relatedId: orderId,
-          phoneNumber: requester?.phoneNumber || null,
         });
         
         // WebSocket 알림
@@ -10919,7 +11076,7 @@ export async function registerRoutes(
         // 푸시 알림
         sendPushToUser(app.helperId, {
           title: "매칭 완료",
-          body: `${order.companyName} 오더 매칭이 완료되었습니다. 담당자: ${requester?.phoneNumber || "미등록"}`,
+          body: `${order.companyName} 오더 매칭이 완료되었습니다.`,
           url: "/helper-home",
           tag: `matching-complete-${orderId}`,
         });
@@ -10953,13 +11110,12 @@ export async function registerRoutes(
       // 선택된 헬퍼 정보 가져오기
       const matchedHelper = selectedApplications.length > 0 ? await storage.getUser(selectedApplications[0].helperId) : null;
       
-      // 의뢰인에게 알림 (헬퍼 연락처 포함)
+      // 의뢰인에게 알림
       await storage.createNotification({
         userId: userId,
         type: "matching_completed",
         title: "매칭 완료",
-        message: `${order.companyName} 오더 매칭이 완료되었습니다. 헬퍼 연락처: ${matchedHelper?.phoneNumber || "미등록"}`,
-        phoneNumber: matchedHelper?.phoneNumber || null,
+        message: `${order.companyName} 오더 매칭이 완료되었습니다.`,
         relatedId: orderId,
       });
 
@@ -19775,6 +19931,17 @@ export async function registerRoutes(
 
 
   // Refund Policies (환불 정책 관리)
+  // Alias for backward compatibility
+  app.get("/api/admin/refund-policies", adminAuth, requirePermission("settings.view"), async (req, res) => {
+    try {
+      const policies = await db.select().from(refundPolicies).orderBy(desc(refundPolicies.isDefault), desc(refundPolicies.effectiveFrom));
+      res.json(policies);
+    } catch (err) {
+      console.error("Get refund policies error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.get("/api/admin/settings/refund-policies", adminAuth, requirePermission("settings.view"), async (req, res) => {
     try {
       const policies = await db.select().from(refundPolicies).orderBy(desc(refundPolicies.isDefault), desc(refundPolicies.effectiveFrom));

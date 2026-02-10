@@ -6,6 +6,7 @@
 import cron from 'node-cron';
 import { db } from '../storage';
 import { storage } from '../storage';
+import { payments } from '@shared/schema';
 import { eq, and, lte, gte } from 'drizzle-orm';
 import { paymentService } from '../services/payment.service';
 import { logger } from '../lib/logger';
@@ -67,11 +68,11 @@ class OverdueScheduler {
       // 2. 연체 결제 조회 (status != 'completed')
       const overduePayments = await db
         .select()
-        .from(storage.payments)
+        .from(payments)
         .where(
           and(
-            eq(storage.payments.status, 'pending'),
-            gte(storage.payments.overdueDays, 1)
+            eq(payments.status, 'pending'),
+            gte(payments.overdueDays, 1)
           )
         );
 
@@ -98,8 +99,8 @@ class OverdueScheduler {
       // dueDate가 과거인 모든 pending 결제 조회
       const pendingPayments = await db
         .select()
-        .from(storage.payments)
-        .where(eq(storage.payments.status, 'pending'));
+        .from(payments)
+        .where(eq(payments.status, 'pending'));
 
       const now = new Date();
       let updatedCount = 0;
@@ -126,14 +127,14 @@ class OverdueScheduler {
           else if (diffDays >= 1) overdueStatus = 'warning';
 
           await db
-            .update(storage.payments)
+            .update(payments)
             .set({
               overdueDays: diffDays,
               lateInterest: lateInterest.toString(),
               overdueStatus,
               updatedAt: new Date(),
             })
-            .where(eq(storage.payments.id, payment.id));
+            .where(eq(payments.id, payment.id));
 
           updatedCount++;
         }
@@ -249,13 +250,13 @@ class OverdueScheduler {
     }
 
     await db
-      .update(storage.payments)
+      .update(payments)
       .set({
         overdueStatus: 'legal',
         legalActionStartedAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(storage.payments.id, payment.id));
+      .where(eq(payments.id, payment.id));
 
     // TODO: 법무팀 알림, 소송 준비 등
     logger.warn(`Legal action initiated for payment ${payment.id}`);

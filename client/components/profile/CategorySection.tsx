@@ -18,30 +18,48 @@ interface CategorySectionProps {
   children: React.ReactNode;
   collapsible?: boolean;
   defaultExpanded?: boolean;
+  isExpanded?: boolean; // External control for accordion
+  onToggle?: () => void; // Callback for accordion
+  badge?: string; // Badge text (e.g., "🔴 1건 미완료")
+  badgeColor?: string;
 }
 
 export function CategorySection({
   title,
   icon,
   children,
-  collapsible = false,
-  defaultExpanded = true,
+  collapsible = true, // Changed default to true for accordion
+  defaultExpanded = false, // Changed default to false for accordion
+  isExpanded: externalIsExpanded,
+  onToggle,
+  badge,
+  badgeColor,
 }: CategorySectionProps) {
   const { theme } = useTheme();
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
-  const rotation = useSharedValue(defaultExpanded ? 0 : -90);
-  const contentHeight = useSharedValue(defaultExpanded ? 1 : 0);
+  const [internalIsExpanded, setInternalIsExpanded] = useState(defaultExpanded);
+
+  // Use external state if provided (for accordion), otherwise use internal state
+  const isExpanded = externalIsExpanded !== undefined ? externalIsExpanded : internalIsExpanded;
+
+  const rotation = useSharedValue(isExpanded ? 0 : -90);
+  const contentHeight = useSharedValue(isExpanded ? 1 : 0);
 
   const toggleExpanded = () => {
-    const newExpanded = !isExpanded;
-    setIsExpanded(newExpanded);
-
-    // Animate chevron rotation
-    rotation.value = withSpring(newExpanded ? 0 : -90, SpringConfigs.gentle);
-
-    // Animate content visibility
-    contentHeight.value = withSpring(newExpanded ? 1 : 0, SpringConfigs.gentle);
+    if (onToggle) {
+      // External control (accordion mode)
+      onToggle();
+    } else {
+      // Internal control (independent mode)
+      const newExpanded = !internalIsExpanded;
+      setInternalIsExpanded(newExpanded);
+    }
   };
+
+  // Update animation when isExpanded changes
+  React.useEffect(() => {
+    rotation.value = withSpring(isExpanded ? 0 : -90, SpringConfigs.gentle);
+    contentHeight.value = withSpring(isExpanded ? 1 : 0, SpringConfigs.gentle);
+  }, [isExpanded]);
 
   const chevronStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
@@ -70,6 +88,16 @@ export function CategorySection({
             </View>
           )}
           <ThemedText style={styles.title}>{title}</ThemedText>
+          {badge && (
+            <View
+              style={[
+                styles.badgeContainer,
+                { backgroundColor: badgeColor || theme.textSecondary },
+              ]}
+            >
+              <ThemedText style={styles.badgeText}>{badge}</ThemedText>
+            </View>
+          )}
         </View>
         {collapsible && (
           <Animated.View style={chevronStyle}>
@@ -110,6 +138,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.md,
+    flex: 1,
   },
   iconContainer: {
     width: 36,
@@ -120,6 +149,17 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 16,
+    fontWeight: '600',
+  },
+  badgeContainer: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+    marginLeft: Spacing.sm,
+  },
+  badgeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
     fontWeight: '600',
   },
   content: {

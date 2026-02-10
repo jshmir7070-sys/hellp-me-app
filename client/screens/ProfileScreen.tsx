@@ -48,6 +48,8 @@ interface Team {
   leaderId: number;
 }
 
+type CategoryId = 'profile' | 'documents' | 'work' | 'team' | 'settlement' | 'payment' | 'disputes' | 'settings';
+
 export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
@@ -58,6 +60,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
   const [showImageOptions, setShowImageOptions] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<CategoryId | null>(null);
 
   const isHelper = user?.role === 'helper';
   const primaryColor = isHelper ? BrandColors.helper : BrandColors.requester;
@@ -78,6 +81,13 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     queryKey: ['/api/helper/my-team'],
     enabled: isHelper,
   });
+
+  // TODO: Fetch helper documents status for badge count
+  const documentsMissing = 0; // Replace with actual logic
+
+  const handleToggleSection = (sectionId: CategoryId) => {
+    setExpandedSection(prev => prev === sectionId ? null : sectionId);
+  };
 
   const handleAvatarPress = () => {
     setShowImageOptions(true);
@@ -250,7 +260,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
               <ThemedText style={[styles.statValue, { color: theme.text }]}>
-                {profile?.rating?.toFixed(1) || '-'}
+                ★ {profile?.rating?.toFixed(1) || '-'}
               </ThemedText>
               <ThemedText style={[styles.statLabel, { color: theme.tabIconDefault }]}>평점</ThemedText>
             </View>
@@ -263,27 +273,110 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             </View>
           </View>
         ) : null}
+      </Card>
 
-        </Card>
-
+      {/* Menu Categories - Helper */}
       {isHelper ? (
         <>
-          <CategorySection title="업무" icon="briefcase-outline">
+          {/* 👤 내 정보 변경 */}
+          <CategorySection
+            title="👤 내 정보 변경"
+            isExpanded={expandedSection === 'profile'}
+            onToggle={() => handleToggleSection('profile')}
+          >
+            <MenuItem
+              icon="person-outline"
+              label="닉네임 변경"
+              onPress={() => navigation.navigate('EditProfile', { field: 'name' })}
+            />
+            <MenuItem
+              icon="location-outline"
+              label="주소 변경"
+              onPress={() => navigation.navigate('EditProfile', { field: 'address' })}
+            />
+            <MenuItem
+              icon="call-outline"
+              label="전화번호 변경"
+              onPress={() => navigation.navigate('EditProfile', { field: 'phone' })}
+            />
+            <MenuItem
+              icon="lock-closed-outline"
+              label="비밀번호 변경"
+              onPress={() => navigation.navigate('ChangePassword')}
+            />
+          </CategorySection>
+
+          {/* 📄 서류 등록 */}
+          <CategorySection
+            title="📄 서류 등록"
+            isExpanded={expandedSection === 'documents'}
+            onToggle={() => handleToggleSection('documents')}
+            badge={documentsMissing > 0 ? `🔴 ${documentsMissing}건 미완료` : undefined}
+          >
+            <MenuItem
+              icon="business-outline"
+              label="사업자등록증"
+              description="세금계산서 발행용"
+              onPress={() => navigation.navigate('DocBusiness')}
+            />
+            <MenuItem
+              icon="card-outline"
+              label="운전면허증"
+              description="헬퍼 인증용"
+              onPress={() => navigation.navigate('DocDriverLicense')}
+            />
             <MenuItem
               icon="document-text-outline"
-              label="서류 제출"
-              description="사업자등록증, 운전면허증, 차량등록증"
-              onPress={() => navigation.navigate('HelperOnboarding')}
+              label="화물운송자격증"
+              description="택배 배송용 (선택)"
+              onPress={() => navigation.navigate('DocCargoLicense')}
+            />
+            <MenuItem
+              icon="car-outline"
+              label="차량 등록"
+              description="차량번호, 차종"
+              onPress={() => navigation.navigate('DocVehicle')}
+            />
+            <MenuItem
+              icon="wallet-outline"
+              label="수수료 통장 (정산계좌)"
+              description={profile?.bankName ? `${profile.bankName} ${profile.accountNumber?.slice(-4) || ''}` : '정산받을 계좌 등록'}
+              onPress={() => navigation.navigate('DocBankAccount')}
+            />
+            <MenuItem
+              icon="document-attach-outline"
+              label="운송 계약서 (회사↔나)"
+              description="최초 1회 서명"
+              onPress={() => navigation.navigate('DocPlatformContract')}
+            />
+          </CategorySection>
+
+          {/* 📋 업무 */}
+          <CategorySection
+            title="📋 업무"
+            isExpanded={expandedSection === 'work'}
+            onToggle={() => handleToggleSection('work')}
+          >
+            <MenuItem
+              icon="list-outline"
+              label="수행 이력"
+              description="완료된 배송 업무"
+              onPress={() => navigation.navigate('HelperHistory')}
             />
             <MenuItem
               icon="camera-outline"
-              label="요청자 QR 스캔"
-              description="요청자의 QR을 스캔하여 출근 기록"
+              label="QR 체크인"
+              description="요청자 QR 스캔"
               onPress={() => navigation.navigate('QRCheckin')}
             />
           </CategorySection>
 
-          <CategorySection title="팀 관리" icon="people-outline">
+          {/* 👥 팀 */}
+          <CategorySection
+            title="👥 팀"
+            isExpanded={expandedSection === 'team'}
+            onToggle={() => handleToggleSection('team')}
+          >
             {team ? (
               <Card variant="glass" padding="md" style={styles.teamCard}>
                 <View style={styles.teamInfo}>
@@ -315,25 +408,26 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             )}
           </CategorySection>
 
-          <CategorySection title="정산" icon="card-outline">
+          {/* 💰 정산 */}
+          <CategorySection
+            title="💰 정산"
+            isExpanded={expandedSection === 'settlement'}
+            onToggle={() => handleToggleSection('settlement')}
+          >
             <MenuItem
-              icon="card-outline"
-              label="정산 계좌"
-              description={profile?.bankName ? `${profile.bankName} ${profile.accountNumber?.slice(-4) || ''}` : '계좌를 등록해주세요'}
-              onPress={() => navigation.navigate('PaymentSettings')}
+              icon="cash-outline"
+              label="정산 내역"
+              description="수익 내역 및 정산 현황"
+              onPress={() => navigation.navigate('Settlement')}
             />
           </CategorySection>
 
-          <CategorySection title="이력" icon="document-text-outline">
-            <MenuItem
-              icon="document-text-outline"
-              label="수행 이력"
-              description="완료된 배송 업무를 확인하세요"
-              onPress={() => navigation.navigate('HelperHistory')}
-            />
-          </CategorySection>
-
-          <CategorySection title="이의제기 및 사고" icon="alert-circle-outline" collapsible defaultExpanded={false}>
+          {/* ⚠️ 이의제기·사고 */}
+          <CategorySection
+            title="⚠️ 이의제기·사고"
+            isExpanded={expandedSection === 'disputes'}
+            onToggle={() => handleToggleSection('disputes')}
+          >
             <MenuItem
               icon="warning-outline"
               label="이의제기 접수"
@@ -354,10 +448,88 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             />
           </CategorySection>
 
+          {/* ⚙️ 설정·지원 */}
+          <CategorySection
+            title="⚙️ 설정·지원"
+            isExpanded={expandedSection === 'settings'}
+            onToggle={() => handleToggleSection('settings')}
+          >
+            <MenuItem
+              icon="notifications-outline"
+              label="알림 설정"
+              onPress={() => navigation.navigate('Settings')}
+            />
+            <MenuItem
+              icon="book-outline"
+              label="사용 가이드"
+              description="앱 사용법 안내"
+              onPress={() => navigation.navigate('Help')}
+            />
+            <MenuItem
+              icon="help-circle-outline"
+              label="자주 묻는 질문"
+              description="FAQ"
+              onPress={() => navigation.navigate('Support')}
+            />
+            <MenuItem
+              icon="document-text-outline"
+              label="이용약관"
+              onPress={() => navigation.navigate('Policy', { type: 'terms' })}
+            />
+            <MenuItem
+              icon="shield-outline"
+              label="개인정보 처리방침"
+              onPress={() => navigation.navigate('Policy', { type: 'privacy' })}
+            />
+            <MenuItem
+              icon="log-out-outline"
+              label="회원탈퇴"
+              onPress={() => Alert.alert('회원탈퇴', '회원탈퇴 기능은 준비중입니다')}
+            />
+          </CategorySection>
         </>
       ) : (
+        /* Menu Categories - Requester */
         <>
-          <CategorySection title="사업자 정보" icon="business-outline">
+          {/* 👤 내 정보 변경 */}
+          <CategorySection
+            title="👤 내 정보 변경"
+            isExpanded={expandedSection === 'profile'}
+            onToggle={() => handleToggleSection('profile')}
+          >
+            <MenuItem
+              icon="person-outline"
+              label="닉네임 변경"
+              onPress={() => navigation.navigate('EditProfile', { field: 'name' })}
+            />
+            <MenuItem
+              icon="business-outline"
+              label="회사명 변경"
+              onPress={() => navigation.navigate('EditProfile', { field: 'company' })}
+            />
+            <MenuItem
+              icon="location-outline"
+              label="주소 변경"
+              onPress={() => navigation.navigate('EditProfile', { field: 'address' })}
+            />
+            <MenuItem
+              icon="call-outline"
+              label="전화번호 변경"
+              onPress={() => navigation.navigate('EditProfile', { field: 'phone' })}
+            />
+            <MenuItem
+              icon="lock-closed-outline"
+              label="비밀번호 변경"
+              onPress={() => navigation.navigate('ChangePassword')}
+            />
+          </CategorySection>
+
+          {/* 📄 서류 등록 */}
+          <CategorySection
+            title="📄 서류 등록"
+            isExpanded={expandedSection === 'documents'}
+            onToggle={() => handleToggleSection('documents')}
+          >
             <MenuItem
               icon="business-outline"
               label="사업자정보 등록"
@@ -368,85 +540,107 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             />
           </CategorySection>
 
-          <CategorySection title="업무" icon="briefcase-outline">
+          {/* 📋 업무 */}
+          <CategorySection
+            title="📋 업무"
+            isExpanded={expandedSection === 'work'}
+            onToggle={() => handleToggleSection('work')}
+          >
             <MenuItem
-              icon="grid-outline"
-              label="내 QR 보기"
-              description="헬퍼 출근 확인용 QR 코드"
+              icon="list-outline"
+              label="오더/사용 이력"
+              description="완료된 오더 내역"
+              onPress={() => navigation.navigate('RequesterHistory')}
+            />
+            <MenuItem
+              icon="qr-code-outline"
+              label="내 QR 코드"
+              description="헬퍼 출근 확인용"
               onPress={() => navigation.navigate('QRCheckin')}
             />
           </CategorySection>
 
-          <CategorySection title="결제" icon="card-outline">
+          {/* 💳 결제 */}
+          <CategorySection
+            title="💳 결제"
+            isExpanded={expandedSection === 'payment'}
+            onToggle={() => handleToggleSection('payment')}
+          >
             <MenuItem
               icon="card-outline"
               label="결제 수단"
-              description="결제 카드 및 계좌를 관리하세요"
+              description="결제 카드 및 계좌 관리"
               onPress={() => navigation.navigate('PaymentSettings')}
             />
             <MenuItem
-              icon="refresh-outline"
+              icon="wallet-outline"
               label="환불 계좌"
-              description={profile?.bankName ? `${profile.bankName} ${profile.accountNumber?.slice(-4) || ''}` : '환불받을 계좌를 등록하세요'}
+              description={profile?.bankName ? `${profile.bankName} ${profile.accountNumber?.slice(-4) || ''}` : '환불받을 계좌 등록'}
               onPress={() => navigation.navigate('RefundAccount')}
             />
           </CategorySection>
 
-          <CategorySection title="이력 및 이의제기" icon="document-text-outline" collapsible defaultExpanded={false}>
-            <MenuItem
-              icon="document-text-outline"
-              label="사용 이력"
-              description="완료된 오더 내역을 확인하세요"
-              onPress={() => navigation.navigate('RequesterHistory')}
-            />
+          {/* ⚠️ 이의제기·사고 */}
+          <CategorySection
+            title="⚠️ 이의제기·사고"
+            isExpanded={expandedSection === 'disputes'}
+            onToggle={() => handleToggleSection('disputes')}
+          >
             <MenuItem
               icon="list-outline"
               label="이의제기 내역"
-              description="접수한 이의제기 현황 확인"
+              description="접수한 이의제기 현황"
               onPress={() => navigation.navigate('RequesterDisputeList')}
             />
             <MenuItem
               icon="alert-circle-outline"
               label="사고 내역"
-              description="화물사고 접수 현황 확인"
+              description="화물사고 접수 현황"
               onPress={() => navigation.navigate('IncidentList')}
+            />
+          </CategorySection>
+
+          {/* ⚙️ 설정·지원 */}
+          <CategorySection
+            title="⚙️ 설정·지원"
+            isExpanded={expandedSection === 'settings'}
+            onToggle={() => handleToggleSection('settings')}
+          >
+            <MenuItem
+              icon="notifications-outline"
+              label="알림 설정"
+              onPress={() => navigation.navigate('Settings')}
+            />
+            <MenuItem
+              icon="book-outline"
+              label="사용 가이드"
+              description="앱 사용법 안내"
+              onPress={() => navigation.navigate('Help')}
+            />
+            <MenuItem
+              icon="help-circle-outline"
+              label="자주 묻는 질문"
+              description="FAQ"
+              onPress={() => navigation.navigate('Support')}
+            />
+            <MenuItem
+              icon="document-text-outline"
+              label="이용약관"
+              onPress={() => navigation.navigate('Policy', { type: 'terms' })}
+            />
+            <MenuItem
+              icon="shield-outline"
+              label="개인정보 처리방침"
+              onPress={() => navigation.navigate('Policy', { type: 'privacy' })}
+            />
+            <MenuItem
+              icon="log-out-outline"
+              label="회원탈퇴"
+              onPress={() => Alert.alert('회원탈퇴', '회원탈퇴 기능은 준비중입니다')}
             />
           </CategorySection>
         </>
       )}
-
-      <CategorySection title="설정" icon="settings-outline">
-        <MenuItem
-          icon="settings-outline"
-          label="앱 설정"
-          onPress={() => navigation.navigate('Settings')}
-        />
-      </CategorySection>
-
-      <CategorySection title="지원" icon="help-circle-outline" collapsible defaultExpanded={false}>
-        <MenuItem
-          icon="help-circle-outline"
-          label="사용 가이드"
-          description="앱 사용법 안내"
-          onPress={() => navigation.navigate('Help')}
-        />
-        <MenuItem
-          icon="help-circle-outline"
-          label="자주 묻는 질문"
-          description="FAQ"
-          onPress={() => navigation.navigate('Support')}
-        />
-        <MenuItem
-          icon="document-text-outline"
-          label="이용약관"
-          onPress={() => navigation.navigate('Policy', { type: 'terms' })}
-        />
-        <MenuItem
-          icon="shield-outline"
-          label="개인정보 처리방침"
-          onPress={() => navigation.navigate('Policy', { type: 'privacy' })}
-        />
-      </CategorySection>
 
       <Pressable
         testID="button-logout"
@@ -599,7 +793,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: Spacing.md,
-    marginBottom: Spacing.lg,
   },
   statItem: {
     alignItems: 'center',

@@ -4,13 +4,12 @@ import { TossLogo } from "./TossLogo";
 
 interface HeaderTitleProps {
   size?: "large" | "small";
-  gradient?: boolean;
 }
 
-export function HeaderTitle({ size = "small", gradient = false }: HeaderTitleProps) {
+export function HeaderTitle({ size = "small" }: HeaderTitleProps) {
   return (
     <View style={styles.container}>
-      <TossLogo size={size} gradient={gradient} />
+      <TossLogo size={size} />
     </View>
   );
 }

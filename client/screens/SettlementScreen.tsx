@@ -1,8 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { View, ScrollView, Pressable, StyleSheet, ActivityIndicator } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useHeaderHeight } from "@react-navigation/elements";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { View, Pressable, StyleSheet, ActivityIndicator } from "react-native";
 import { Icon } from "@/components/Icon";
 import { useQuery } from "@tanstack/react-query";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -10,6 +7,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
+import { SafeScrollView } from "@/components/SafeScrollView";
 import { Spacing, BorderRadius, Typography, BrandColors, Colors } from "@/constants/theme";
 
 type SettlementScreenProps = {
@@ -44,9 +42,6 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 
 export default function SettlementScreen({ navigation }: SettlementScreenProps) {
-  const insets = useSafeAreaInsets();
-  const headerHeight = useHeaderHeight();
-  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
 
   const today = new Date();
@@ -185,13 +180,12 @@ export default function SettlementScreen({ navigation }: SettlementScreenProps) 
   };
 
   return (
-    <ScrollView
+    <SafeScrollView
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
-      contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl + 60,
-        paddingHorizontal: Spacing.lg,
-      }}
+      contentContainerStyle={{ paddingHorizontal: Spacing.lg }}
+      includeHeaderHeight={true}
+      topPadding={Spacing.lg}
+      bottomPadding={Spacing.xl}
     >
       <Card variant="glass" padding="lg" style={styles.summaryCard}>
         <ThemedText style={[styles.summaryTitle, { color: theme.text }]}>
@@ -338,7 +332,7 @@ export default function SettlementScreen({ navigation }: SettlementScreenProps) 
           </ThemedText>
         </Card>
       ) : null}
-    </ScrollView>
+    </SafeScrollView>
   );
 }
 

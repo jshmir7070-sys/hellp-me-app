@@ -36,6 +36,12 @@ import AdminIncidentListScreen from "@/screens/AdminIncidentListScreen";
 import AdminDeductionListScreen from "@/screens/AdminDeductionListScreen";
 import AdminRefundListScreen from "@/screens/AdminRefundListScreen";
 import AdminOrderDetailScreen from "@/screens/AdminOrderDetailScreen";
+import DocBusinessScreen from "@/screens/documents/DocBusinessScreen";
+import DocDriverLicenseScreen from "@/screens/documents/DocDriverLicenseScreen";
+import DocCargoLicenseScreen from "@/screens/documents/DocCargoLicenseScreen";
+import DocVehicleScreen from "@/screens/documents/DocVehicleScreen";
+import DocBankAccountScreen from "@/screens/documents/DocBankAccountScreen";
+import DocPlatformContractScreen from "@/screens/documents/DocPlatformContractScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
@@ -65,6 +71,12 @@ export type ProfileStackParamList = {
   HelperDisputeList: undefined;
   HelperDisputeDetail: { disputeId: number };
   BusinessRegistration: undefined;
+  DocBusiness: undefined;
+  DocDriverLicense: undefined;
+  DocCargoLicense: undefined;
+  DocVehicle: undefined;
+  DocBankAccount: undefined;
+  DocPlatformContract: undefined;
   IncidentList: undefined;
   IncidentReport: { orderId: number };
   IncidentDetail: { incidentId: number };
@@ -253,6 +265,48 @@ export default function ProfileStackNavigator() {
         component={BusinessRegistrationScreen}
         options={{
           headerTitle: '사업자정보 등록',
+        }}
+      />
+      <Stack.Screen
+        name="DocBusiness"
+        component={DocBusinessScreen}
+        options={{
+          headerTitle: '사업자등록증',
+        }}
+      />
+      <Stack.Screen
+        name="DocDriverLicense"
+        component={DocDriverLicenseScreen}
+        options={{
+          headerTitle: '운전면허증',
+        }}
+      />
+      <Stack.Screen
+        name="DocCargoLicense"
+        component={DocCargoLicenseScreen}
+        options={{
+          headerTitle: '화물운송자격증',
+        }}
+      />
+      <Stack.Screen
+        name="DocVehicle"
+        component={DocVehicleScreen}
+        options={{
+          headerTitle: '차량등록',
+        }}
+      />
+      <Stack.Screen
+        name="DocBankAccount"
+        component={DocBankAccountScreen}
+        options={{
+          headerTitle: '수수료 통장',
+        }}
+      />
+      <Stack.Screen
+        name="DocPlatformContract"
+        component={DocPlatformContractScreen}
+        options={{
+          headerTitle: '운송 계약서',
         }}
       />
       <Stack.Screen

@@ -1006,6 +1006,7 @@ export const contracts = pgTable("contracts", {
   balancePaid: boolean("balance_paid").default(false),
   depositPaidAt: timestamp("deposit_paid_at"),
   balancePaidAt: timestamp("balance_paid_at"),
+  contactSharedAt: timestamp("contact_shared_at"), // 연락처 공개 시각 (계약금 입금 시)
   balanceDueDate: text("balance_due_date"),
   status: text("status").default("pending"), // pending, deposit_paid, completed, cancelled
   // 예치금 제거 후 새 필드들 (계약금/잔금 체계)
@@ -4360,8 +4361,21 @@ export const platformFeePolicies = pgTable("platform_fee_policies", {
 export const refundPolicies = pgTable("refund_policies", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  beforeMatchingRefundRate: integer("before_matching_refund_rate").notNull().default(100), // 매칭 전 취소 환불율 (%)
-  afterMatchingRefundRate: integer("after_matching_refund_rate").notNull().default(70), // 매칭 후 취소 환불율 (%)
+
+  // ── 단계별 환불률 (%) ──
+  beforeDepositRefundRate: integer("before_deposit_refund_rate").notNull().default(100), // 계약금 결제 전 (연락처 미공개)
+  afterDepositRefundRate: integer("after_deposit_refund_rate").notNull().default(0), // 계약금 결제 후 (연락처 공개, 원칙 불가)
+  helperFaultRefundRate: integer("helper_fault_refund_rate").notNull().default(100), // 헬퍼 귀책 (노쇼/일방취소)
+
+  // ── 헬퍼 패널티 ──
+  helperNoShowPenalty: integer("helper_no_show_penalty").default(0), // 헬퍼 노쇼 시 차감 금액 (원)
+  helperCancelPenaltyRate: integer("helper_cancel_penalty_rate").default(0), // 헬퍼 취소 시 패널티 비율 (%)
+
+  // ── 관리자 재정의 ──
+  adminOverrideEnabled: boolean("admin_override_enabled").default(true), // 관리자 수동 환불 허용
+  adminOverrideMaxRate: integer("admin_override_max_rate").default(100), // 관리자 최대 환불 가능률 (%)
+
+  // ── 정책 메타 ──
   effectiveFrom: text("effective_from").notNull(),
   effectiveTo: text("effective_to"),
   isActive: boolean("is_active").default(true),

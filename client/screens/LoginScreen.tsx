@@ -144,16 +144,9 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* Gradient Background */}
-      <LinearGradient
-        colors={[...PremiumGradients.blue, theme.backgroundRoot]}
-        locations={[0, 0.3, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
@@ -165,13 +158,13 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           {/* Logo Section */}
           <View style={styles.logoContainer}>
             <TossLogo size="large" gradient />
-            <ThemedText style={[styles.subtitle, { color: theme.buttonText }]}>
+            <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
               프리미엄 물류 플랫폼
             </ThemedText>
           </View>
 
           {/* Login Form Card */}
-          <Card variant="glass" padding="xl" style={styles.formCard}>
+          <Card variant="default" padding="xl" style={styles.formCard}>
             {error ? (
               <Card
                 variant="outlined"
