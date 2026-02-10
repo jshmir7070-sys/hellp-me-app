@@ -13,6 +13,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Badge } from "@/components/Badge";
 import { Avatar } from "@/components/Avatar";
+import { CategorySection } from "@/components/profile/CategorySection";
+import { MenuItem } from "@/components/profile/MenuItem";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius, Typography, BrandColors, Colors } from "@/constants/theme";
@@ -273,7 +275,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               icon="document-text-outline"
               label="서류 제출"
               description="사업자등록증, 운전면허증, 차량등록증"
-              theme={theme}
+              
               onPress={() => navigation.navigate('HelperOnboarding')}
             />
           </View>
@@ -285,7 +287,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               icon="camera-outline"
               label="요청자 QR 스캔"
               description="요청자의 QR을 스캔하여 출근 기록"
-              theme={theme}
+              
               onPress={() => navigation.navigate('QRCheckin')}
             />
           </View>
@@ -319,7 +321,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                 icon="people-outline"
                 label="팀 생성하기"
                 description="팀을 만들어 함께 일해보세요"
-                theme={theme}
+                
                 onPress={() => navigation.navigate('CreateTeam')}
               />
             )}
@@ -332,7 +334,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               icon="card-outline"
               label="정산 계좌"
               description={profile?.bankName ? `${profile.bankName} ${profile.accountNumber?.slice(-4) || ''}` : '계좌를 등록해주세요'}
-              theme={theme}
+              
               onPress={() => navigation.navigate('PaymentSettings')}
             />
           </View>
@@ -344,7 +346,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               icon="document-text-outline"
               label="수행 이력"
               description="완료된 배송 업무를 확인하세요"
-              theme={theme}
+              
               onPress={() => navigation.navigate('HelperHistory')}
             />
           </View>
@@ -356,21 +358,21 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               icon="warning-outline"
               label="이의제기 접수"
               description="정산 오류, 수량 차이 등 접수"
-              theme={theme}
+              
               onPress={() => navigation.navigate('HelperDisputeSubmit')}
             />
             <MenuItem
               icon="list-outline"
               label="이의제기 내역"
               description="접수한 이의제기 현황 확인"
-              theme={theme}
+              
               onPress={() => navigation.navigate('HelperDisputeList')}
             />
             <MenuItem
               icon="alert-circle-outline"
               label="사고 내역"
               description="접수된 화물사고 확인 및 응답"
-              theme={theme}
+              
               onPress={() => navigation.navigate('HelperIncidentList')}
             />
           </View>
@@ -385,7 +387,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               icon="business-outline"
               label="사업자정보 등록"
               description={(requesterProfile as any)?.businessNumber ? `사업자번호: ${(requesterProfile as any).businessNumber}` : '세금계산서 발행을 위해 등록해주세요'}
-              theme={theme}
+              
               badge={!(requesterProfile as any)?.businessNumber ? '미등록' : undefined}
               badgeColor="BrandColors.error"
               onPress={() => navigation.navigate('BusinessRegistration')}
@@ -399,7 +401,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               icon="grid-outline"
               label="내 QR 보기"
               description="헬퍼 출근 확인용 QR 코드"
-              theme={theme}
+              
               onPress={() => navigation.navigate('QRCheckin')}
             />
           </View>
@@ -411,14 +413,14 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               icon="card-outline"
               label="결제 수단"
               description="결제 카드 및 계좌를 관리하세요"
-              theme={theme}
+              
               onPress={() => navigation.navigate('PaymentSettings')}
             />
             <MenuItem
               icon="refresh-outline"
               label="환불 계좌"
               description={profile?.bankName ? `${profile.bankName} ${profile.accountNumber?.slice(-4) || ''}` : '환불받을 계좌를 등록하세요'}
-              theme={theme}
+              
               onPress={() => navigation.navigate('RefundAccount')}
             />
           </View>
@@ -430,14 +432,14 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               icon="list-outline"
               label="이의제기 내역"
               description="접수한 이의제기 현황 확인"
-              theme={theme}
+              
               onPress={() => navigation.navigate('RequesterDisputeList')}
             />
             <MenuItem
               icon="alert-circle-outline"
               label="사고 내역"
               description="화물사고 접수 현황 확인"
-              theme={theme}
+              
               onPress={() => navigation.navigate('IncidentList')}
             />
           </View>
@@ -449,7 +451,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               icon="document-text-outline"
               label="사용 이력"
               description="완료된 오더 내역을 확인하세요"
-              theme={theme}
+              
               onPress={() => navigation.navigate('RequesterHistory')}
             />
           </View>
@@ -462,7 +464,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
         <MenuItem
           icon="settings-outline"
           label="앱 설정"
-          theme={theme}
+          
           onPress={() => navigation.navigate('Settings')}
         />
       </View>
@@ -474,26 +476,26 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
           icon="help-circle-outline"
           label="사용 가이드"
           description="앱 사용법 안내"
-          theme={theme}
+          
           onPress={() => navigation.navigate('Help')}
         />
         <MenuItem
           icon="help-circle-outline"
           label="자주 묻는 질문"
           description="FAQ"
-          theme={theme}
+          
           onPress={() => navigation.navigate('Support')}
         />
         <MenuItem
           icon="document-text-outline"
           label="이용약관"
-          theme={theme}
+          
           onPress={() => navigation.navigate('Policy', { type: 'terms' })}
         />
         <MenuItem
           icon="shield-outline"
           label="개인정보 처리방침"
-          theme={theme}
+          
           onPress={() => navigation.navigate('Policy', { type: 'privacy' })}
         />
       </View>
@@ -593,56 +595,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   );
 }
 
-function MenuItem({ 
-  icon, 
-  label, 
-  description,
-  theme, 
-  badge,
-  badgeColor,
-  onPress 
-}: { 
-  icon: string; 
-  label: string; 
-  description?: string;
-  theme: any; 
-  badge?: string;
-  badgeColor?: string;
-  onPress: () => void 
-}) {
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.menuItem,
-        { 
-          backgroundColor: theme.backgroundDefault,
-          opacity: pressed ? 0.7 : 1,
-        },
-      ]}
-      onPress={onPress}
-    >
-      <View style={styles.menuItemLeft}>
-        <Icon name={icon as any} size={20} color={theme.text} />
-        <View style={styles.menuItemTextContainer}>
-          <View style={styles.labelRow}>
-            <ThemedText style={[styles.menuItemLabel, { color: theme.text }]}>{label}</ThemedText>
-            {badge ? (
-              <View style={[styles.badgeContainer, { backgroundColor: badgeColor || BrandColors.error }]}>
-                <ThemedText style={styles.badgeText}>{badge}</ThemedText>
-              </View>
-            ) : null}
-          </View>
-          {description ? (
-            <ThemedText style={[styles.menuItemDescription, { color: theme.tabIconDefault }]}>
-              {description}
-            </ThemedText>
-          ) : null}
-        </View>
-      </View>
-      <Icon name="chevron-forward-outline" size={20} color={theme.tabIconDefault} />
-    </Pressable>
-  );
-}
+// MenuItem component extracted to @/components/profile/MenuItem
 
 const styles = StyleSheet.create({
   profileCard: {

@@ -50,6 +50,6 @@ echo.
 echo ========================================
 echo.
 
-npx expo start --clear
+npx expo start --clear --offline
 
 pause

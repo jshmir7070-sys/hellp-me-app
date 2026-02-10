@@ -14,10 +14,17 @@ export function useScreenOptions({
   const { theme, isDark } = useTheme();
 
   return {
-    headerTitleAlign: "center",
+    headerTitleAlign: "left", // Toss-style left alignment
     headerTransparent: transparent,
     headerBlurEffect: isDark ? "dark" : "light",
     headerTintColor: theme.text,
+    headerBackTitleVisible: false, // Hide "Back" text (Toss-style)
+    headerLeftContainerStyle: {
+      paddingLeft: 16, // Toss-style spacing
+    },
+    headerRightContainerStyle: {
+      paddingRight: 16, // Toss-style spacing
+    },
     headerStyle: {
       backgroundColor: Platform.select({
         ios: undefined,

@@ -91,20 +91,21 @@ export default function ProfileStackNavigator() {
         component={ProfileScreen}
         options={{
           headerTitle: () => <HeaderTitle size="small" />,
+          headerLeft: () => null, // Toss-style: no back button on main tab
         }}
       />
       <Stack.Screen
         name="Settings"
         component={SettingsScreen}
         options={{
-          headerTitle: () => <HeaderTitle size="small" />,
+          headerTitle: "설정", // Text title for nested screen
         }}
       />
       <Stack.Screen
         name="EditProfile"
         component={EditProfileScreen}
         options={{
-          headerTitle: () => <HeaderTitle size="small" />,
+          headerTitle: "프로필 수정", // Text title for nested screen
         }}
       />
       <Stack.Screen
@@ -125,42 +126,42 @@ export default function ProfileStackNavigator() {
         name="PaymentSettings"
         component={PaymentSettingsScreen}
         options={{
-          headerTitle: () => <HeaderTitle size="small" />,
+          headerTitle: "정산 계좌", // Text title for nested screen
         }}
       />
       <Stack.Screen
         name="SettlementHistory"
         component={SettlementHistoryScreen}
         options={{
-          headerTitle: () => <HeaderTitle size="small" />,
+          headerTitle: "정산 내역", // Text title for nested screen
         }}
       />
       <Stack.Screen
         name="RefundAccount"
         component={RefundAccountScreen}
         options={{
-          headerTitle: () => <HeaderTitle size="small" />,
+          headerTitle: "환불 계좌", // Text title for nested screen
         }}
       />
       <Stack.Screen
         name="TeamManagement"
         component={TeamManagementScreen}
         options={{
-          headerTitle: () => <HeaderTitle size="small" />,
+          headerTitle: "팀 관리", // Text title for nested screen
         }}
       />
       <Stack.Screen
         name="CreateTeam"
         component={CreateTeamScreen}
         options={{
-          headerTitle: () => <HeaderTitle size="small" />,
+          headerTitle: "팀 생성", // Text title for nested screen
         }}
       />
       <Stack.Screen
         name="QRCheckin"
         component={QRCheckinScreen}
         options={{
-          headerTitle: () => <HeaderTitle size="small" />,
+          headerTitle: "QR 체크인", // Text title for nested screen
         }}
       />
       <Stack.Screen

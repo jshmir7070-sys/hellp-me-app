@@ -102,6 +102,7 @@ export default function HomeStackNavigator() {
         component={HomeScreen}
         options={{
           headerTitle: () => <HeaderTitle size="small" />,
+          headerLeft: () => null, // Toss-style: no back button on main tab
           headerRight: () => <HomeHeaderRight />,
         }}
       />

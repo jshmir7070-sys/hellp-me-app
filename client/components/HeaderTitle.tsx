@@ -1,20 +1,16 @@
 import React from "react";
-import { View, StyleSheet, Image } from "react-native";
+import { View, StyleSheet } from "react-native";
+import { TossLogo } from "./TossLogo";
 
 interface HeaderTitleProps {
   size?: "large" | "small";
+  gradient?: boolean;
 }
 
-export function HeaderTitle({ size = "small" }: HeaderTitleProps) {
-  const logoStyle = size === "large" ? styles.logoLarge : styles.logoSmall;
-  
+export function HeaderTitle({ size = "small", gradient = false }: HeaderTitleProps) {
   return (
     <View style={styles.container}>
-      <Image
-        source={require("@/assets/images/hellpme-logo.png")}
-        style={logoStyle}
-        resizeMode="contain"
-      />
+      <TossLogo size={size} gradient={gradient} />
     </View>
   );
 }
@@ -24,13 +20,5 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
-  },
-  logoLarge: {
-    width: 200,
-    height: 70,
-  },
-  logoSmall: {
-    width: 120,
-    height: 40,
   },
 });
