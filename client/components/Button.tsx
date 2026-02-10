@@ -55,7 +55,7 @@ export function Button({
   children,
   style,
   disabled = false,
-  variant = "legacy",  // 기본값: 기존 스타일
+  variant = "primary",  // 기본값: Toss-style 블루 그라데이션
   size = "md",
   fullWidth = false,
   icon,

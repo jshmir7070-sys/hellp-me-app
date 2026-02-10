@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, TextInput, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image, Modal } from 'react-native';
+import { View, StyleSheet, TextInput, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Icon } from "@/components/Icon";
@@ -10,13 +10,12 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { Badge } from '@/components/Badge';
+import { TossLogo } from '@/components/TossLogo';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuth, UserRole } from '@/contexts/AuthContext';
 import { Colors, Spacing, BorderRadius, Typography, BrandColors, PremiumGradients } from '@/constants/theme';
 import { getApiUrl } from '@/lib/query-client';
 import { LinearGradient } from 'expo-linear-gradient';
-
-const logoImage = require('../assets/images/hellpme-logo.png');
 
 const HELPER_TERMS = {
   terms: {
@@ -411,7 +410,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
         >
           <View style={styles.contentWrapper}>
           <View style={styles.logoContainer}>
-            <Image source={logoImage} style={styles.logo} resizeMode="contain" />
+            <TossLogo size="large" gradient />
           </View>
 
           <ThemedText style={[styles.stepTitle, { color: theme.buttonText }]}>
@@ -488,7 +487,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
       >
         <View style={styles.contentWrapper}>
         <View style={styles.logoContainerSmall}>
-          <Image source={logoImage} style={styles.logoSmall} resizeMode="contain" />
+          <TossLogo size="small" gradient />
         </View>
 
         <ThemedText style={[styles.formTitle, { color: Colors.light.buttonText, textAlign: 'center' }]}>
@@ -956,17 +955,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: Spacing['2xl'],
   },
-  logo: {
-    width: 300,
-    height: 100,
-  },
   logoContainerSmall: {
     alignItems: 'center',
     marginBottom: Spacing.md,
-  },
-  logoSmall: {
-    width: 200,
-    height: 70,
   },
   stepTitle: {
     ...Typography.h2,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
+import { View, StyleSheet, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,11 +11,10 @@ import { ThemedText } from '@/components/ThemedText';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
+import { TossLogo } from '@/components/TossLogo';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { Colors, Spacing, BorderRadius, Typography, BrandColors, PremiumGradients } from '@/constants/theme';
-
-const logoImage = require('../assets/images/hellpme-logo.png');
 
 const SAVED_EMAIL_KEY = 'saved_email';
 const AUTO_LOGIN_KEY = 'auto_login';
@@ -165,7 +164,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         <View style={styles.contentWrapper}>
           {/* Logo Section */}
           <View style={styles.logoContainer}>
-            <Image source={logoImage} style={styles.logo} resizeMode="contain" />
+            <TossLogo size="large" gradient />
             <ThemedText style={[styles.subtitle, { color: theme.buttonText }]}>
               프리미엄 물류 플랫폼
             </ThemedText>
@@ -314,11 +313,7 @@ const styles = StyleSheet.create({
   logoContainer: {
     alignItems: 'center',
     marginBottom: Spacing['4xl'],
-  },
-  logo: {
-    width: 300,
-    height: 100,
-    marginBottom: Spacing.lg,
+    gap: Spacing.md,
   },
   subtitle: {
     ...Typography.body,
