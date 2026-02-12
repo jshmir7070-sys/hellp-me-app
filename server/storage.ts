@@ -1428,7 +1428,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCourierTieredPricing(tier: InsertCourierTieredPricing): Promise<CourierTieredPricing> {
-    const [created] = await db.insert(courierTieredPricing).values(tier).returning();
+    const [created] = await db.insert(courierTieredPricing).values(tier as any).returning();
     return created;
   }
 
@@ -2780,7 +2780,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTaxInvoicesByHelper(helperId: string): Promise<TaxInvoice[]> {
-    return await db.select().from(taxInvoices).where(eq(taxInvoices.recipientBusinessNumber, helperId)).orderBy(desc(taxInvoices.createdAt));
+    return await db.select().from(taxInvoices).where(eq(taxInvoices.buyerCorpNum, helperId)).orderBy(desc(taxInvoices.createdAt));
   }
 
   async getTaxInvoicesByPeriod(period: string): Promise<TaxInvoice[]> {

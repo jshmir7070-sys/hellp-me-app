@@ -17,6 +17,10 @@ module.exports = {
           },
         ],
       },
+      moduleNameMapper: {
+        '^@shared/(.*)$': '<rootDir>/shared/$1',
+      },
+      setupFiles: ['<rootDir>/server/__tests__/setup-env.ts'],
       moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
       collectCoverageFrom: [
         'server/**/*.{ts,tsx}',

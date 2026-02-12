@@ -1,4 +1,5 @@
 import { drizzle } from "drizzle-orm/node-postgres";
+// @ts-ignore
 import pg from "pg";
 import * as schema from "@shared/schema";
 import * as views from "./db/views";
@@ -28,7 +29,7 @@ export const pool = new Pool({
 });
 
 // Neon 연결 끊김 시 서버 충돌 방지
-pool.on("error", (err) => {
+pool.on("error", (err: Error) => {
   console.error("[DB Pool] Unexpected error on idle client:", err.message);
   // 에러 로깅만 하고 서버는 계속 실행 (새 연결 자동 생성됨)
 });
