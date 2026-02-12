@@ -236,6 +236,7 @@ export default function AdminIncidentListScreen({ navigation }: AdminIncidentLis
             paddingHorizontal: Spacing.lg,
             paddingTop: Spacing.md,
             paddingBottom: insets.bottom + Spacing.xl,
+            flexGrow: 1,
           }}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} />

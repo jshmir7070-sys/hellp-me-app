@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { View, StyleSheet, Pressable, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import Checkbox from 'expo-checkbox';
@@ -10,11 +9,9 @@ import Checkbox from 'expo-checkbox';
 import { ThemedText } from '@/components/ThemedText';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
-import { Card } from '@/components/Card';
 import { TossLogo } from '@/components/TossLogo';
-import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/contexts/AuthContext';
-import { Colors, Spacing, BorderRadius, Typography, BrandColors, PremiumGradients } from '@/constants/theme';
+import { Spacing, BorderRadius, Typography, BrandColors, PremiumGradients } from '@/constants/theme';
 
 const SAVED_EMAIL_KEY = 'saved_email';
 const AUTO_LOGIN_KEY = 'auto_login';
@@ -47,7 +44,6 @@ type LoginScreenProps = {
 };
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
-  const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const { login, isAuthenticated } = useAuth();
 
@@ -74,7 +70,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       const [savedEmail, savedAutoLogin, savedPassword] = await Promise.all([
         AsyncStorage.getItem(SAVED_EMAIL_KEY),
         AsyncStorage.getItem(AUTO_LOGIN_KEY),
-        secureGetPassword(), // Use SecureStore for password
+        secureGetPassword(),
       ]);
 
       if (savedEmail) {
@@ -106,10 +102,10 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
       if (autoLogin) {
         await AsyncStorage.setItem(AUTO_LOGIN_KEY, 'true');
-        await secureSetPassword(password); // Use SecureStore for password
+        await secureSetPassword(password);
       } else {
         await AsyncStorage.removeItem(AUTO_LOGIN_KEY);
-        await secureRemovePassword(); // Use SecureStore for password
+        await secureRemovePassword();
       }
     } catch (e) {
       console.error('Failed to save settings:', e);
@@ -144,39 +140,36 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+      style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: insets.top + Spacing['3xl'], paddingBottom: insets.bottom + Spacing.xl }
+          { paddingTop: insets.top + Spacing['2xl'], paddingBottom: insets.bottom + Spacing.lg }
         ]}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.contentWrapper}>
           {/* Logo Section */}
           <View style={styles.logoContainer}>
-            <TossLogo size="large" gradient />
-            <ThemedText style={[styles.subtitle, { color: theme.textSecondary }]}>
+            <TossLogo size="large" />
+            <ThemedText style={styles.subtitle}>
               프리미엄 물류 플랫폼
             </ThemedText>
           </View>
 
-          {/* Login Form Card */}
-          <Card variant="default" padding="xl" style={styles.formCard}>
-            {error ? (
-              <Card
-                variant="outlined"
-                padding="md"
-                style={[styles.errorContainer, { borderColor: BrandColors.error }]}
-              >
-                <ThemedText style={styles.errorText}>{error}</ThemedText>
-              </Card>
-            ) : null}
+          {/* Error Message */}
+          {error ? (
+            <View style={styles.errorContainer}>
+              <ThemedText style={styles.errorText}>{error}</ThemedText>
+            </View>
+          ) : null}
 
+          {/* Login Form */}
+          <View style={styles.formSection}>
             <Input
-              variant="premium"
+              variant="outlined"
               placeholder="이메일을 입력하세요"
               keyboardType="email-address"
               autoCapitalize="none"
@@ -191,7 +184,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
             />
 
             <Input
-              variant="premium"
+              variant="outlined"
               placeholder="비밀번호를 입력하세요"
               secureTextEntry
               value={password}
@@ -212,11 +205,11 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
                 <Checkbox
                   value={saveEmail}
                   onValueChange={setSaveEmail}
-                  color={saveEmail ? PremiumGradients.blue[0] : undefined}
+                  color={saveEmail ? BrandColors.primary : undefined}
                   style={styles.checkbox}
                   disabled={autoLogin}
                 />
-                <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
+                <ThemedText style={styles.checkboxLabel}>
                   아이디 저장
                 </ThemedText>
               </Pressable>
@@ -228,17 +221,17 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
                 <Checkbox
                   value={autoLogin}
                   onValueChange={handleAutoLoginChange}
-                  color={autoLogin ? PremiumGradients.blue[0] : undefined}
+                  color={autoLogin ? BrandColors.primary : undefined}
                   style={styles.checkbox}
                 />
-                <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
+                <ThemedText style={styles.checkboxLabel}>
                   자동 로그인
                 </ThemedText>
               </Pressable>
             </View>
 
             <Button
-              variant="premium"
+              variant="primary"
               size="lg"
               fullWidth
               onPress={handleLogin}
@@ -248,41 +241,41 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
             >
               {isLoading ? '로그인 중...' : '로그인'}
             </Button>
+          </View>
 
-            <View style={styles.findContainer}>
-              <Pressable
-                onPress={() => navigation.navigate('FindEmail')}
-                disabled={isLoading}
-              >
-                <ThemedText style={[styles.findLink, { color: theme.tabIconDefault }]}>
-                  아이디 찾기
-                </ThemedText>
-              </Pressable>
-              <ThemedText style={[styles.divider, { color: theme.tabIconDefault }]}>|</ThemedText>
-              <Pressable
-                onPress={() => navigation.navigate('FindPassword')}
-                disabled={isLoading}
-              >
-                <ThemedText style={[styles.findLink, { color: theme.tabIconDefault }]}>
-                  비밀번호 찾기
-                </ThemedText>
-              </Pressable>
-            </View>
-
-            <View style={styles.signupContainer}>
-              <ThemedText style={[styles.signupText, { color: theme.tabIconDefault }]}>
-                계정이 없으신가요?
+          <View style={styles.findContainer}>
+            <Pressable
+              onPress={() => navigation.navigate('FindEmail')}
+              disabled={isLoading}
+            >
+              <ThemedText style={styles.findLink}>
+                아이디 찾기
               </ThemedText>
-              <Pressable
-                onPress={() => navigation.navigate('Signup')}
-                disabled={isLoading}
-              >
-                <ThemedText style={[styles.signupLink, { color: PremiumGradients.blue[0] }]}>
-                  회원가입
-                </ThemedText>
-              </Pressable>
-            </View>
-          </Card>
+            </Pressable>
+            <ThemedText style={styles.divider}>|</ThemedText>
+            <Pressable
+              onPress={() => navigation.navigate('FindPassword')}
+              disabled={isLoading}
+            >
+              <ThemedText style={styles.findLink}>
+                비밀번호 찾기
+              </ThemedText>
+            </Pressable>
+          </View>
+
+          <View style={styles.signupContainer}>
+            <ThemedText style={styles.signupText}>
+              계정이 없으신가요?
+            </ThemedText>
+            <Pressable
+              onPress={() => navigation.navigate('Signup')}
+              disabled={isLoading}
+            >
+              <ThemedText style={styles.signupLink}>
+                회원가입
+              </ThemedText>
+            </Pressable>
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -292,6 +285,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   scrollContent: {
     flexGrow: 1,
@@ -305,22 +299,24 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: Spacing['4xl'],
-    gap: Spacing.md,
+    marginBottom: Spacing['3xl'],
+    gap: Spacing.sm,
   },
   subtitle: {
     ...Typography.body,
-    fontWeight: '600',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
+    fontWeight: '500',
+    color: '#6B7280',
   },
-  formCard: {
+  formSection: {
     width: '100%',
   },
   errorContainer: {
     backgroundColor: BrandColors.errorLight,
+    borderRadius: BorderRadius.sm,
+    padding: Spacing.md,
     marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: BrandColors.error,
   },
   errorText: {
     color: BrandColors.error,
@@ -349,9 +345,10 @@ const styles = StyleSheet.create({
   },
   checkboxLabel: {
     ...Typography.small,
+    color: '#374151',
   },
   loginButton: {
-    marginTop: Spacing.md,
+    marginTop: Spacing.sm,
   },
   findContainer: {
     flexDirection: 'row',
@@ -362,9 +359,11 @@ const styles = StyleSheet.create({
   },
   findLink: {
     ...Typography.small,
+    color: '#6B7280',
   },
   divider: {
     ...Typography.small,
+    color: '#D1D5DB',
   },
   signupContainer: {
     flexDirection: 'row',
@@ -375,9 +374,11 @@ const styles = StyleSheet.create({
   },
   signupText: {
     ...Typography.body,
+    color: '#6B7280',
   },
   signupLink: {
     ...Typography.body,
     fontWeight: '600',
+    color: BrandColors.primary,
   },
 });

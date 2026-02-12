@@ -230,7 +230,9 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   emptyContainer: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: Spacing['5xl'],
   },
   emptyTitle: {

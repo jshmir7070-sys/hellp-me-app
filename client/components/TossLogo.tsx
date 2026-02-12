@@ -27,7 +27,7 @@ export function TossLogo({
     transform: [{ scale: scale.value }],
   }));
 
-  const logoSize = size === 'large' ? { width: 140, height: 45 } : { width: 90, height: 30 };
+  const logoSize = size === 'large' ? { width: 200, height: 65 } : { width: 90, height: 30 };
 
   // Use hellpme-logo.png for all pages
   const logoSource = require('@/assets/images/hellpme-logo.png');

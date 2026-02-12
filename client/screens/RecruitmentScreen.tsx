@@ -202,6 +202,7 @@ export default function RecruitmentScreen({ navigation }: RecruitmentScreenProps
           paddingTop: headerHeight + Spacing.lg + 94,
           paddingBottom: tabBarHeight + Spacing.xl,
           paddingHorizontal: Spacing.lg,
+          flexGrow: 1,
         }}
         refreshControl={
           <RefreshControl

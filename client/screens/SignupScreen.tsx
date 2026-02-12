@@ -399,67 +399,62 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
 
   if (step === 1) {
     return (
-      <View style={styles.container}>
-        <LinearGradient
-          colors={[PremiumGradients.purple[0], PremiumGradients.purple[1], theme.backgroundRoot]}
-          locations={[0, 0.3, 1]}
-          style={StyleSheet.absoluteFill}
-        />
+      <View style={[styles.container, { backgroundColor: '#FFFFFF' }]}>
         <ScrollView
           contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl }]}
         >
           <View style={styles.contentWrapper}>
           <View style={styles.logoContainer}>
-            <TossLogo size="large" gradient />
+            <TossLogo size="large" />
           </View>
 
-          <ThemedText style={[styles.stepTitle, { color: theme.buttonText }]}>
+          <ThemedText style={[styles.stepTitle, { color: '#1F2937' }]}>
             어떤 서비스가 필요하신가요?
           </ThemedText>
-          <ThemedText style={[styles.stepSubtitle, { color: 'rgba(255,255,255,0.8)' }]}>
+          <ThemedText style={[styles.stepSubtitle, { color: '#6B7280' }]}>
             본인에게 맞는 유형을 선택해주세요
           </ThemedText>
 
           <View style={styles.roleCards}>
-            <Card
-              variant="glass"
-              padding="xl"
+            <Pressable
               onPress={() => handleRoleSelect('helper')}
-              pressable
-              style={styles.roleCard}
+              style={[styles.roleCard, { backgroundColor: '#FFFFFF', borderColor: BrandColors.helperLight, borderWidth: 2 }]}
             >
               <View style={[styles.roleIconContainer, { backgroundColor: BrandColors.helperLight }]}>
                 <Icon name="car-outline" size={40} color={BrandColors.helper} />
               </View>
-              <ThemedText style={[styles.roleTitle, { color: theme.text }]}>헬퍼</ThemedText>
-              <ThemedText style={[styles.roleDescription, { color: theme.tabIconDefault }]}>
+              <ThemedText style={[styles.roleTitle, { color: BrandColors.helper }]}>헬퍼</ThemedText>
+              <ThemedText style={[styles.roleDescription, { color: '#6B7280' }]}>
                 배달 업무를 수행하고{'\n'}수익을 올리고 싶어요
               </ThemedText>
-            </Card>
+              <View style={[styles.roleAccent, { backgroundColor: BrandColors.helper }]}>
+                <ThemedText style={{ color: '#FFFFFF', ...Typography.small, fontWeight: '600' }}>시작하기</ThemedText>
+              </View>
+            </Pressable>
 
-            <Card
-              variant="glass"
-              padding="xl"
+            <Pressable
               onPress={() => handleRoleSelect('requester')}
-              pressable
-              style={styles.roleCard}
+              style={[styles.roleCard, { backgroundColor: '#FFFFFF', borderColor: BrandColors.requesterLight, borderWidth: 2 }]}
             >
               <View style={[styles.roleIconContainer, { backgroundColor: BrandColors.requesterLight }]}>
                 <Icon name="briefcase-outline" size={40} color={BrandColors.requester} />
               </View>
-              <ThemedText style={[styles.roleTitle, { color: theme.text }]}>요청자</ThemedText>
-              <ThemedText style={[styles.roleDescription, { color: theme.tabIconDefault }]}>
+              <ThemedText style={[styles.roleTitle, { color: BrandColors.requester }]}>요청자</ThemedText>
+              <ThemedText style={[styles.roleDescription, { color: '#6B7280' }]}>
                 배송 서비스가 필요한{'\n'}사업체입니다
               </ThemedText>
-            </Card>
+              <View style={[styles.roleAccent, { backgroundColor: BrandColors.requester }]}>
+                <ThemedText style={{ color: '#FFFFFF', ...Typography.small, fontWeight: '600' }}>시작하기</ThemedText>
+              </View>
+            </Pressable>
           </View>
 
           <View style={styles.loginContainer}>
-            <ThemedText style={[styles.loginText, { color: 'rgba(255,255,255,0.8)' }]}>
+            <ThemedText style={[styles.loginText, { color: '#6B7280' }]}>
               이미 계정이 있으신가요?
             </ThemedText>
             <Pressable onPress={() => navigation.navigate('Login')}>
-              <ThemedText style={[styles.loginLink, { color: theme.buttonText }]}>로그인</ThemedText>
+              <ThemedText style={[styles.loginLink, { color: BrandColors.primary }]}>로그인</ThemedText>
             </Pressable>
           </View>
           </View>
@@ -470,14 +465,9 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: '#FFFFFF' }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <LinearGradient
-        colors={[PremiumGradients.purple[0], PremiumGradients.purple[1], theme.backgroundRoot]}
-        locations={[0, 0.3, 1]}
-        style={StyleSheet.absoluteFill}
-      />
       <ScrollView
         contentContainerStyle={[
           styles.scrollContent,
@@ -487,10 +477,10 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
       >
         <View style={styles.contentWrapper}>
         <View style={styles.logoContainerSmall}>
-          <TossLogo size="small" gradient />
+          <TossLogo size="small" />
         </View>
 
-        <ThemedText style={[styles.formTitle, { color: Colors.light.buttonText, textAlign: 'center' }]}>
+        <ThemedText style={[styles.formTitle, { color: accentColor, textAlign: 'center' }]}>
           {selectedRole === 'helper' ? '헬퍼' : '요청자'} 회원가입
         </ThemedText>
 
@@ -981,6 +971,17 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     borderWidth: 2,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  roleAccent: {
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    marginTop: Spacing.sm,
   },
   roleIconContainer: {
     width: 80,
