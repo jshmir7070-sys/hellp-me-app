@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     ...Typography.small,
-    color: "BrandColors.error",
+    color: BrandColors.error,
     marginBottom: Spacing.md,
   },
   submitButton: {

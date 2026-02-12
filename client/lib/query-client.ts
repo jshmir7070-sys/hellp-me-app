@@ -27,20 +27,13 @@ export function getApiUrl(): string {
   const host = process.env.EXPO_PUBLIC_DOMAIN;
   const protocol = process.env.EXPO_PUBLIC_API_PROTOCOL;
 
-  console.log('[DEBUG] Environment variables:', {
-    EXPO_PUBLIC_DOMAIN: host,
-    EXPO_PUBLIC_API_PROTOCOL: protocol,
-  });
-
   if (!host) {
     if (typeof window !== 'undefined' && window.location) {
       apiUrlConfigError = null;
-      console.log('[DEBUG] Using window.location.origin:', window.location.origin);
       return window.location.origin + '/';
     }
 
     if (__DEV__) {
-      console.warn("[DEV] EXPO_PUBLIC_DOMAIN not set, using localhost:5000");
       apiUrlConfigError = null;
       return 'http://localhost:5000/';
     }
@@ -63,7 +56,6 @@ export function getApiUrl(): string {
     
     const url = new URL(urlString);
     apiUrlConfigError = null;
-    console.log('[DEBUG] Final API URL:', url.href);
     return url.href;
   } catch (e) {
     apiUrlConfigError = '서버 주소가 올바르지 않습니다.';

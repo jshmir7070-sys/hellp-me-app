@@ -347,16 +347,16 @@ export default function TeamManagementScreen() {
 
       {!isLeader ? (
         <Pressable
-          style={[styles.leaveButton, { borderColor: "BrandColors.error" }]}
+          style={[styles.leaveButton, { borderColor: BrandColors.error }]}
           onPress={handleLeaveTeam}
           disabled={leaveTeamMutation.isPending}
         >
           {leaveTeamMutation.isPending ? (
-            <ActivityIndicator size="small" color="BrandColors.error" />
+            <ActivityIndicator size="small" color={BrandColors.error} />
           ) : (
             <>
-              <Icon name="exit-outline" size={20} color="BrandColors.error" />
-              <ThemedText style={[styles.leaveButtonText, { color: "BrandColors.error", marginLeft: Spacing.sm }]}>
+              <Icon name="exit-outline" size={20} color={BrandColors.error} />
+              <ThemedText style={[styles.leaveButtonText, { color: BrandColors.error, marginLeft: Spacing.sm }]}>
                 팀 탈퇴
               </ThemedText>
             </>

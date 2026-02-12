@@ -480,7 +480,7 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
                 style={styles.removePhotoButton}
                 onPress={() => removePhoto(index)}
               >
-                <Icon name="close-circle" size={22} color="BrandColors.error" />
+                <Icon name="close-circle" size={22} color={BrandColors.error} />
               </Pressable>
             </View>
           ))}

@@ -37,10 +37,10 @@ const DISPUTE_TYPE_LABELS: Record<string, string> = {
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  pending: { label: "검토중", color: "BrandColors.warning", bg: "BrandColors.warningLight" },
-  reviewing: { label: "처리중", color: "BrandColors.primaryLight", bg: "BrandColors.helperLight" },
-  resolved: { label: "처리완료", color: "BrandColors.success", bg: "BrandColors.successLight" },
-  rejected: { label: "반려", color: "BrandColors.error", bg: "BrandColors.errorLight" },
+  pending: { label: "검토중", color: BrandColors.warning, bg: BrandColors.warningLight },
+  reviewing: { label: "처리중", color: BrandColors.primaryLight, bg: BrandColors.helperLight },
+  resolved: { label: "처리완료", color: BrandColors.success, bg: BrandColors.successLight },
+  rejected: { label: "반려", color: BrandColors.error, bg: BrandColors.errorLight },
 };
 
 export default function DisputeListScreen({ navigation }: DisputeListScreenProps) {

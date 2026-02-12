@@ -819,7 +819,7 @@ function RequesterDashboard({
       stars.push(
         <Icon
           key={i}
-          name={i <= displayRating ? "star-outline" : "star-outline"}
+          name={i <= displayRating ? "star" : "star-outline"}
           size={18}
           color={i <= displayRating ? BrandColors.warning : BrandColors.neutral}
           style={{ marginRight: 2 }}

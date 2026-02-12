@@ -492,12 +492,12 @@ export default function CreateContractScreen({ route, navigation }: Props) {
 
         {requestTaxInvoice && !requesterProfile?.businessNumber && (
           <View style={[styles.warningBox, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : BrandColors.warningLight }]}>
-            <Icon name="warning-outline" size={20} color="BrandColors.warning" />
+            <Icon name="warning-outline" size={20} color={BrandColors.warning} />
             <View style={{ flex: 1, marginLeft: Spacing.sm }}>
               <ThemedText style={[styles.warningText, { color: BrandColors.warning }]}>
                 사업자정보가 등록되지 않았습니다
               </ThemedText>
-              <ThemedText style={[styles.warningHint, { color: 'BrandColors.warning' }]}>
+              <ThemedText style={[styles.warningHint, { color: BrandColors.warning }]}>
                 세금계산서 발행을 위해 나의정보에서 사업자정보를 등록해주세요
               </ThemedText>
             </View>

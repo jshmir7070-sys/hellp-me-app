@@ -40,10 +40,10 @@ const INCIDENT_TYPE_LABELS: Record<string, string> = {
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
-  pending: { label: "접수됨", color: "BrandColors.warning", bg: "BrandColors.warningLight" },
-  reviewing: { label: "처리중", color: "BrandColors.primaryLight", bg: "BrandColors.helperLight" },
-  resolved: { label: "처리완료", color: "BrandColors.success", bg: "BrandColors.successLight" },
-  rejected: { label: "반려", color: "BrandColors.error", bg: "BrandColors.errorLight" },
+  pending: { label: "접수됨", color: BrandColors.warning, bg: BrandColors.warningLight },
+  reviewing: { label: "처리중", color: BrandColors.primaryLight, bg: BrandColors.helperLight },
+  resolved: { label: "처리완료", color: BrandColors.success, bg: BrandColors.successLight },
+  rejected: { label: "반려", color: BrandColors.error, bg: BrandColors.errorLight },
 };
 
 export default function IncidentListScreen({ navigation }: IncidentListScreenProps) {
@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   responseNeededBadge: {
-    backgroundColor: "BrandColors.errorLight",
+    backgroundColor: BrandColors.errorLight,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
     borderRadius: BorderRadius.xs,
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
   responseNeededText: {
     fontSize: 11,
     fontWeight: "600",
-    color: "BrandColors.error",
+    color: BrandColors.error,
   },
   emptyContainer: {
     alignItems: "center",

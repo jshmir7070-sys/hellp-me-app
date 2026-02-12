@@ -446,7 +446,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
         {closingReport?.status === 'rejected' && closingReport.rejectReason ? (
           <Card variant="glass" padding="lg" style={StyleSheet.flatten([styles.requirementsCard, styles.rejectedCard])}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm }}>
-              <Icon name="alert-circle-outline" size={18} color="BrandColors.error" />
+              <Icon name="alert-circle-outline" size={18} color={BrandColors.error} />
               <ThemedText style={[styles.sectionTitle, { color: BrandColors.error }]}>마감자료 반려</ThemedText>
             </View>
             {closingReport.rejectCategory ? (

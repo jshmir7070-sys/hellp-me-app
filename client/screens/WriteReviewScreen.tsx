@@ -100,9 +100,9 @@ export default function WriteReviewScreen({ navigation, route }: WriteReviewScre
             style={styles.starButton}
           >
             <Icon
-              name={index < rating ? "star-outline" : "star-outline"}
+              name={index < rating ? "star" : "star-outline"}
               size={40}
-              color={index < rating ? "BrandColors.warning" : theme.backgroundTertiary}
+              color={index < rating ? BrandColors.warning : theme.backgroundTertiary}
             />
           </Pressable>
         ))}
