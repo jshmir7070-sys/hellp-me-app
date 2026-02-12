@@ -45,7 +45,7 @@ export default function RecruitmentDetailScreen({ navigation, route }: Recruitme
 
   const applyMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest('POST', `/api/orders/apply/${recruitmentId}`, {});
+      const res = await apiRequest('POST', `/api/orders/${recruitmentId}/apply`, {});
       return res.json();
     },
     onSuccess: () => {

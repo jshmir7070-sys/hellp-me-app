@@ -199,9 +199,9 @@ export default function SettlementsPage() {
     return {
       pending: settlements.filter(s => s.status === SETTLEMENT_STATUS.PENDING).length,
       confirmed: settlements.filter(s =>
-        s.status === SETTLEMENT_STATUS.CONFIRMED || s.status === SETTLEMENT_STATUS.PAYABLE
+        s.status === SETTLEMENT_STATUS.CONFIRMED || s.status === SETTLEMENT_STATUS.READY
       ).length,
-      on_hold: settlements.filter(s => s.status === SETTLEMENT_STATUS.HOLD).length,
+      on_hold: settlements.filter(s => s.status === SETTLEMENT_STATUS.ON_HOLD).length,
       paid: settlements.filter(s => s.status === SETTLEMENT_STATUS.PAID).length,
     };
   }, [settlements]);
@@ -222,8 +222,8 @@ export default function SettlementsPage() {
       if (activeView !== 'all') {
         const statusMap: Record<string, string[]> = {
           pending: [SETTLEMENT_STATUS.PENDING],
-          confirmed: [SETTLEMENT_STATUS.CONFIRMED, SETTLEMENT_STATUS.PAYABLE],
-          on_hold: [SETTLEMENT_STATUS.HOLD],
+          confirmed: [SETTLEMENT_STATUS.CONFIRMED, SETTLEMENT_STATUS.READY],
+          on_hold: [SETTLEMENT_STATUS.ON_HOLD],
           paid: [SETTLEMENT_STATUS.PAID],
         };
         const allowedStatuses = statusMap[activeView] || [];
@@ -416,7 +416,7 @@ export default function SettlementsPage() {
                 </Button>
               </>
             )}
-            {status === SETTLEMENT_STATUS.HOLD && (
+            {status === SETTLEMENT_STATUS.ON_HOLD && (
               <Button
                 size="sm"
                 variant="outline"
@@ -431,7 +431,7 @@ export default function SettlementsPage() {
                 해제
               </Button>
             )}
-            {(status === SETTLEMENT_STATUS.CONFIRMED || status === SETTLEMENT_STATUS.PAYABLE) && (
+            {(status === SETTLEMENT_STATUS.CONFIRMED || status === SETTLEMENT_STATUS.READY) && (
               <Button
                 size="sm"
                 variant="outline"

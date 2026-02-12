@@ -1,19 +1,21 @@
 export const SETTLEMENT_STATUS = {
   PENDING: "pending",
+  READY: "ready",
   CONFIRMED: "confirmed",
-  PAYABLE: "payable",
   PAID: "paid",
-  HOLD: "hold",
+  ON_HOLD: "on_hold",
+  CANCELLED: "cancelled",
 } as const;
 
 export type SettlementStatus = typeof SETTLEMENT_STATUS[keyof typeof SETTLEMENT_STATUS];
 
 export const SETTLEMENT_STATUS_LABEL: Record<string, string> = {
   pending: "산출됨",
+  ready: "지급가능",
   confirmed: "확정됨",
-  payable: "지급가능",
   paid: "지급완료",
-  hold: "보류",
+  on_hold: "보류",
+  cancelled: "취소됨",
 };
 
 export type SettlementRow = {
@@ -37,19 +39,19 @@ export function getSettlementActionState(s: SettlementRow) {
   const canConfirm =
     status === SETTLEMENT_STATUS.PENDING && hasAmounts && !s.isOnHold;
 
-  const canMarkPayable =
+  const canMarkReady =
     status === SETTLEMENT_STATUS.CONFIRMED && !s.isOnHold;
 
   const canPay =
-    status === SETTLEMENT_STATUS.PAYABLE && hasAmounts && !s.isOnHold;
+    status === SETTLEMENT_STATUS.READY && hasAmounts && !s.isOnHold;
 
   const canHold =
-    [SETTLEMENT_STATUS.PENDING, SETTLEMENT_STATUS.CONFIRMED, SETTLEMENT_STATUS.PAYABLE].includes(
+    [SETTLEMENT_STATUS.PENDING, SETTLEMENT_STATUS.CONFIRMED, SETTLEMENT_STATUS.READY].includes(
       status as any
     ) && !s.isOnHold;
 
   const canReleaseHold =
-    status === SETTLEMENT_STATUS.HOLD || s.isOnHold === true;
+    status === SETTLEMENT_STATUS.ON_HOLD || s.isOnHold === true;
 
-  return { hasAmounts, canConfirm, canMarkPayable, canPay, canHold, canReleaseHold };
+  return { hasAmounts, canConfirm, canMarkReady, canPay, canHold, canReleaseHold };
 }

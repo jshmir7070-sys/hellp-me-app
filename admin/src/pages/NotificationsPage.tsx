@@ -75,7 +75,7 @@ export default function NotificationsPage() {
       const params = new URLSearchParams();
       if (dateRange.from) params.append('from', dateRange.from);
       if (dateRange.to) params.append('to', dateRange.to);
-      const res = await apiRequest(`/api/admin/notifications?${params.toString()}`);
+      const res = await apiRequest(`/notifications?${params.toString()}`);
       return res as Notification[];
     },
   });
@@ -83,14 +83,14 @@ export default function NotificationsPage() {
   const { data: announcements = [], isLoading: announcementsLoading, refetch: refetchAnnouncements } = useQuery<Announcement[]>({
     queryKey: ['/api/admin/announcements'],
     queryFn: async (): Promise<Announcement[]> => {
-      const res = await apiRequest('/api/admin/announcements');
+      const res = await apiRequest('/announcements');
       return res as Announcement[];
     },
   });
 
   const sendNotificationMutation = useMutation({
     mutationFn: async (data: typeof sendForm) => {
-      return apiRequest('/api/admin/notifications/send', {
+      return apiRequest('/notifications/send', {
         method: 'POST',
         body: JSON.stringify(data),
       });
@@ -108,7 +108,7 @@ export default function NotificationsPage() {
 
   const createAnnouncementMutation = useMutation({
     mutationFn: async (data: typeof announcementForm) => {
-      return apiRequest('/api/admin/announcements', {
+      return apiRequest('/announcements', {
         method: 'POST',
         body: JSON.stringify(data),
       });
@@ -126,7 +126,7 @@ export default function NotificationsPage() {
 
   const deleteAnnouncementMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest(`/api/admin/announcements/${id}`, { method: 'DELETE' });
+      return apiRequest(`/announcements/${id}`, { method: 'DELETE' });
     },
     onSuccess: () => {
       toast({ title: '공지사항 삭제 완료' });
