@@ -1227,9 +1227,6 @@ export async function registerRoutes(
     
     // 공개 응답: 민감 정보 제외
     res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
       status: dbStatus === "connected" ? "healthy" : "unhealthy",
       timestamp: new Date().toISOString(),
     });
@@ -1465,9 +1462,6 @@ export async function registerRoutes(
         // Fallback: 테스트 모드 - 기본 응답 반환
         console.log("KAKAO_REST_API_KEY not set, using fallback mode");
         return res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
           results: [
             {
               address: query,
@@ -1511,9 +1505,6 @@ export async function registerRoutes(
           
           // API 키 오류시 입력값을 결과로 반환 (fallback)
           return res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
             results: [
               {
                 address: query,
@@ -1723,9 +1714,6 @@ export async function registerRoutes(
       await storage.createRefreshToken(user.id, newRefreshTokenValue, newRefreshExpiresAt, deviceInfo);
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         token: newAccessToken,
         refreshToken: newRefreshTokenValue,
         expiresIn: 3600
@@ -2307,9 +2295,6 @@ export async function registerRoutes(
         
         // 테스트용 mock 데이터 반환
         return res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
           success: true,
           verified: true,
           customer: {
@@ -2398,9 +2383,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         verified: true,
         customer: {
@@ -2488,9 +2470,6 @@ export async function registerRoutes(
           const paymentUrl = `${baseUrl}/payment/checkout?${checkoutParams.toString()}`;
 
           return res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
             success: true,
             paymentId,
             paymentUrl,
@@ -2506,9 +2485,6 @@ export async function registerRoutes(
       const testPaymentUrl = `${baseUrl}/payment/test-checkout?paymentId=${paymentId}&amount=${amount}&orderTitle=${encodeURIComponent(orderTitle || '테스트 결제')}`;
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         paymentId,
         paymentUrl: testPaymentUrl,
@@ -2538,9 +2514,6 @@ export async function registerRoutes(
       }
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         paymentId,
         status: payment.status || 'initiated',
         amount: payment.amount,
@@ -2576,9 +2549,6 @@ export async function registerRoutes(
 
       if (payment.status === 'captured' || payment.status === 'completed') {
         return res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
           verified: true,
           status: payment.status,
           amount: payment.amount,
@@ -2722,9 +2692,6 @@ export async function registerRoutes(
       }
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         verified: payment.status === 'captured' || payment.status === 'completed',
         status: payment.status,
         amount: payment.amount,
@@ -2764,9 +2731,6 @@ export async function registerRoutes(
       const existingAccount = await storage.getVirtualAccountByOrder(orderId);
       if (existingAccount && existingAccount.status === "pending") {
         return res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
           success: true,
           virtualAccount: existingAccount,
           message: "기존 가상계좌를 사용해주세요"
@@ -2820,9 +2784,6 @@ export async function registerRoutes(
           });
 
           return res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
             success: true,
             virtualAccount,
             message: "가상계좌가 발급되었습니다"
@@ -2851,9 +2812,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         virtualAccount: testVirtualAccount,
         isTestMode: true,
@@ -4263,9 +4221,6 @@ export async function registerRoutes(
       const isComplete = hasVehicle && hasBusiness && hasLicense && hasBankAccount && hasTermsAgreement;
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         hasVehicle,
         hasBusiness,
         hasLicense,
@@ -5611,9 +5566,6 @@ export async function registerRoutes(
       const imageUrl = `/uploads/closing/${file.filename}`;
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         fileKey: imageUrl,
         imageType,
@@ -5657,9 +5609,6 @@ export async function registerRoutes(
       console.log(`[Evidence Upload] User ${userId} uploaded ${category || 'general'} image: ${path}`);
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         url,
         path,
@@ -5727,8 +5676,6 @@ export async function registerRoutes(
       console.log(`[Profile Image Upload] User ${userId} uploaded profile image: ${url}`);
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
         success: true,
         url,
         uploadedAt: new Date().toISOString(),
@@ -5753,9 +5700,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         profileImageUrl: (user as any).profileImageUrl || null,
       });
     } catch (err) {
@@ -5936,9 +5880,6 @@ export async function registerRoutes(
       console.log(`[Balance Notify] Requester ${user.id} notified payment for order ${orderId}`);
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         ok: true,
         orderId: order.orderNumber || `O-${orderId}`,
         message: "입금 알림이 관리자에게 전송되었습니다",
@@ -6054,9 +5995,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         ok: true,
         orderId: order.orderNumber || `O-${orderId}`,
         status: "final_amount_confirmed",
@@ -6136,9 +6074,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         ok: true,
         orderId: order.orderNumber || `O-${orderId}`,
         status: "balance_paid",
@@ -6319,7 +6254,6 @@ export async function registerRoutes(
       
       // 응답 포맷
       res.json({
-        profileImage: user.profileImageUrl || null,
         id: incident.id,
         orderId: incident.orderId,
         incidentType: incident.incidentType,
@@ -6733,9 +6667,6 @@ export async function registerRoutes(
       }
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         ...order,
         helperName,
         selectedHelperId,
@@ -7018,7 +6949,6 @@ export async function registerRoutes(
       );
       
       res.json({
-        profileImage: user.profileImageUrl || null,
         hasActiveDispute: !!activeDispute,
         activeDispute: activeDispute ? {
           id: activeDispute.id,
@@ -7072,7 +7002,6 @@ export async function registerRoutes(
       }
       
       res.json({
-        profileImage: user.profileImageUrl || null,
         id: dispute.id,
         orderId: dispute.orderId,
         workDate: dispute.workDate,
@@ -8101,9 +8030,6 @@ export async function registerRoutes(
       );
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         orderId,
         totalCandidates: candidates.length,
         maxCandidates: 3,
@@ -8165,9 +8091,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         candidate_id: String(candidate.id),
         status: "WITHDRAWN",
       });
@@ -8235,9 +8158,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         ok: true,
         candidateId: candidate.id,
         status: "withdrawn",
@@ -8568,9 +8488,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         snapshot,
         breakdown: {
@@ -8645,9 +8562,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         newStatus: "in_progress",
       });
@@ -8730,9 +8644,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         message: "출근 체크인 완료! 업무가 시작되었습니다.",
         newStatus: "in_progress",
@@ -8805,9 +8716,6 @@ export async function registerRoutes(
       const qrData = `hellpme://order/${orderId}/start?token=${token}`;
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         tokenId: newToken.id,
         token,
@@ -8945,9 +8853,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         message: "업무가 시작되었습니다",
         newStatus: "in_progress",
@@ -8991,9 +8896,6 @@ export async function registerRoutes(
 
       if (!latestToken) {
         return res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
           hasToken: false,
           orderStatus: order.status,
         });
@@ -9003,9 +8905,6 @@ export async function registerRoutes(
       const isUsed = !!latestToken.usedAt;
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         hasToken: true,
         tokenStatus: isUsed ? "used" : isExpired ? "expired" : "valid",
         expiresAt: latestToken.expiresAt.toISOString(),
@@ -9091,9 +8990,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         newStatus: "closed",
         closureReport,
@@ -9417,9 +9313,6 @@ export async function registerRoutes(
       // PortOne 결제 URL 생성 (실제 SDK 연동 시 여기서 PortOne API 호출)
       // 현재는 결제 정보만 반환하고 클라이언트에서 PortOne SDK로 결제 진행
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         invoice_id: String(invoice.id),
         status: "PENDING",
         payment: {
@@ -9468,9 +9361,6 @@ export async function registerRoutes(
       const helperPayout = baseAmount - commissionAmount;
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         orderId,
         orderStatus: order.status,
         pricing: pricingSnapshot ? {
@@ -9739,9 +9629,6 @@ export async function registerRoutes(
       const payoutAmount = totalAmount - commissionAmount - deductions; // 지급액 (합계 - 수수료 - 차감액)
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         supplyAmount, // 공급가액
         vat, // 부가세
         totalAmount, // 합계
@@ -9880,9 +9767,6 @@ export async function registerRoutes(
       const netAmount = totalAmount - commissionAmountDetail - deductionAmount;
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         orderId: closingReport?.orderId || settlement?.orderId,
         orderTitle: order?.companyName || order?.deliveryArea || '오더',
         companyName: order?.companyName,
@@ -10069,9 +9953,6 @@ export async function registerRoutes(
       }
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         ...dispute,
         order: order ? { ...order, helperName } : null,
         adminUserName: adminUser?.name || null,
@@ -10192,9 +10073,6 @@ export async function registerRoutes(
       };
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         ...formattedIncident,
         order: order ? { ...order, helperName } : null,
         requester,
@@ -11658,9 +11536,6 @@ export async function registerRoutes(
         });
         
         return res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
           passwordExpired: true,
           tempToken,
           message: "비밀번호가 만료되었습니다. 새 비밀번호를 설정해주세요.",
@@ -11690,9 +11565,6 @@ export async function registerRoutes(
         }
 
         return res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
           requireSmsVerification: true,
           tempToken,
           phoneNumber: maskedPhone,
@@ -11718,9 +11590,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         token,
         refreshToken: refreshTokenValue,
         user: {
@@ -11782,9 +11651,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         token,
         refreshToken: refreshTokenValue,
         user: {
@@ -11919,9 +11785,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         token,
         refreshToken: refreshTokenValue,
         user: {
@@ -12074,9 +11937,6 @@ export async function registerRoutes(
       // Never return the password in API response for security
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         message: "관리자 계정이 승인되었습니다. 임시 비밀번호가 등록된 휴대폰으로 SMS 발송됩니다.",
         smsSent: !!targetUser.phoneNumber, // Indicates if SMS could be sent
@@ -12115,9 +11975,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         message: "관리자 계정이 정지되었습니다.",
       });
@@ -12150,9 +12007,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         message: "관리자 계정이 재활성화되었습니다.",
       });
@@ -12587,9 +12441,6 @@ export async function registerRoutes(
       const { depositAmount, paymentStatus: depositPaymentStatus } = depositInfo;
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         ...order,
         helperName,
         helperPhone,
@@ -12779,9 +12630,6 @@ export async function registerRoutes(
       const settlement = allSettlements.find(s => s.orderId === contract.orderId && s.helperId === contract.helperId);
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         ...contract,
         // 헬퍼 정보
         helperName: helper?.name || null,
@@ -13701,9 +13549,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         id: updated.id,
         name: updated.name,
         sign: updated.sign?.toUpperCase(),
@@ -13804,9 +13649,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         payment: updated,
         refund_amount: refundAmount,
@@ -13851,9 +13693,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         payment,
         synced_status: syncedStatus,
@@ -13965,9 +13804,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         payment: updated,
         retry_count: currentRetryCount + 1,
@@ -14028,9 +13864,6 @@ export async function registerRoutes(
       }
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         webhook_log_id: String(log.id),
         source: log.source,
         event_type: log.eventType,
@@ -14149,9 +13982,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         webhook_log_id: String(id),
         status: "RETRIED",
         result,
@@ -14785,9 +14615,6 @@ export async function registerRoutes(
         : [];
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         closingReport: {
           id: closingReport.id,
           status: closingReport.status,
@@ -14834,9 +14661,6 @@ export async function registerRoutes(
         : {};
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         exists: true,
         orderId,
         id: closingReport.id,
@@ -15012,9 +14836,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         closingReportId: closingReport.id,
         finalTotal,
@@ -15197,9 +15018,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         settlement: {
           id: record.id,
@@ -15279,9 +15097,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         deliveryHistoryImages,
         etcImages,
         closingMemo,
@@ -15445,9 +15260,6 @@ export async function registerRoutes(
       const canConfirm = deliveryHistoryImages.length > 0 && unresolvedDisputes.length === 0;
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         settlementId: id,
         orderId: settlement.orderId,
         canConfirm,
@@ -15774,9 +15586,6 @@ export async function registerRoutes(
       });
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         orders: orderDetails,
         summary: {
           totalSupply,
@@ -16159,9 +15968,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         settlement_id: String(settlement.id),
         status: "DRAFT",
         locked: false,
@@ -16217,9 +16023,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         settlement_id: String(id),
         status: "READY",
       });
@@ -16244,9 +16047,6 @@ export async function registerRoutes(
       const order = settlement.orderId ? await storage.getOrder(settlement.orderId) : null;
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         ...settlement,
         lineItems,
         helperName: helper?.name || null,
@@ -16962,9 +16762,6 @@ export async function registerRoutes(
       const contract = incident.jobContractId ? await storage.getContract(incident.jobContractId) : null;
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         ...incident,
         reporterName: reporter?.name || null,
         reporterPhone: reporter?.phoneNumber || null,
@@ -17182,7 +16979,6 @@ export async function registerRoutes(
       const requester = order?.requesterId ? await storage.getUser(order.requesterId) : null;
       
       res.json({
-        profileImage: user.profileImageUrl || null,
         id: dispute.id,
         orderId: dispute.orderId,
         helperId: dispute.helperId,
@@ -17539,9 +17335,6 @@ export async function registerRoutes(
         !["closed", "resolved"].includes(i.status || "")
       ).length;
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         dailyOrders,
         monthlyOrders,
         categoryData,
@@ -17595,9 +17388,6 @@ export async function registerRoutes(
       const openDisputes = incidents.filter(i => i.status !== "closed" && i.status !== "resolved");
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         ordersToday: todayOrders.length,
         matchRate,
         completedCount: completedContracts.length,
@@ -18110,9 +17900,6 @@ export async function registerRoutes(
       const failCount = results.filter(r => !r.success).length;
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         message: `${successCount}명에게 정산서 발송 완료, ${failCount}명 실패`,
         data: {
@@ -18284,9 +18071,6 @@ export async function registerRoutes(
       const overdueAmount = overdueContracts.reduce((sum, c) => sum + (c.balanceAmount || 0), 0);
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         orders: {
           today: todayOrders.length,
           thisMonth: thisMonthOrders.length,
@@ -18340,9 +18124,6 @@ export async function registerRoutes(
       const idempotencyKey = `${orderId || 'no-order'}-${paymentType}-${Date.now()}`;
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         id: Date.now(),
         orderId,
         contractId,
@@ -19148,9 +18929,6 @@ export async function registerRoutes(
       const { rate, source } = await storage.getEffectiveCommissionRate(helperId);
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         helperName: helper.name,
         commissionRate: rate,
         source,
@@ -20085,9 +19863,6 @@ export async function registerRoutes(
       const platformPolicy = await findActivePlatformFeePolicy(date);
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         unitPriceSupply: pricingPolicy?.unitPriceSupply || null,
         minChargeSupply: pricingPolicy?.minChargeSupply || null,
         urgent: urgentPolicy ? {
@@ -20851,9 +20626,6 @@ export async function registerRoutes(
       const user = req.user!;
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         pushEnabled: user.pushEnabled ?? true,
         locationConsent: user.locationConsent ?? false,
         latitude: user.latitude,
@@ -20975,9 +20747,6 @@ export async function registerRoutes(
       const vehicle = await storage.getHelperVehicle(userId);
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         name: user.name || "",
         phoneNumber: user.phoneNumber || "",
         email: user.email || "",
@@ -21147,9 +20916,6 @@ export async function registerRoutes(
       const delivered = logs.filter(l => l.isDelivered).length;
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         total,
         read,
         unread,
@@ -22834,9 +22600,6 @@ export async function registerRoutes(
       };
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         user: {
           id: user.id,
           name: user.name,
@@ -23615,9 +23378,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         user: {
           id: user.id,
           name: user.name,
@@ -24536,9 +24296,6 @@ export async function registerRoutes(
         .sort((a, b) => b.totalAmount - a.totalAmount);
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         month,
         helpers: summaryArray,
         totalHelpers: summaryArray.length,
@@ -24724,9 +24481,6 @@ export async function registerRoutes(
       const issueDelaySetting = settings.find(s => s.settingKey === "tax_invoice_issue_delay_days");
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         defaultTaxType: taxTypeSetting?.settingValue || "exclusive",
         vatRate: vatRateSetting ? parseInt(vatRateSetting.settingValue) : 10,
         autoIssue: autoIssueSetting?.settingValue === "true",
@@ -24820,9 +24574,6 @@ export async function registerRoutes(
       }
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         message: `${createdInvoices.length}건의 세금계산서가 생성되었습니다`,
         invoices: createdInvoices,
@@ -24921,9 +24672,6 @@ export async function registerRoutes(
   app.get("/api/admin/popbill/status", adminAuth, requirePermission("tax.view"), async (req, res) => {
     try {
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         configured: popbill.isConfigured(),
         message: popbill.isConfigured() 
           ? "팝빌 API가 설정되었습니다" 
@@ -24989,9 +24737,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         invoice: updated,
         popbillResult: result,
@@ -25049,9 +24794,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         invoice: updated,
         popbillResult: result,
@@ -25094,9 +24836,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         status: result,
       });
@@ -25128,9 +24867,6 @@ export async function registerRoutes(
       );
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         pdfUrl: result.url,
       });
@@ -25168,9 +24904,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         taxInvoice,
         message: "세금계산서가 생성되었습니다",
@@ -26095,9 +25828,6 @@ export async function registerRoutes(
       const activeQr = qrCodes.find((qr: any) => qr.status === "active");
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         teamId: team.id,
         teamName: team.name,
         qrCode: activeQr?.code || user.personalCode || null,
@@ -26153,9 +25883,6 @@ export async function registerRoutes(
       const members = await storage.getTeamMembers(team.id);
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         teamId: team.id,
         teamName: team.name,
         qrCode: team.qrCodeToken,
@@ -26998,9 +26725,6 @@ export async function registerRoutes(
       });
       
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         message: "헬퍼 출근이 확인되었습니다",
         helperName: helper.name,
@@ -28167,9 +27891,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         payout_id: String(payout.id),
         status: "REQUESTED",
       });
@@ -28268,9 +27989,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         payout_id: String(id),
         status: "REQUESTED",
         retry_count: retryCount,
@@ -28322,9 +28040,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         payout_id: String(id),
         status: "SENT",
         sent_at: updated?.sentAt,
@@ -28406,9 +28121,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         payout_id: String(id),
         status: "SUCCEEDED",
         succeeded_at: updated?.succeededAt,
@@ -28467,9 +28179,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         payout_id: String(id),
         status: "FAILED",
         failed_at: updated?.failedAt,
@@ -28675,9 +28384,6 @@ export async function registerRoutes(
       const order = await storage.getOrder(orderId);
       if (!order) {
         return res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
           order_id: orderId,
           is_visible: false,
           reason_codes: ["ORDER_NOT_FOUND"],
@@ -28863,9 +28569,6 @@ export async function registerRoutes(
       const isVisible = reasonCodes.length === 0;
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         order_id: orderId,
         is_visible: isVisible,
         reason_codes: reasonCodes,
@@ -28944,9 +28647,6 @@ export async function registerRoutes(
         });
 
         res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
           success: true,
           webhook_log_id: webhook.id,
           status: "PROCESSED",
@@ -29007,9 +28707,6 @@ export async function registerRoutes(
       );
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         orderId,
         totalCandidates: candidates.length,
         maxCandidates: 3,
@@ -29082,9 +28779,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         candidate: updatedCandidate,
         helper: helper ? {
@@ -29278,9 +28972,6 @@ export async function registerRoutes(
       const helperPayout = baseAmount - commissionAmount;
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         orderId,
         orderStatus: order.status,
         pricing: pricingSnapshot ? {
@@ -29358,9 +29049,6 @@ export async function registerRoutes(
       });
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         success: true,
         snapshot,
         breakdown: {
@@ -29477,9 +29165,6 @@ export async function registerRoutes(
       }
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         ok: true,
         orderId: order.orderNumber || `O-${orderId}`,
         status: "settlement_paid",
@@ -31129,7 +30814,6 @@ export async function registerRoutes(
         .where(eq(incidentEvidence.incidentId, incidentId));
 
       res.json({
-        profileImage: user.profileImageUrl || null,
         ...incident,
         createdAt: incident.createdAt?.toISOString() || null,
         resolvedAt: incident.resolvedAt?.toISOString() || null,
@@ -31701,9 +31385,6 @@ export async function registerRoutes(
       const lastOrder = completedOrders[completedOrders.length - 1];
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         id: helper.id,
         name: helper.name,
         email: helper.email,
@@ -31756,9 +31437,6 @@ export async function registerRoutes(
       const lastOrder = allOrders[allOrders.length - 1];
 
       res.json({
-        profileImage: user.profileImageUrl || null,
-        
-        
         id: requester.id,
         name: requester.name,
         companyName: requester.companyName,
