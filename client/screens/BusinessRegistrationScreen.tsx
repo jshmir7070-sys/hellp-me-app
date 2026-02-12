@@ -151,9 +151,9 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
             </ThemedText>
             <TextInput
               style={[styles.input, { 
-                backgroundColor: isDark ? 'Colors.dark.textSecondary' : 'Colors.light.backgroundRoot',
+                backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundRoot,
                 color: theme.text,
-                borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary
+                borderColor: isDark ? Colors.dark.border : Colors.light.backgroundSecondary
               }]}
               value={businessNumber}
               onChangeText={(text) => setBusinessNumber(formatBusinessNumber(text))}
@@ -170,9 +170,9 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
             </ThemedText>
             <TextInput
               style={[styles.input, { 
-                backgroundColor: isDark ? 'Colors.dark.textSecondary' : 'Colors.light.backgroundRoot',
+                backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundRoot,
                 color: theme.text,
-                borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary
+                borderColor: isDark ? Colors.dark.border : Colors.light.backgroundSecondary
               }]}
               value={businessName}
               onChangeText={setBusinessName}
@@ -187,9 +187,9 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
             </ThemedText>
             <TextInput
               style={[styles.input, { 
-                backgroundColor: isDark ? 'Colors.dark.textSecondary' : 'Colors.light.backgroundRoot',
+                backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundRoot,
                 color: theme.text,
-                borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary
+                borderColor: isDark ? Colors.dark.border : Colors.light.backgroundSecondary
               }]}
               value={representativeName}
               onChangeText={setRepresentativeName}
@@ -204,9 +204,9 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
             </ThemedText>
             <TextInput
               style={[styles.input, { 
-                backgroundColor: isDark ? 'Colors.dark.textSecondary' : 'Colors.light.backgroundRoot',
+                backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundRoot,
                 color: theme.text,
-                borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary
+                borderColor: isDark ? Colors.dark.border : Colors.light.backgroundSecondary
               }]}
               value={address}
               onChangeText={setAddress}
@@ -221,9 +221,9 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
             </ThemedText>
             <TextInput
               style={[styles.input, { 
-                backgroundColor: isDark ? 'Colors.dark.textSecondary' : 'Colors.light.backgroundRoot',
+                backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundRoot,
                 color: theme.text,
-                borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary
+                borderColor: isDark ? Colors.dark.border : Colors.light.backgroundSecondary
               }]}
               value={businessType}
               onChangeText={setBusinessType}
@@ -238,9 +238,9 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
             </ThemedText>
             <TextInput
               style={[styles.input, { 
-                backgroundColor: isDark ? 'Colors.dark.textSecondary' : 'Colors.light.backgroundRoot',
+                backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundRoot,
                 color: theme.text,
-                borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary
+                borderColor: isDark ? Colors.dark.border : Colors.light.backgroundSecondary
               }]}
               value={businessCategory}
               onChangeText={setBusinessCategory}

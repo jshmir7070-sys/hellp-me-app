@@ -391,6 +391,211 @@ export function Icon({ name, size = 24, color = "#000", style }: IconProps) {
         <Path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
       </Svg>
     ),
+    "star": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" fill={color} stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "person": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle cx="12" cy="7" r="4" fill={color} stroke={color} strokeWidth={strokeWidth}/>
+        <Path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" fill={color} stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "people": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle cx="9" cy="7" r="4" fill={color} stroke={color} strokeWidth={strokeWidth}/>
+        <Path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" fill={color} stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Circle cx="19" cy="7" r="3" fill={color} stroke={color} strokeWidth={strokeWidth}/>
+        <Path d="M23 21v-2a3 3 0 00-3-3h-1" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "close": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M18 6L6 18M6 6l12 12" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "add": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M12 5v14M5 12h14" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "checkmark-circle": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle cx="12" cy="12" r="10" fill={color}/>
+        <Path d="M9 12l2 2 4-4" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "close-circle": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle cx="12" cy="12" r="10" fill={color}/>
+        <Path d="M15 9l-6 6M9 9l6 6" stroke="#fff" strokeWidth={2} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "images-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Rect x="5" y="5" width="16" height="16" rx="2" stroke={color} strokeWidth={strokeWidth}/>
+        <Path d="M3 9v10a2 2 0 002 2h10" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+        <Circle cx="11" cy="11" r="1.5" fill={color}/>
+        <Path d="M21 17l-4-4-6 6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "bell-off-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M13.73 21a2 2 0 01-3.46 0" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+        <Path d="M18 8A6 6 0 006 8c0 3.09-.78 5.24-1.71 6.67" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+        <Path d="M18 8c0 2.8.63 5 1.68 6.52" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+        <Path d="M1 1l22 22" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "inbox-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M22 12H16l-2 3H10l-2-3H2" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "barcode-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M3 5v14M7 5v14M11 5v14M15 5v14M19 5v14M21 5v14" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "shield-checkmark-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M9 12l2 2 4-4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "qr-code-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Rect x="3" y="3" width="7" height="7" stroke={color} strokeWidth={strokeWidth}/>
+        <Rect x="14" y="3" width="7" height="7" stroke={color} strokeWidth={strokeWidth}/>
+        <Rect x="3" y="14" width="7" height="7" stroke={color} strokeWidth={strokeWidth}/>
+        <Rect x="14" y="14" width="3" height="3" stroke={color} strokeWidth={strokeWidth}/>
+        <Path d="M21 14h-3v3M21 17v4h-4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "exit-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M16 17l5-5-5-5M21 12H9" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "account-plus-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle cx="10" cy="7" r="4" stroke={color} strokeWidth={strokeWidth}/>
+        <Path d="M18 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M20 8v4M18 10h4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "paperclip": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "navigation": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M3 11l19-9-9 19-2-8-8-2z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "arrow-expand": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "open-in-new": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M15 3h6v6M10 14L21 3" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "tune": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+        <Path d="M1 14h6M9 8h6M17 16h6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "cellphone": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Rect x="5" y="2" width="14" height="20" rx="2" stroke={color} strokeWidth={strokeWidth}/>
+        <Path d="M12 18h.01" stroke={color} strokeWidth={2} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "camera-off-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M1 1l22 22" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+        <Path d="M21 21H3a2 2 0 01-2-2V8a2 2 0 012-2h3" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M21 8v11M15.28 6H21a2 2 0 012 0M10 6l2-3h4l2 3" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "checkbox": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Rect x="3" y="3" width="18" height="18" rx="3" fill={color} stroke={color} strokeWidth={strokeWidth}/>
+        <Path d="M9 12l2 2 4-4" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "square-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Rect x="3" y="3" width="18" height="18" rx="3" stroke={color} strokeWidth={strokeWidth}/>
+      </Svg>
+    ),
+    "chatbubble-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "chatbubbles-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M8 10h8M8 14h4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "chatbubble-ellipses-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Circle cx="8" cy="12" r="1" fill={color}/>
+        <Circle cx="12" cy="12" r="1" fill={color}/>
+        <Circle cx="16" cy="12" r="1" fill={color}/>
+      </Svg>
+    ),
+    "business-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M3 21h18M5 21V7l8-4v18M19 21V11l-6-4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M9 9h1M9 13h1M9 17h1" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "remove-circle-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={strokeWidth}/>
+        <Path d="M8 12h8" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "rotate-left": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M1 4v6h6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M3.51 15a9 9 0 102.13-9.36L1 10" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "crop-free": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M3 9V5a2 2 0 012-2h4M15 3h4a2 2 0 012 2v4M21 15v4a2 2 0 01-2 2h-4M9 21H5a2 2 0 01-2-2v-4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "fullscreen": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M8 3H5a2 2 0 00-2 2v3M21 8V5a2 2 0 00-2-2h-3M3 16v3a2 2 0 002 2h3M16 21h3a2 2 0 002-2v-3" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "map-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M8 2v16M16 6v16" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "chevron-down": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M6 9l6 6 6-6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
   };
 
   const iconElement = icons[name] || (

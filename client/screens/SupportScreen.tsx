@@ -347,11 +347,11 @@ export default function SupportScreen({ navigation }: SupportScreenProps) {
         </ThemedText>
         <View style={styles.contactButtons}>
           <Pressable 
-            style={[styles.contactButton, { backgroundColor: 'BrandColors.warning' }]}
+            style={[styles.contactButton, { backgroundColor: BrandColors.kakao }]}
             onPress={handleKakao}
           >
-            <Icon name="chatbox-outline" size={18} color="Colors.dark.backgroundSecondary" />
-            <ThemedText style={[styles.contactButtonText, { color: 'Colors.dark.backgroundSecondary' }]}>카카오톡 상담</ThemedText>
+            <Icon name="chatbox-outline" size={18} color={Colors.dark.text} />
+            <ThemedText style={[styles.contactButtonText, { color: Colors.dark.text }]}>카카오톡 상담</ThemedText>
           </Pressable>
           <Pressable 
             style={[styles.contactButton, { backgroundColor: primaryColor }]}

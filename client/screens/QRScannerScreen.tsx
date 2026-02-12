@@ -288,7 +288,7 @@ export default function QRScannerScreen({ navigation, route }: QRScannerScreenPr
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: 'Colors.dark.text' }]}>
+    <View style={[styles.container, { backgroundColor: Colors.dark.text }]}>
       <CameraView
         style={styles.camera}
         facing="back"

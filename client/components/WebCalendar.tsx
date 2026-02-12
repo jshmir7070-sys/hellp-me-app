@@ -91,7 +91,7 @@ export function WebCalendar({ visible, onClose, onSelect, selectedDate, title = 
           <ThemedText
             style={[
               styles.dayText,
-              { color: isPast ? Colors.light.tabIconDefault : theme.text },
+              { color: isPast ? theme.tabIconDefault : theme.text },
               isToday && !isSelected && { color: BrandColors.requester, fontWeight: '700' },
               isSelected && { color: '#fff', fontWeight: '700' },
             ]}
@@ -117,7 +117,7 @@ export function WebCalendar({ visible, onClose, onSelect, selectedDate, title = 
           style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
           onStartShouldSetResponder={() => true}
         >
-          <View style={styles.header}>
+          <View style={[styles.header, { borderBottomColor: isDark ? Colors.dark.border : '#E0E0E0' }]}>
             <ThemedText style={[styles.title, { color: theme.text }]}>{title}</ThemedText>
             <Pressable onPress={onClose}>
               <Icon name="close-outline" size={24} color={theme.text} />
@@ -136,13 +136,13 @@ export function WebCalendar({ visible, onClose, onSelect, selectedDate, title = 
             </Pressable>
           </View>
 
-          <View style={styles.weekHeader}>
+          <View style={[styles.weekHeader, { borderBottomColor: isDark ? Colors.dark.border : '#E0E0E0' }]}>
             {DAYS.map((day, index) => (
               <View key={day} style={styles.dayCell}>
-                <ThemedText 
+                <ThemedText
                   style={[
-                    styles.weekDayText, 
-                    { color: index === 0 ? '#EF4444' : index === 6 ? '#3B82F6' : Colors.light.tabIconDefault }
+                    styles.weekDayText,
+                    { color: index === 0 ? '#EF4444' : index === 6 ? '#3B82F6' : theme.tabIconDefault }
                   ]}
                 >
                   {day}
@@ -155,9 +155,9 @@ export function WebCalendar({ visible, onClose, onSelect, selectedDate, title = 
             {renderCalendarDays()}
           </View>
 
-          <View style={styles.footer}>
-            <Pressable 
-              style={[styles.todayButton, { borderColor: BrandColors.requester }]} 
+          <View style={[styles.footer, { borderTopColor: isDark ? Colors.dark.border : '#E0E0E0' }]}>
+            <Pressable
+              style={[styles.todayButton, { borderColor: BrandColors.requester }]}
               onPress={handleToday}
             >
               <ThemedText style={{ color: BrandColors.requester, fontWeight: '600' }}>오늘</ThemedText>
@@ -188,7 +188,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: Spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
   title: {
     ...Typography.body,
@@ -210,10 +209,10 @@ const styles = StyleSheet.create({
   },
   weekHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: Spacing.sm,
     paddingBottom: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
   weekDayText: {
     ...Typography.small,
@@ -245,7 +244,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: Spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
   },
   todayButton: {
     paddingVertical: Spacing.sm,

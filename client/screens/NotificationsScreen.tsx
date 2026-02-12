@@ -72,7 +72,7 @@ export default function NotificationsScreen() {
       case 'contract':
         return BrandColors.requester;
       case 'payment':
-        return 'BrandColors.requester';
+        return BrandColors.requester;
       case 'message':
         return BrandColors.warning;
       default:

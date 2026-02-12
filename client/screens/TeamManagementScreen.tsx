@@ -56,8 +56,8 @@ export default function TeamManagementScreen() {
   const queryClient = useQueryClient();
   const primaryColor = BrandColors.helper;
   
-  const borderColor = isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundSecondary;
-  const inputBgColor = isDark ? 'Colors.dark.backgroundSecondary' : 'Colors.light.backgroundRoot';
+  const borderColor = isDark ? Colors.dark.border : Colors.light.backgroundSecondary;
+  const inputBgColor = isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundRoot;
   
   const [showQrScanner, setShowQrScanner] = useState(false);
   const [manualToken, setManualToken] = useState("");

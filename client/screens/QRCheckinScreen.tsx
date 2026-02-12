@@ -302,7 +302,7 @@ function RequesterQRView({
             <QRCode
               value={qrCode}
               size={160}
-              color="Colors.dark.text"
+              color={Colors.dark.text}
               backgroundColor={Colors.light.buttonText}
             />
           ) : (

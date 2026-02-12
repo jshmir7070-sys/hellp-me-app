@@ -251,7 +251,7 @@ export default function ApplicantListScreen({ route, navigation }: Props) {
               showsVerticalScrollIndicator={false}
             >
               <LinearGradient
-                colors={[BrandColors.helper, 'BrandColors.primaryLight']}
+                colors={[BrandColors.helper, BrandColors.primaryLight]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={[styles.coverPhoto, { height: COVER_HEIGHT }]}

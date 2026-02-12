@@ -58,9 +58,9 @@ export default function ReviewsScreen({ navigation }: Props) {
         {[1, 2, 3, 4, 5].map((star) => (
           <Icon
             key={star}
-            name="star-outline"
+            name={star <= rating ? "star" : "star-outline"}
             size={16}
-            color={star <= rating ? 'BrandColors.warning' : Colors.light.backgroundTertiary}
+            color={star <= rating ? BrandColors.warning : Colors.light.backgroundTertiary}
             style={{ marginRight: 2 }}
           />
         ))}

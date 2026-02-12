@@ -601,7 +601,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
           style={[
             styles.submitButton,
             { 
-              backgroundColor: canSubmit() ? BrandColors.helper : 'Colors.light.textTertiary',
+              backgroundColor: canSubmit() ? BrandColors.helper : Colors.light.textTertiary,
               opacity: isSubmitting ? 0.7 : 1,
             }
           ]}

@@ -459,7 +459,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
             </ThemedText>
           </View>
           <Pressable 
-            style={[styles.datePickerButton, { borderColor: isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundTertiary }]}
+            style={[styles.datePickerButton, { borderColor: isDark ? Colors.dark.border : Colors.light.backgroundTertiary }]}
             onPress={() => setShowDatePicker(true)}
           >
             <Icon name="calendar-outline" size={18} color={BrandColors.requester} />
@@ -479,13 +479,13 @@ export default function CreateContractScreen({ route, navigation }: Props) {
             </ThemedText>
           </View>
           <Pressable 
-            style={[styles.checkboxContainer, { borderColor: requestTaxInvoice ? BrandColors.requester : (isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundTertiary) }]}
+            style={[styles.checkboxContainer, { borderColor: requestTaxInvoice ? BrandColors.requester : (isDark ? Colors.dark.textSecondary : Colors.light.backgroundTertiary) }]}
             onPress={() => setRequestTaxInvoice(!requestTaxInvoice)}
           >
             {requestTaxInvoice ? (
               <Icon name="checkbox" size={24} color={BrandColors.requester} />
             ) : (
-              <Icon name="square-outline" size={24} color={isDark ? 'Colors.light.textSecondary' : 'Colors.light.textTertiary'} />
+              <Icon name="square-outline" size={24} color={isDark ? Colors.dark.textSecondary : Colors.light.textTertiary} />
             )}
           </Pressable>
         </View>
@@ -1017,7 +1017,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
         <View style={styles.nextSteps}>
           <View style={styles.nextStepItem}>
             <View style={[styles.nextStepNumber, { backgroundColor: BrandColors.warningLight }]}>
-              <ThemedText style={{ color: 'BrandColors.warning', fontWeight: '700' }}>1</ThemedText>
+              <ThemedText style={{ color: BrandColors.warning, fontWeight: '700' }}>1</ThemedText>
             </View>
             <View style={styles.nextStepContent}>
               <ThemedText style={[styles.nextStepTitle, { color: theme.text }]}>
@@ -1031,7 +1031,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
           
           <View style={styles.nextStepItem}>
             <View style={[styles.nextStepNumber, { backgroundColor: BrandColors.helperLight }]}>
-              <ThemedText style={{ color: 'BrandColors.primaryLight', fontWeight: '700' }}>2</ThemedText>
+              <ThemedText style={{ color: BrandColors.primaryLight, fontWeight: '700' }}>2</ThemedText>
             </View>
             <View style={styles.nextStepContent}>
               <ThemedText style={[styles.nextStepTitle, { color: theme.text }]}>
@@ -1045,7 +1045,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
           
           <View style={styles.nextStepItem}>
             <View style={[styles.nextStepNumber, { backgroundColor: BrandColors.successLight }]}>
-              <ThemedText style={{ color: 'BrandColors.success', fontWeight: '700' }}>3</ThemedText>
+              <ThemedText style={{ color: BrandColors.success, fontWeight: '700' }}>3</ThemedText>
             </View>
             <View style={styles.nextStepContent}>
               <ThemedText style={[styles.nextStepTitle, { color: theme.text }]}>
@@ -1131,7 +1131,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
                   padding: 16,
                   fontSize: 18,
                   borderRadius: 8,
-                  border: `1px solid ${isDark ? 'Colors.light.textSecondary' : Colors.light.backgroundTertiary}`,
+                  border: `1px solid ${isDark ? Colors.dark.border : Colors.light.backgroundTertiary}`,
                   backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.buttonText,
                   color: isDark ? Colors.light.buttonText : Colors.light.text,
                   marginBottom: 16,
@@ -1386,7 +1386,7 @@ const styles = StyleSheet.create({
     backgroundColor: BrandColors.primaryLight,
   },
   completedStep: {
-    backgroundColor: 'BrandColors.success',
+    backgroundColor: BrandColors.success,
   },
   stepLine: {
     width: 50,
@@ -1394,7 +1394,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.light.backgroundTertiary,
   },
   completedLine: {
-    backgroundColor: 'BrandColors.success',
+    backgroundColor: BrandColors.success,
   },
   stepNumber: {
     fontSize: 14,

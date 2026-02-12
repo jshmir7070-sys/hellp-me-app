@@ -206,7 +206,7 @@ export default function WithdrawAccountScreen({ navigation }: WithdrawAccountScr
 const styles = StyleSheet.create({
   warningCard: {
     marginBottom: Spacing['2xl'],
-    backgroundColor: 'BrandColors.errorLight',
+    backgroundColor: BrandColors.errorLight,
   },
   warningHeader: {
     flexDirection: 'row',

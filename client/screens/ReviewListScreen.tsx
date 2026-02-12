@@ -37,9 +37,9 @@ export default function ReviewListScreen() {
         {[1, 2, 3, 4, 5].map((star) => (
           <Icon
             key={star}
-            name="star-outline"
+            name={star <= rating ? "star" : "star-outline"}
             size={16}
-            color={star <= rating ? 'BrandColors.warning' : theme.tabIconDefault}
+            color={star <= rating ? BrandColors.warning : theme.tabIconDefault}
             style={{ marginRight: 2 }}
           />
         ))}

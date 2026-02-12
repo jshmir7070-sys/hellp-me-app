@@ -828,7 +828,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
   );
 
   const renderUrgentCheckbox = (checked: boolean, onChange: (value: boolean) => void) => (
-    <View style={[styles.urgentBox, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : BrandColors.errorLight, borderColor: isDark ? 'BrandColors.error' : 'BrandColors.errorLight' }]}>
+    <View style={[styles.urgentBox, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : BrandColors.errorLight, borderColor: isDark ? BrandColors.error : BrandColors.errorLight }]}>
       <Switch
         value={checked}
         onValueChange={onChange}
@@ -1181,7 +1181,7 @@ export default function CreateJobScreen({ navigation }: CreateJobScreenProps) {
         <ThemedText style={[styles.label, { color: theme.text }]}>
           단가 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
         </ThemedText>
-        <View style={[styles.priceDisplayBox, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : 'Colors.light.backgroundRoot' }]}>
+        <View style={[styles.priceDisplayBox, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : Colors.light.backgroundRoot }]}>
           <ThemedText style={[styles.priceDisplayText, { color: theme.text }]}>
             당일: 박스당 {((categoryPricing as any)?.other?.boxPrice || 2500).toLocaleString()}원, 착지당 {((categoryPricing as any)?.other?.destinationPrice || 4000).toLocaleString()}원
           </ThemedText>

@@ -625,7 +625,7 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
           style={[
             styles.submitButton,
             { 
-              backgroundColor: canSubmit() ? BrandColors.helper : 'Colors.light.textTertiary',
+              backgroundColor: canSubmit() ? BrandColors.helper : Colors.light.textTertiary,
               opacity: isSubmitting ? 0.7 : 1,
             }
           ]}

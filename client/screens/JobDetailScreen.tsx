@@ -790,7 +790,7 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 180,
     borderRadius: BorderRadius.sm,
-    backgroundColor: 'Colors.light.backgroundSecondary',
+    backgroundColor: Colors.light.backgroundSecondary,
   },
   mapOverlay: {
     position: 'absolute',
