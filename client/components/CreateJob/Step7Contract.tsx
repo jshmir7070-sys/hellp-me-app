@@ -30,9 +30,10 @@ export default function Step7Contract({
   const [signatureData, setSignatureData] = useState<string | null>(null);
   const [signatureName, setSignatureName] = useState("");
   const [isVerified, setIsVerified] = useState(false);
+  const [verificationPhone, setVerificationPhone] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
   const [showVerificationModal, setShowVerificationModal] = useState(false);
-  const [sentCode, setSentCode] = useState("");
+  const [codeSent, setCodeSent] = useState(false);
   const [agreePayment, setAgreePayment] = useState(false);
   const [agreeCredit, setAgreeCredit] = useState(false);
   const [agreePrivate, setAgreePrivate] = useState(false);
@@ -101,22 +102,36 @@ export default function Step7Contract({
     setShowSignature(false);
   };
 
-  const handleRequestVerification = () => {
-    // 6자리 인증번호 생성
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    setSentCode(code);
+  const handleOpenVerification = () => {
     setShowVerificationModal(true);
-    Alert.alert("인증번호 발송", `${user?.phone || "등록된 번호"}로 인증번호가 발송되었습니다.\n\n(테스트용 인증번호: ${code})`);
+    setCodeSent(false);
+    setVerificationCode("");
+  };
+
+  const handleSendCode = () => {
+    if (!verificationPhone.trim() || verificationPhone.replace(/[^0-9]/g, '').length < 10) {
+      Alert.alert("알림", "올바른 전화번호를 입력해주세요.");
+      return;
+    }
+    setCodeSent(true);
+    Alert.alert("인증번호 발송", `${verificationPhone}로 인증번호가 발송되었습니다.\n\n(테스트 인증번호: 123456)`);
   };
 
   const handleVerifyCode = () => {
-    if (verificationCode === sentCode) {
+    if (verificationCode === "123456") {
       setIsVerified(true);
       setShowVerificationModal(false);
       Alert.alert("인증 완료", "본인인증이 완료되었습니다.");
     } else {
-      Alert.alert("인증 실패", "인증번호가 일치하지 않습니다. 다시 입력해주세요.");
+      Alert.alert("인증 실패", "인증번호가 일치하지 않습니다.\n(테스트 인증번호: 123456)");
     }
+  };
+
+  const formatPhone = (value: string): string => {
+    const numbers = value.replace(/[^0-9]/g, '');
+    if (numbers.length <= 3) return numbers;
+    if (numbers.length <= 7) return `${numbers.slice(0, 3)}-${numbers.slice(3)}`;
+    return `${numbers.slice(0, 3)}-${numbers.slice(3, 7)}-${numbers.slice(7, 11)}`;
   };
 
   const handleNext = () => {
@@ -488,22 +503,30 @@ export default function Step7Contract({
             </ThemedText>
           </View>
           <ThemedText style={[styles.stepCardDescription, { color: Colors.light.tabIconDefault }]}>
-            {user?.phone || "등록된 전화번호"}로 SMS 인증을 진행합니다
+            전화번호를 입력하고 SMS 인증을 진행합니다
           </ThemedText>
-          <Pressable
-            style={[styles.actionButton, {
-              borderColor: isVerified ? '#10B981' : BrandColors.requester,
-              backgroundColor: isVerified ? (isDark ? '#064E3B' : '#ECFDF5') : 'transparent',
-              opacity: (signatureData && !isVerified) ? 1 : (isVerified ? 1 : 0.5),
-            }]}
-            onPress={handleRequestVerification}
-            disabled={!signatureData || isVerified}
-          >
-            <Icon name={isVerified ? "checkmark-circle-outline" : "shield-checkmark-outline"} size={20} color={isVerified ? '#10B981' : (signatureData ? BrandColors.requester : Colors.light.tabIconDefault)} />
-            <ThemedText style={[styles.actionButtonText, { color: isVerified ? '#10B981' : (signatureData ? BrandColors.requester : Colors.light.tabIconDefault) }]}>
-              {isVerified ? "인증 완료" : "본인인증 하기"}
-            </ThemedText>
-          </Pressable>
+          {isVerified && verificationPhone ? (
+            <View style={[styles.signaturePreview, { borderColor: '#10B981' }]}>
+              <Icon name="checkmark-circle" size={24} color="#10B981" />
+              <ThemedText style={[styles.signaturePreviewText, { color: '#10B981' }]}>
+                인증 완료 ({verificationPhone})
+              </ThemedText>
+            </View>
+          ) : (
+            <Pressable
+              style={[styles.actionButton, {
+                borderColor: BrandColors.requester,
+                opacity: signatureData ? 1 : 0.5,
+              }]}
+              onPress={handleOpenVerification}
+              disabled={!signatureData}
+            >
+              <Icon name="shield-checkmark-outline" size={20} color={signatureData ? BrandColors.requester : Colors.light.tabIconDefault} />
+              <ThemedText style={[styles.actionButtonText, { color: signatureData ? BrandColors.requester : Colors.light.tabIconDefault }]}>
+                본인인증 하기
+              </ThemedText>
+            </Pressable>
+          )}
         </View>
 
         {isAllComplete && (
@@ -622,37 +645,80 @@ export default function Step7Contract({
             </View>
 
             <View style={styles.signatureBody}>
+              {/* 전화번호 입력 */}
               <ThemedText style={[styles.signatureLabel, { color: theme.text }]}>
-                인증번호 입력
+                전화번호 입력
               </ThemedText>
               <ThemedText style={[styles.signatureHint, { color: Colors.light.tabIconDefault }]}>
-                {user?.phone || "등록된 전화번호"}로 발송된 6자리 인증번호를 입력해주세요.
+                인증번호를 받을 전화번호를 입력해주세요.
               </ThemedText>
-              <TextInput
-                style={[
-                  styles.signatureInput,
-                  {
-                    backgroundColor: theme.backgroundDefault,
-                    color: theme.text,
-                    borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
-                    textAlign: 'center',
-                    fontSize: 24,
-                    letterSpacing: 8,
-                  },
-                ]}
-                placeholder="000000"
-                placeholderTextColor={Colors.light.tabIconDefault}
-                value={verificationCode}
-                onChangeText={setVerificationCode}
-                keyboardType="number-pad"
-                maxLength={6}
-                autoFocus
-              />
-              <Pressable onPress={handleRequestVerification} style={styles.resendButton}>
-                <ThemedText style={{ color: BrandColors.requester }}>
-                  인증번호 재발송
-                </ThemedText>
-              </Pressable>
+              <View style={{ flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.lg }}>
+                <TextInput
+                  style={[
+                    styles.signatureInput,
+                    {
+                      backgroundColor: theme.backgroundDefault,
+                      color: theme.text,
+                      borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                      flex: 1,
+                      marginBottom: 0,
+                    },
+                  ]}
+                  placeholder="010-0000-0000"
+                  placeholderTextColor={Colors.light.tabIconDefault}
+                  value={verificationPhone}
+                  onChangeText={(text) => setVerificationPhone(formatPhone(text))}
+                  keyboardType="phone-pad"
+                  maxLength={13}
+                  editable={!codeSent}
+                />
+                <Pressable
+                  style={[styles.sendCodeButton, { backgroundColor: codeSent ? '#10B981' : BrandColors.requester }]}
+                  onPress={handleSendCode}
+                  disabled={codeSent}
+                >
+                  <ThemedText style={{ color: '#FFFFFF', fontWeight: '600', fontSize: 13 }}>
+                    {codeSent ? "발송완료" : "인증요청"}
+                  </ThemedText>
+                </Pressable>
+              </View>
+
+              {/* 인증번호 입력 */}
+              {codeSent && (
+                <>
+                  <ThemedText style={[styles.signatureLabel, { color: theme.text }]}>
+                    인증번호 입력
+                  </ThemedText>
+                  <ThemedText style={[styles.signatureHint, { color: Colors.light.tabIconDefault }]}>
+                    {verificationPhone}로 발송된 6자리 인증번호를 입력해주세요.
+                  </ThemedText>
+                  <TextInput
+                    style={[
+                      styles.signatureInput,
+                      {
+                        backgroundColor: theme.backgroundDefault,
+                        color: theme.text,
+                        borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                        textAlign: 'center',
+                        fontSize: 24,
+                        letterSpacing: 8,
+                      },
+                    ]}
+                    placeholder="123456"
+                    placeholderTextColor={Colors.light.tabIconDefault}
+                    value={verificationCode}
+                    onChangeText={setVerificationCode}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                    autoFocus
+                  />
+                  <Pressable onPress={() => { setCodeSent(false); setVerificationCode(""); }} style={styles.resendButton}>
+                    <ThemedText style={{ color: BrandColors.requester }}>
+                      전화번호 변경 / 재발송
+                    </ThemedText>
+                  </Pressable>
+                </>
+              )}
             </View>
 
             <View style={[styles.signatureFooter, { borderTopColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}>
@@ -663,9 +729,9 @@ export default function Step7Contract({
                 <ThemedText style={[styles.signatureCancelText, { color: BrandColors.requester }]}>취소</ThemedText>
               </Pressable>
               <Pressable
-                style={[styles.signatureConfirm, { backgroundColor: BrandColors.requester, opacity: verificationCode.length === 6 ? 1 : 0.5 }]}
+                style={[styles.signatureConfirm, { backgroundColor: BrandColors.requester, opacity: (codeSent && verificationCode.length === 6) ? 1 : 0.5 }]}
                 onPress={handleVerifyCode}
-                disabled={verificationCode.length !== 6}
+                disabled={!codeSent || verificationCode.length !== 6}
               >
                 <ThemedText style={styles.signatureConfirmText}>인증 확인</ThemedText>
               </Pressable>
@@ -954,6 +1020,13 @@ const styles = StyleSheet.create({
   resendButton: {
     alignItems: 'center',
     paddingVertical: Spacing.sm,
+  },
+  sendCodeButton: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   contractConsentRow: {
     flexDirection: 'row',
