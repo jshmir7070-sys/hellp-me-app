@@ -1,0 +1,92 @@
+{
+  "expo": {
+    "name": "hellpme",
+    "slug": "hellpme",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "hellpme",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.hellpme.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "QR 코드 스캔 및 업무 증빙 사진 촬영을 위해 카메라 접근 권한이 필요합니다.",
+        "NSLocationWhenInUseUsageDescription": "배송 경로 추적 및 현장 출퇴근 확인을 위해 위치 정보가 필요합니다.",
+        "NSPhotoLibraryUsageDescription": "업무 증빙 사진 및 서류 업로드를 위해 사진 라이브러리 접근 권한이 필요합니다.",
+        "NSPhotoLibraryAddUsageDescription": "촬영한 사진을 저장하기 위해 사진 라이브러리 접근 권한이 필요합니다."
+      },
+      "privacyManifests": {
+        "NSPrivacyAccessedAPITypes": []
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.hellpme.app",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_MEDIA_IMAGES",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "QR 코드 스캔 및 업무 증빙 사진 촬영을 위해 카메라 접근 권한이 필요합니다."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "배송 경로 추적 및 현장 출퇴근 확인을 위해 위치 정보가 필요합니다."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "업무 증빙 사진 및 서류 업로드를 위해 사진 라이브러리 접근 권한이 필요합니다.",
+          "cameraPermission": "업무 증빙 사진 촬영을 위해 카메라 접근 권한이 필요합니다."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#E6F4FE"
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "reactCompiler": true
+    }
+  }
+}

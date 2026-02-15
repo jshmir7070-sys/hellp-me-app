@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>결제 - Hellp Me</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      background: linear-gradient(135deg, #059669 0%, #10B981 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 16px;
+      padding: 32px 24px;
+      max-width: 400px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .logo {
+      font-size: 32px;
+      font-weight: 800;
+      color: #059669;
+      margin-bottom: 8px;
+      text-align: center;
+    }
+    .subtitle {
+      color: #6B7280;
+      font-size: 14px;
+      margin-bottom: 32px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 24px;
+      color: #1F2937;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+    .payment-info {
+      background: #F9FAFB;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .payment-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #E5E7EB;
+    }
+    .payment-row:last-child {
+      border-bottom: none;
+      padding-top: 16px;
+      margin-top: 8px;
+      border-top: 2px solid #059669;
+    }
+    .payment-label {
+      color: #6B7280;
+      font-size: 14px;
+    }
+    .payment-value {
+      color: #1F2937;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .payment-total {
+      font-size: 20px;
+      font-weight: 700;
+      color: #059669;
+    }
+    .pay-btn {
+      background: linear-gradient(135deg, #059669 0%, #10B981 100%);
+      color: white;
+      border: none;
+      padding: 16px 32px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 12px;
+      cursor: pointer;
+      width: 100%;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .pay-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(5, 150, 105, 0.3);
+    }
+    .pay-btn:active {
+      transform: translateY(0);
+    }
+    .pay-btn:disabled {
+      background: #9CA3AF;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .status {
+      margin-top: 24px;
+      padding: 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      display: none;
+      text-align: center;
+    }
+    .status.loading {
+      display: block;
+      background: #ECFDF5;
+      color: #065F46;
+    }
+    .status.success {
+      display: block;
+      background: #D1FAE5;
+      color: #065F46;
+    }
+    .status.error {
+      display: block;
+      background: #FEE2E2;
+      color: #991B1B;
+    }
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #059669;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .payment-type-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    .badge-down {
+      background: #DBEAFE;
+      color: #1E40AF;
+    }
+    .badge-balance {
+      background: #D1FAE5;
+      color: #065F46;
+    }
+    .cancel-link {
+      display: block;
+      margin-top: 16px;
+      color: #6B7280;
+      font-size: 14px;
+      text-decoration: none;
+      text-align: center;
+    }
+    .cancel-link:hover {
+      color: #1F2937;
+      text-decoration: underline;
+    }
+    .security-info {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 24px;
+      color: #9CA3AF;
+      font-size: 12px;
+    }
+    .security-info svg {
+      width: 16px;
+      height: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">Hellp Me</div>
+    <div class="subtitle">헬퍼 매칭 서비스</div>
+    
+    <h1>결제하기</h1>
+    
+    <div id="paymentTypeContainer" style="text-align: center;">
+      <span id="paymentTypeBadge" class="payment-type-badge badge-down">계약금</span>
+    </div>
+    
+    <div class="payment-info">
+      <div class="payment-row">
+        <span class="payment-label">계약번호</span>
+        <span id="contractId" class="payment-value">-</span>
+      </div>
+      <div class="payment-row">
+        <span class="payment-label">오더명</span>
+        <span id="orderName" class="payment-value">-</span>
+      </div>
+      <div class="payment-row">
+        <span class="payment-label">결제금액</span>
+        <span id="amount" class="payment-value payment-total">0원</span>
+      </div>
+    </div>
+    
+    <button id="payBtn" class="pay-btn" onclick="startPayment()">
+      결제하기
+    </button>
+    
+    <div id="status" class="status"></div>
+    
+    <a href="#" class="cancel-link" onclick="cancelPayment()">취소하고 돌아가기</a>
+    
+    <div class="security-info">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+      </svg>
+      <span>안전한 결제 환경이 보장됩니다</span>
+    </div>
+  </div>
+
+  <script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentId = urlParams.get('paymentId');
+    const contractId = urlParams.get('contractId');
+    const paymentType = urlParams.get('type') || 'DOWN';
+    const amount = parseInt(urlParams.get('amount') || '0');
+    const orderName = urlParams.get('orderName') || '오더';
+    const returnUrl = urlParams.get('returnUrl') || 'hellpme://payment/return';
+    const storeId = urlParams.get('storeId') || 'store-placeholder';
+    const channelKey = urlParams.get('channelKey') || 'channel-key-placeholder';
+    
+    document.addEventListener('DOMContentLoaded', function() {
+      document.getElementById('contractId').textContent = '#' + (contractId || '-');
+      document.getElementById('orderName').textContent = decodeURIComponent(orderName);
+      document.getElementById('amount').textContent = formatCurrency(amount);
+      
+      const badge = document.getElementById('paymentTypeBadge');
+      if (paymentType === 'BALANCE') {
+        badge.textContent = '잔금';
+        badge.className = 'payment-type-badge badge-balance';
+      } else {
+        badge.textContent = '계약금';
+        badge.className = 'payment-type-badge badge-down';
+      }
+    });
+    
+    function formatCurrency(value) {
+      return new Intl.NumberFormat('ko-KR').format(value) + '원';
+    }
+    
+    function showStatus(type, message) {
+      const status = document.getElementById('status');
+      status.className = 'status ' + type;
+      if (type === 'loading') {
+        status.innerHTML = '<span class="spinner"></span>' + message;
+      } else {
+        status.textContent = message;
+      }
+    }
+    
+    async function startPayment() {
+      const btn = document.getElementById('payBtn');
+      btn.disabled = true;
+      showStatus('loading', '결제를 준비하고 있습니다...');
+      
+      try {
+        if (!paymentId) {
+          throw new Error('결제 정보가 올바르지 않습니다');
+        }
+        
+        const isTestMode = window.location.pathname.includes('test-checkout');
+        
+        if (isTestMode) {
+          showStatus('success', '테스트 모드: 결제가 완료되었습니다');
+          setTimeout(() => {
+            redirectToApp(paymentId, 'success');
+          }, 1500);
+          return;
+        }
+        
+        showStatus('loading', '결제창을 여는 중...');
+        
+        const response = await PortOne.requestPayment({
+          storeId: storeId,
+          channelKey: channelKey,
+          paymentId: paymentId,
+          orderName: decodeURIComponent(orderName),
+          totalAmount: amount,
+          currency: 'KRW',
+          payMethod: 'CARD',
+          customer: {
+            fullName: '고객',
+          },
+        });
+        
+        if (response.code) {
+          if (response.code === 'USER_CANCELLED') {
+            showStatus('error', '결제가 취소되었습니다');
+            btn.disabled = false;
+            return;
+          }
+          throw new Error(response.message || '결제에 실패했습니다');
+        }
+        
+        showStatus('loading', '결제 결과를 확인하는 중...');
+        
+        const verifyResponse = await fetch('/api/payments/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paymentId: paymentId })
+        });
+        
+        if (!verifyResponse.ok) {
+          const errorData = await verifyResponse.json();
+          throw new Error(errorData.message || '결제 확인에 실패했습니다');
+        }
+        
+        showStatus('success', '결제가 완료되었습니다. 앱으로 돌아갑니다...');
+        setTimeout(() => {
+          redirectToApp(paymentId, 'success');
+        }, 1500);
+        
+      } catch (error) {
+        console.error('Payment error:', error);
+        showStatus('error', error.message || '결제 중 오류가 발생했습니다');
+        btn.disabled = false;
+      }
+    }
+    
+    function redirectToApp(paymentId, status) {
+      const redirectUrl = `${returnUrl}?paymentId=${encodeURIComponent(paymentId)}&status=${status}`;
+      window.location.href = redirectUrl;
+    }
+    
+    function cancelPayment() {
+      redirectToApp(paymentId || '', 'cancelled');
+    }
+  </script>
+</body>
+</html>
