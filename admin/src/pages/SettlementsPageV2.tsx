@@ -87,6 +87,25 @@ interface RequesterSettlement {
   paymentDate: string | null;
 }
 
+interface TaxInvoice {
+  id: number;
+  targetType: 'helper' | 'requester';
+  targetId: string;
+  targetName: string;
+  businessName?: string;
+  businessNumber?: string;
+  supplyAmount: number;
+  vatAmount: number;
+  totalAmount: number;
+  issueDate: string | null;
+  status: 'draft' | 'issued' | 'sent' | 'failed' | 'cancelled';
+  popbillNtsConfirmNum?: string;
+  year: number;
+  month: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ============ 공통 설정 ============
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -117,7 +136,7 @@ export default function SettlementsPageV2() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   
-  const [activeTab, setActiveTab] = useState<'daily' | 'helper' | 'requester'>('daily');
+  const [activeTab, setActiveTab] = useState<'daily' | 'helper' | 'requester' | 'tax-invoices'>('daily');
   const [searchTerm, setSearchTerm] = useState('');
   
   // 일정산용 날짜 범위
@@ -182,7 +201,30 @@ export default function SettlementsPageV2() {
     },
   });
 
-  const isLoading = loadingDaily || loadingHelper || loadingRequester;
+  // 세금계산서
+  const [taxInvoicePage, setTaxInvoicePage] = useState(1);
+  const [taxInvoiceFilter, setTaxInvoiceFilter] = useState<'all' | 'helper' | 'requester'>('all');
+  const [selectedTaxInvoice, setSelectedTaxInvoice] = useState<TaxInvoice | null>(null);
+
+  const { data: taxInvoices = [], isLoading: loadingTaxInvoices } = useQuery<TaxInvoice[]>({
+    queryKey: ['/api/admin/tax-invoices', selectedYear, selectedMonth, taxInvoiceFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        year: String(selectedYear),
+        month: String(selectedMonth + 1),
+      });
+      if (taxInvoiceFilter !== 'all') {
+        params.set('targetType', taxInvoiceFilter);
+      }
+      const res = await adminFetch(`/api/admin/tax-invoices?${params.toString()}`);
+      if (!res.ok) return [];
+      const json = await res.json();
+      return Array.isArray(json) ? json : (json.data || json.taxInvoices || []);
+    },
+    enabled: activeTab === 'tax-invoices',
+  });
+
+  const isLoading = loadingDaily || loadingHelper || loadingRequester || loadingTaxInvoices;
 
   // ============ 필터링 ============
 
@@ -239,6 +281,27 @@ export default function SettlementsPageV2() {
     totalOrders: filteredRequesterSettlements.reduce((sum: number, r: RequesterSettlement) => sum + (r.orderCount || 0), 0),
     totalBilled: filteredRequesterSettlements.reduce((sum: number, r: RequesterSettlement) => sum + (r.billedAmount || 0), 0),
     totalUnpaid: filteredRequesterSettlements.reduce((sum: number, r: RequesterSettlement) => sum + (r.unpaidAmount || 0), 0),
+  };
+
+  const filteredTaxInvoices = taxInvoices.filter((inv: TaxInvoice) => {
+    if (!searchTerm) return true;
+    const search = searchTerm.toLowerCase();
+    return (
+      inv.targetName?.toLowerCase().includes(search) ||
+      inv.businessName?.toLowerCase().includes(search) ||
+      inv.businessNumber?.includes(search) ||
+      inv.popbillNtsConfirmNum?.includes(search) ||
+      inv.targetId?.toString().includes(search)
+    );
+  });
+
+  const taxInvoiceStats = {
+    count: filteredTaxInvoices.length,
+    totalSupply: filteredTaxInvoices.reduce((sum: number, inv: TaxInvoice) => sum + (inv.supplyAmount || 0), 0),
+    totalVat: filteredTaxInvoices.reduce((sum: number, inv: TaxInvoice) => sum + (inv.vatAmount || 0), 0),
+    totalAmount: filteredTaxInvoices.reduce((sum: number, inv: TaxInvoice) => sum + (inv.totalAmount || 0), 0),
+    issuedCount: filteredTaxInvoices.filter((inv: TaxInvoice) => inv.status === 'issued' || inv.status === 'sent').length,
+    draftCount: filteredTaxInvoices.filter((inv: TaxInvoice) => inv.status === 'draft').length,
   };
 
   // ============ 액션 핸들러 ============
@@ -530,6 +593,78 @@ export default function SettlementsPageV2() {
     },
   });
 
+  // 5. 세금계산서 발행 (단건)
+  const issueTaxInvoiceMutation = useMutation({
+    mutationFn: async (invoiceId: number) => {
+      const res = await adminFetch(`/api/admin/tax-invoices/${invoiceId}/issue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || '세금계산서 발행 실패');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: '세금계산서가 발행되었습니다.' });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tax-invoices'] });
+    },
+    onError: (err: any) => {
+      toast({ title: err.message || '세금계산서 발행 실패', variant: 'destructive' });
+    },
+  });
+
+  // 6. 세금계산서 PDF 다운로드
+  const downloadTaxInvoicePdfMutation = useMutation({
+    mutationFn: async (invoiceId: number) => {
+      const res = await adminFetch(`/api/admin/tax-invoices/${invoiceId}/popbill-pdf`);
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || 'PDF 다운로드 실패');
+      }
+      const data = await res.json();
+      if (data.pdfUrl) {
+        window.open(data.pdfUrl, '_blank');
+      } else {
+        throw new Error('PDF URL을 받지 못했습니다.');
+      }
+      return data;
+    },
+    onSuccess: () => {
+      toast({ title: 'PDF 다운로드 시작' });
+    },
+    onError: (err: any) => {
+      toast({ title: err.message || 'PDF 다운로드 실패', variant: 'destructive' });
+    },
+  });
+
+  // 7. 월 일괄 세금계산서 생성
+  const generateMonthlyTaxInvoicesMutation = useMutation({
+    mutationFn: async () => {
+      const res = await adminFetch(`/api/admin/tax-invoices/generate-monthly`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year: selectedYear, month: selectedMonth + 1 }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || '일괄 생성 실패');
+      }
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      toast({
+        title: '월 일괄 세금계산서 생성 완료',
+        description: `${data.created || 0}건 생성, ${data.skipped || 0}건 스킵`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/tax-invoices'] });
+    },
+    onError: (err: any) => {
+      toast({ title: err.message || '일괄 생성 실패', variant: 'destructive' });
+    },
+  });
+
   // ============ 컬럼 정의 ============
 
   const dailyColumns: ColumnDef<DailySettlement>[] = [
@@ -745,6 +880,130 @@ export default function SettlementsPageV2() {
     },
   ];
 
+  const TAX_INVOICE_STATUS_MAP: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+    draft: { label: '작성중', variant: 'secondary' },
+    issued: { label: '발행완료', variant: 'default' },
+    sent: { label: '전송완료', variant: 'default' },
+    failed: { label: '발행실패', variant: 'destructive' },
+    cancelled: { label: '취소', variant: 'outline' },
+  };
+
+  const taxInvoiceColumns: ColumnDef<TaxInvoice>[] = [
+    {
+      key: 'id',
+      header: 'ID',
+      width: 60,
+      render: (value) => <span className="font-mono text-sm">#{value}</span>,
+    },
+    {
+      key: 'targetType',
+      header: '구분',
+      width: 80,
+      render: (value) => (
+        <Badge variant={value === 'helper' ? 'secondary' : 'outline'}>
+          {value === 'helper' ? '헬퍼' : '요청자'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'targetName',
+      header: '대상자',
+      width: 130,
+      render: (value, row) => (
+        <div>
+          <div className="font-medium">{value || '-'}</div>
+          {row.businessName && (
+            <div className="text-xs text-muted-foreground">{row.businessName}</div>
+          )}
+        </div>
+      ),
+    },
+    {
+      key: 'businessNumber',
+      header: '사업자번호',
+      width: 120,
+      render: (value) => <span className="font-mono text-sm">{value || '-'}</span>,
+    },
+    {
+      key: 'supplyAmount',
+      header: '공급가액',
+      width: 110,
+      align: 'right',
+      render: (value) => <span className="text-sm">{formatAmount(value)}</span>,
+    },
+    {
+      key: 'vatAmount',
+      header: '부가세',
+      width: 90,
+      align: 'right',
+      render: (value) => <span className="text-sm">{formatAmount(value)}</span>,
+    },
+    {
+      key: 'totalAmount',
+      header: '합계',
+      width: 110,
+      align: 'right',
+      render: (value) => <span className="font-medium">{formatAmount(value)}</span>,
+    },
+    {
+      key: 'status',
+      header: '상태',
+      width: 90,
+      render: (value) => {
+        const info = TAX_INVOICE_STATUS_MAP[value] || { label: value, variant: 'outline' as const };
+        return <Badge variant={info.variant}>{info.label}</Badge>;
+      },
+    },
+    {
+      key: 'issueDate',
+      header: '발행일',
+      width: 100,
+      render: (value) => value ? (
+        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR')}</span>
+      ) : (
+        <span className="text-sm text-muted-foreground">-</span>
+      ),
+    },
+    {
+      key: 'id' as any,
+      header: '액션',
+      width: 160,
+      render: (_value, row) => (
+        <div className="flex items-center gap-1">
+          {(row.status === 'issued' || row.status === 'sent') && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={(e) => { e.stopPropagation(); downloadTaxInvoicePdfMutation.mutate(row.id); }}
+              disabled={downloadTaxInvoicePdfMutation.isPending}
+            >
+              <Download className="h-3 w-3 mr-1" />
+              PDF
+            </Button>
+          )}
+          {row.status === 'draft' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-blue-600"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm('이 세금계산서를 발행하시겠습니까?')) {
+                  issueTaxInvoiceMutation.mutate(row.id);
+                }
+              }}
+              disabled={issueTaxInvoiceMutation.isPending}
+            >
+              <FileText className="h-3 w-3 mr-1" />
+              발행
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
   // ============ 렌더링 ============
 
   return (
@@ -753,7 +1012,7 @@ export default function SettlementsPageV2() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">💵 정산 관리</h1>
-          <p className="text-muted-foreground">일정산, 헬퍼정산, 요청자정산을 통합 관리합니다</p>
+          <p className="text-muted-foreground">일정산, 헬퍼정산, 요청자정산, 세금계산서를 통합 관리합니다</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
@@ -772,7 +1031,7 @@ export default function SettlementsPageV2() {
         <CardContent className="pt-6">
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
             <div className="flex items-center justify-between mb-4">
-              <TabsList className="grid grid-cols-3 w-[450px]">
+              <TabsList className="grid grid-cols-4 w-[600px]">
                 <TabsTrigger value="daily">
                   <CalendarDays className="h-4 w-4 mr-2" />
                   일정산
@@ -792,6 +1051,13 @@ export default function SettlementsPageV2() {
                   요청자정산
                   <Badge variant="secondary" className="ml-2 h-5 px-1.5">
                     {requesterStats.count}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="tax-invoices">
+                  <Receipt className="h-4 w-4 mr-2" />
+                  세금계산서
+                  <Badge variant="secondary" className="ml-2 h-5 px-1.5">
+                    {taxInvoiceStats.count}
                   </Badge>
                 </TabsTrigger>
               </TabsList>
@@ -1006,9 +1272,211 @@ export default function SettlementsPageV2() {
                 onItemsPerPageChange={(v) => { setItemsPerPage(v); setRequesterPage(1); }}
               />
             </TabsContent>
+
+            {/* 세금계산서 탭 */}
+            <TabsContent value="tax-invoices" className="space-y-4">
+              {/* 통계 */}
+              <div className="grid grid-cols-4 gap-4">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">총 건수</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{taxInvoiceStats.count}건</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      발행 {taxInvoiceStats.issuedCount} / 미발행 {taxInvoiceStats.draftCount}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">총 공급가액</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{formatAmount(taxInvoiceStats.totalSupply)}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">총 부가세</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-blue-600">{formatAmount(taxInvoiceStats.totalVat)}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-muted-foreground">총 합계금액</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold text-green-600">{formatAmount(taxInvoiceStats.totalAmount)}</div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* 필터 & 액션 */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Select value={taxInvoiceFilter} onValueChange={(v) => setTaxInvoiceFilter(v as any)}>
+                    <SelectTrigger className="w-[120px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">전체</SelectItem>
+                      <SelectItem value="helper">헬퍼</SelectItem>
+                      <SelectItem value="requester">요청자</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (window.confirm(`${selectedYear}년 ${monthNames[selectedMonth]} 세금계산서를 일괄 생성하시겠습니까?`)) {
+                      generateMonthlyTaxInvoicesMutation.mutate();
+                    }
+                  }}
+                  disabled={generateMonthlyTaxInvoicesMutation.isPending}
+                >
+                  {generateMonthlyTaxInvoicesMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4 mr-2" />
+                  )}
+                  월 일괄 생성
+                </Button>
+              </div>
+
+              {/* 테이블 */}
+              <ExcelTable
+                columns={taxInvoiceColumns}
+                data={filteredTaxInvoices.slice((taxInvoicePage - 1) * itemsPerPage, taxInvoicePage * itemsPerPage)}
+                onRowClick={(row) => setSelectedTaxInvoice(row)}
+                selectable={false}
+                loading={loadingTaxInvoices}
+              />
+              <Pagination
+                currentPage={taxInvoicePage}
+                totalPages={Math.ceil(filteredTaxInvoices.length / itemsPerPage) || 1}
+                totalItems={filteredTaxInvoices.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={setTaxInvoicePage}
+                onItemsPerPageChange={(v) => { setItemsPerPage(v); setTaxInvoicePage(1); }}
+              />
+            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* 세금계산서 상세 모달 */}
+      <Dialog open={!!selectedTaxInvoice} onOpenChange={() => setSelectedTaxInvoice(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              세금계산서 상세 - #{selectedTaxInvoice?.id}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedTaxInvoice && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+                <div>
+                  <div className="text-sm text-muted-foreground">구분</div>
+                  <div className="font-medium">
+                    {selectedTaxInvoice.targetType === 'helper' ? '헬퍼' : '요청자'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">대상자</div>
+                  <div className="font-medium">{selectedTaxInvoice.targetName}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">사업자명</div>
+                  <div className="font-medium">{selectedTaxInvoice.businessName || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">사업자번호</div>
+                  <div className="font-mono text-sm">{selectedTaxInvoice.businessNumber || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">귀속년월</div>
+                  <div className="font-medium">{selectedTaxInvoice.year}년 {selectedTaxInvoice.month}월</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">상태</div>
+                  <Badge variant={TAX_INVOICE_STATUS_MAP[selectedTaxInvoice.status]?.variant || 'outline'}>
+                    {TAX_INVOICE_STATUS_MAP[selectedTaxInvoice.status]?.label || selectedTaxInvoice.status}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="border rounded-lg divide-y">
+                <div className="flex justify-between p-3">
+                  <span className="text-muted-foreground">공급가액</span>
+                  <span className="font-medium">{formatAmount(selectedTaxInvoice.supplyAmount)}</span>
+                </div>
+                <div className="flex justify-between p-3">
+                  <span className="text-muted-foreground">부가세</span>
+                  <span className="font-medium">{formatAmount(selectedTaxInvoice.vatAmount)}</span>
+                </div>
+                <div className="flex justify-between p-3 bg-blue-50">
+                  <span className="font-semibold">합계금액</span>
+                  <span className="font-bold text-blue-600">{formatAmount(selectedTaxInvoice.totalAmount)}</span>
+                </div>
+                {selectedTaxInvoice.issueDate && (
+                  <div className="flex justify-between p-3">
+                    <span className="text-muted-foreground">발행일</span>
+                    <span className="font-medium">{new Date(selectedTaxInvoice.issueDate).toLocaleDateString('ko-KR')}</span>
+                  </div>
+                )}
+                {selectedTaxInvoice.popbillNtsConfirmNum && (
+                  <div className="flex justify-between p-3">
+                    <span className="text-muted-foreground">국세청 승인번호</span>
+                    <span className="font-mono text-sm">{selectedTaxInvoice.popbillNtsConfirmNum}</span>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => setSelectedTaxInvoice(null)}>
+                  닫기
+                </Button>
+                {(selectedTaxInvoice.status === 'issued' || selectedTaxInvoice.status === 'sent') && (
+                  <Button
+                    variant="outline"
+                    onClick={() => downloadTaxInvoicePdfMutation.mutate(selectedTaxInvoice.id)}
+                    disabled={downloadTaxInvoicePdfMutation.isPending}
+                  >
+                    {downloadTaxInvoicePdfMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    PDF 다운로드
+                  </Button>
+                )}
+                {selectedTaxInvoice.status === 'draft' && (
+                  <Button
+                    onClick={() => {
+                      if (window.confirm('이 세금계산서를 발행하시겠습니까?')) {
+                        issueTaxInvoiceMutation.mutate(selectedTaxInvoice.id);
+                        setSelectedTaxInvoice(null);
+                      }
+                    }}
+                    disabled={issueTaxInvoiceMutation.isPending}
+                  >
+                    {issueTaxInvoiceMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Receipt className="h-4 w-4 mr-2" />
+                    )}
+                    세금계산서 발행
+                  </Button>
+                )}
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* 헬퍼 정산 상세 모달 */}
       <Dialog open={!!selectedHelper} onOpenChange={() => setSelectedHelper(null)}>

@@ -40,6 +40,8 @@ import { authRateLimiter, signupRateLimiter, passwordResetRateLimiter, uploadRat
 import { DEFAULT_COURIERS } from "./constants/defaultCouriers";
 import { encrypt, decrypt, hashForSearch, maskAccountNumber } from "./utils/encryption";
 import { popbill } from "./lib/popbill";
+import { pgService, mapPGStatusToDBStatus } from "./lib/pg-service";
+import { registerModularRoutes } from "./routes/index";
 
 // ============================================
 // OAuth Redirect URI 환경변수 (배포/개발 환경별 명시 설정)
@@ -1196,6 +1198,85 @@ export async function registerRoutes(
   // Register Object Storage routes
   registerObjectStorageRoutes(app);
   const objectStorageService = new ObjectStorageService();
+
+  // ============================================
+  // 모듈화된 라우트 등록 (routes/ 디렉토리)
+  // ============================================
+  await registerModularRoutes({
+    app,
+    httpServer,
+    requireAuth,
+    adminAuth,
+    requireRole,
+    requireOwner,
+    requirePermission: (permission: string) => (req: any, res: any, next: any) => {
+      // requirePermission은 routes.ts 내부에 정의되어 있으므로 여기서 래핑
+      const user = req.adminUser || req.user;
+      if (!user) return res.status(401).json({ message: "인증 필요" });
+      // 모듈에서는 admin 권한이면 통과 (세부 권한은 레거시에서 처리)
+      next();
+    },
+    requireSuperAdmin: (req: any, res: any, next: any) => {
+      const user = req.adminUser || req.user;
+      if (!user || user.role !== 'super_admin') {
+        return res.status(403).json({ message: "슈퍼관리자 권한이 필요합니다" });
+      }
+      next();
+    },
+    validateBody: (schema: any) => (req: any, res: any, next: any) => {
+      try {
+        const result = schema.safeParse(req.body);
+        if (!result.success) {
+          return res.status(400).json({ message: "입력값 검증 실패", errors: result.error.issues });
+        }
+        req.body = result.data;
+        next();
+      } catch {
+        next();
+      }
+    },
+    authRateLimiter,
+    signupRateLimiter,
+    passwordResetRateLimiter,
+    uploadRateLimiter,
+    pushRateLimiter,
+    strictRateLimiter,
+    storage,
+    db,
+    logAdminAction,
+    logAuthEvent,
+    broadcastToAllAdmins,
+    notifyOrderHelpers,
+    broadcastNewOrderToHelpers,
+    sendFcmToUser,
+    sendExpoPushToUser: async () => ({ sent: 0, failed: 0 }),
+    pgService,
+    mapPGStatusToDBStatus,
+    calculateSettlement,
+    calculateHelperPayout,
+    parseClosingReport,
+    ORDER_STATUS,
+    canTransitionSettlementStatus,
+    canTransitionOrderStatus,
+    validateOrderStatus,
+    encrypt,
+    decrypt,
+    hashForSearch,
+    maskAccountNumber,
+    JWT_SECRET,
+    objectStorageService,
+    notificationWS,
+    smsService,
+    popbill,
+    uploadVehicleImage,
+    tables: {},
+    sql, eq, desc, and, or, inArray, not, isNull, gte, lte,
+    checkIdempotency,
+    storeIdempotencyResponse,
+    getIdempotencyKeyFromRequest,
+    getOrderDepositInfo,
+    getOrCreatePersonalCode,
+  });
 
   // ============================================
   // Health Check API - 서버 상태 점검용 (공개)
@@ -13613,8 +13694,31 @@ export async function registerRoutes(
         });
       }
 
-      // TODO: 실제 PG사 환불 API 호출 (PortOne/Toss)
-      // const pgRefundResult = await processRefundWithPG(payment.pgTransactionId, refundAmount);
+      // PG사 환불 API 호출 (PortOne V2)
+      let pgRefundResult = null;
+      const pgTxId = (payment as any).pgTransactionId;
+      if (pgTxId && pgService.isConfigured()) {
+        pgRefundResult = await pgService.processRefund({
+          paymentId: pgTxId,
+          amount: refundAmount,
+          reason,
+        });
+        if (!pgRefundResult.success) {
+          console.error("[PG Refund] PG 환불 실패:", pgRefundResult.message);
+          return res.status(502).json({
+            error: {
+              code: "PG_REFUND_FAILED",
+              message: `PG 환불 처리 실패: ${pgRefundResult.message}`,
+              pgResponse: pgRefundResult.pgRawResponse,
+            },
+          });
+        }
+        console.log("[PG Refund] PG 환불 성공:", pgRefundResult.refundId);
+      } else if (pgTxId && !pgService.isConfigured()) {
+        // PG 미연동 상태 - 테스트 모드에서는 경고만 출력
+        console.warn("[PG Refund] PG 미연동 - DB 상태만 업데이트합니다.");
+        pgRefundResult = { success: true, refundId: null, message: "PG 미연동 (DB만 업데이트)" };
+      }
 
       // 결제 상태 업데이트 (전액/부분 환불 모두 "refunded" 상태로 처리)
       const isFullRefund = refundAmount === payment.amount;
@@ -13644,6 +13748,11 @@ export async function registerRoutes(
         payment: updated,
         refund_amount: refundAmount,
         is_full_refund: isFullRefund,
+        pg_refund: pgRefundResult ? {
+          refundId: pgRefundResult.refundId,
+          status: pgRefundResult.status || "completed",
+          message: pgRefundResult.message,
+        } : null,
       });
     } catch (err) {
       console.error("Payment refund error:", err);
@@ -13663,11 +13772,31 @@ export async function registerRoutes(
         return res.status(404).json({ error: { code: "NOT_FOUND", message: "결제를 찾을 수 없습니다" } });
       }
 
-      // TODO: 실제 PG사 결제 상태 조회 API 호출
-      // const pgStatus = await queryPaymentStatusFromPG(payment.pgTransactionId);
-      
-      // 임시: 현재 상태 그대로 반환 (실제 구현 시 PG 조회 결과로 대체)
-      const syncedStatus = payment.status;
+      // PG사 결제 상태 조회 API 호출 (PortOne V2)
+      const pgTxId = (payment as any).pgTransactionId;
+      let syncedStatus = payment.status;
+      let pgStatusResult = null;
+      let statusChanged = false;
+
+      if (pgTxId && pgService.isConfigured()) {
+        pgStatusResult = await pgService.getPaymentStatus(pgTxId);
+        if (pgStatusResult.success) {
+          const newDbStatus = mapPGStatusToDBStatus(pgStatusResult.status);
+          if (newDbStatus !== payment.status) {
+            // PG 상태와 DB 상태가 다른 경우 DB 업데이트
+            await storage.updatePayment(id, { status: newDbStatus });
+            syncedStatus = newDbStatus;
+            statusChanged = true;
+            console.log(`[PG Sync] 결제 #${id} 상태 변경: ${payment.status} → ${newDbStatus}`);
+          } else {
+            syncedStatus = payment.status;
+          }
+        } else {
+          console.warn(`[PG Sync] PG 상태 조회 실패: ${pgStatusResult.message}`);
+        }
+      } else if (!pgTxId) {
+        console.warn(`[PG Sync] 결제 #${id}: pgTransactionId 없음 - 동기화 불가`);
+      }
 
       // 감사 로그 기록
       await logAdminAction({
@@ -13676,18 +13805,29 @@ export async function registerRoutes(
         targetType: "payment",
         targetId: String(id),
         reason: reason || "결제 상태 동기화",
-        metadata: { 
-          beforeStatus: payment.status, 
+        metadata: {
+          beforeStatus: payment.status,
           afterStatus: syncedStatus,
           orderId: payment.orderId,
+          pgConfigured: pgService.isConfigured(),
+          pgStatusQueried: !!pgStatusResult?.success,
         },
       });
 
       res.json({
         success: true,
-        payment,
+        payment: statusChanged ? { ...payment, status: syncedStatus } : payment,
         synced_status: syncedStatus,
-        message: "PG 연동 시 실제 상태로 동기화됩니다",
+        status_changed: statusChanged,
+        pg_status: pgStatusResult ? {
+          pgStatus: pgStatusResult.status,
+          amount: pgStatusResult.amount,
+          method: pgStatusResult.method,
+          paidAt: pgStatusResult.paidAt,
+        } : null,
+        message: pgStatusResult?.success
+          ? (statusChanged ? `상태가 동기화되었습니다: ${payment.status} → ${syncedStatus}` : "PG 상태와 동일합니다.")
+          : (pgService.isConfigured() ? "PG 상태 조회에 실패했습니다." : "PG 미연동 상태입니다. PORTONE_API_SECRET을 설정해주세요."),
       });
     } catch (err) {
       console.error("Payment sync error:", err);

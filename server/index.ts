@@ -1,5 +1,6 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { registerApiDocs } from "./api-docs";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { notificationWS } from "./websocket";
@@ -268,6 +269,7 @@ function checkEnvironmentVariables() {
 
 (async () => {
   checkEnvironmentVariables();
+  registerApiDocs(app);
   await registerRoutes(httpServer, app);
 
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
