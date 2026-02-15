@@ -1,10 +1,12 @@
 import React, { useState, useRef } from "react";
-import { View, Pressable, StyleSheet, ScrollView, Alert, Modal, TextInput } from "react-native";
+import { View, Pressable, StyleSheet, ScrollView, Alert, Modal, TextInput, Platform } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { Icon } from "@/components/Icon";
 import { Colors, Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 import { Step7Props } from "./types";
 import { useAuth } from "@/contexts/AuthContext";
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { WebCalendar } from "@/components/WebCalendar";
 
 export default function Step7Contract({
   activeTab,
@@ -34,6 +36,9 @@ export default function Step7Contract({
   const [agreePayment, setAgreePayment] = useState(false);
   const [agreeCredit, setAgreeCredit] = useState(false);
   const [agreePrivate, setAgreePrivate] = useState(false);
+  const [agreePaymentDate, setAgreePaymentDate] = useState(false);
+  const [paymentDueDate, setPaymentDueDate] = useState<string>("");
+  const [showPaymentDatePicker, setShowPaymentDatePicker] = useState(false);
 
   const getCompanyName = () => {
     if (activeTab === "택배사") return courierForm.company;
@@ -75,6 +80,14 @@ export default function Step7Contract({
   };
 
   const handleConfirmContract = () => {
+    if (!agreePayment || !agreeCredit || !agreePrivate || !agreePaymentDate) {
+      Alert.alert("알림", "계약서 내 필수 동의사항을 모두 체크해주세요.");
+      return;
+    }
+    if (!paymentDueDate) {
+      Alert.alert("알림", "잔금 입금 예정일을 선택해주세요.");
+      return;
+    }
     setHasReadContract(true);
     setShowContractModal(false);
   };
@@ -108,11 +121,7 @@ export default function Step7Contract({
 
   const handleNext = () => {
     if (!hasReadContract) {
-      Alert.alert("알림", "계약서를 먼저 확인해주세요.");
-      return;
-    }
-    if (!agreePayment || !agreeCredit || !agreePrivate) {
-      Alert.alert("알림", "필수 동의사항을 모두 체크해주세요.");
+      Alert.alert("알림", "계약서를 확인하고 동의사항을 체크해주세요.");
       return;
     }
     if (!signatureData) {
@@ -126,13 +135,57 @@ export default function Step7Contract({
     onSubmit();
   };
 
-  const allAgreed = agreePayment && agreeCredit && agreePrivate;
-  const isAllComplete = hasReadContract && allAgreed && !!signatureData && isVerified;
+  const allAgreedInContract = agreePayment && agreeCredit && agreePrivate && agreePaymentDate && !!paymentDueDate;
+  const isAllComplete = hasReadContract && !!signatureData && isVerified;
 
   const getQuantityInfo = () => {
     if (activeTab === "택배사") return courierForm.avgQuantity ? `평균 ${courierForm.avgQuantity}건` : "-";
     if (activeTab === "기타택배") return otherCourierForm.boxCount ? `평균 ${otherCourierForm.boxCount}박스` : "-";
     return coldTruckForm.freight ? `운임 ${parseInt(coldTruckForm.freight).toLocaleString()}원` : "-";
+  };
+
+  const formatDateToString = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const parseStringToDate = (str: string): Date => {
+    const parts = str.split('-');
+    if (parts.length === 3) {
+      return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    }
+    return new Date();
+  };
+
+  const getDefaultPaymentDueDate = (): Date => {
+    // 운송 종료일 + 7일을 기본 잔금 입금 예정일로 설정
+    let endDateStr = "";
+    if (activeTab === "택배사") endDateStr = courierForm.requestDateEnd;
+    else if (activeTab === "기타택배") endDateStr = otherCourierForm.requestDateEnd;
+    else endDateStr = coldTruckForm.requestDateEnd;
+
+    if (endDateStr) {
+      const endDate = parseStringToDate(endDateStr);
+      endDate.setDate(endDate.getDate() + 7);
+      return endDate;
+    }
+    const d = new Date();
+    d.setDate(d.getDate() + 14);
+    return d;
+  };
+
+  const handlePaymentDateChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setShowPaymentDatePicker(false);
+    }
+    if (selectedDate) {
+      setPaymentDueDate(formatDateToString(selectedDate));
+      if (Platform.OS === 'ios') {
+        setShowPaymentDatePicker(false);
+      }
+    }
   };
 
   const renderContractContent = () => (
@@ -252,7 +305,81 @@ export default function Step7Contract({
       </ThemedText>
 
       <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
-        제12조 (분쟁 해결)
+        제12조 (잔금 입금 예정일)
+      </ThemedText>
+      <ThemedText style={[styles.contractText, { color: theme.text }]}>
+        1. "갑"은 운송 완료 후 마감 자료 확정에 따른 잔여금을 아래 지정한 입금 예정일까지 지급하여야 합니다.{"\n"}
+        2. 입금 예정일은 운송 종료 후 마감 자료 확정일로부터 기산하며, 제4조 제4항의 7일 이내 지급 의무를 준수하여야 합니다.{"\n"}
+        3. 입금 예정일을 초과할 경우, 제5조의 신용거래 조항이 즉시 적용됩니다.
+      </ThemedText>
+
+      {/* 잔금 입금 예정일 달력 선택 */}
+      <View style={[styles.contractDatePicker, { borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}>
+        <ThemedText style={[styles.contractDatePickerLabel, { color: theme.text }]}>
+          잔금 입금 예정일 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
+        </ThemedText>
+        <Pressable
+          style={[styles.contractDateButton, { backgroundColor: isDark ? '#1F2937' : '#F9FAFB', borderColor: isDark ? Colors.dark.backgroundSecondary : '#D1D5DB' }]}
+          onPress={() => {
+            if (!paymentDueDate) {
+              setPaymentDueDate(formatDateToString(getDefaultPaymentDueDate()));
+            }
+            setShowPaymentDatePicker(true);
+          }}
+        >
+          <Icon name="calendar-outline" size={20} color={BrandColors.requester} />
+          <ThemedText style={[styles.contractDateButtonText, { color: paymentDueDate ? theme.text : Colors.light.tabIconDefault }]}>
+            {paymentDueDate || "입금 예정일을 선택해주세요"}
+          </ThemedText>
+        </Pressable>
+      </View>
+
+      <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
+        제13조 (특약사항 및 동의)
+      </ThemedText>
+      <ThemedText style={[styles.contractText, { color: theme.text }]}>
+        "갑"은 본 계약의 체결과 관련하여 아래 각 호의 사항을 충분히 이해하였으며, 이에 개별적으로 동의합니다. 본 동의는 계약서의 일부를 구성하며, 동의 거부 시 계약 체결이 불가합니다.
+      </ThemedText>
+
+      {/* 필수 동의사항 체크박스 - 계약서 본문 내 */}
+      <Pressable style={styles.contractConsentRow} onPress={() => setAgreePayment(!agreePayment)}>
+        <View style={[styles.contractCheckbox, { backgroundColor: agreePayment ? BrandColors.requester : 'transparent', borderColor: agreePayment ? BrandColors.requester : '#D1D5DB' }]}>
+          {agreePayment && <Icon name="checkmark-outline" size={14} color="#FFFFFF" />}
+        </View>
+        <ThemedText style={[styles.contractConsentText, { color: theme.text }]}>
+          제1호: 잔여금은 마감 자료(실제 배송 수량) 기준으로 확정되며, 청구일로부터 7일 이내 지급할 것에 동의합니다. <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
+        </ThemedText>
+      </Pressable>
+
+      <Pressable style={styles.contractConsentRow} onPress={() => setAgreeCredit(!agreeCredit)}>
+        <View style={[styles.contractCheckbox, { backgroundColor: agreeCredit ? BrandColors.requester : 'transparent', borderColor: agreeCredit ? BrandColors.requester : '#D1D5DB' }]}>
+          {agreeCredit && <Icon name="checkmark-outline" size={14} color="#FFFFFF" />}
+        </View>
+        <ThemedText style={[styles.contractConsentText, { color: theme.text }]}>
+          제2호: 잔여금 정산은 신용거래이며, 미지급 시 연 12% 지연이자, 서비스 이용 제한 및 법적 조치(소송비용·변호사 비용 부담 포함)가 발생할 수 있음에 동의합니다. <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
+        </ThemedText>
+      </Pressable>
+
+      <Pressable style={styles.contractConsentRow} onPress={() => setAgreePrivate(!agreePrivate)}>
+        <View style={[styles.contractCheckbox, { backgroundColor: agreePrivate ? BrandColors.requester : 'transparent', borderColor: agreePrivate ? BrandColors.requester : '#D1D5DB' }]}>
+          {agreePrivate && <Icon name="checkmark-outline" size={14} color="#FFFFFF" />}
+        </View>
+        <ThemedText style={[styles.contractConsentText, { color: theme.text }]}>
+          제3호: 본 거래는 개인 간 거래로서 플랫폼은 통신판매중개자의 지위에 있음을 이해하며, 매칭 완료 후(운송인 연락처 전달 후) 취소 시 계약금이 환불되지 않음에 동의합니다. <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
+        </ThemedText>
+      </Pressable>
+
+      <Pressable style={styles.contractConsentRow} onPress={() => setAgreePaymentDate(!agreePaymentDate)}>
+        <View style={[styles.contractCheckbox, { backgroundColor: agreePaymentDate ? BrandColors.requester : 'transparent', borderColor: agreePaymentDate ? BrandColors.requester : '#D1D5DB' }]}>
+          {agreePaymentDate && <Icon name="checkmark-outline" size={14} color="#FFFFFF" />}
+        </View>
+        <ThemedText style={[styles.contractConsentText, { color: theme.text }]}>
+          제4호: 상기 지정한 잔금 입금 예정일({paymentDueDate || "미선택"})까지 잔여금을 지급할 것을 확약하며, 미이행 시 제5조의 신용거래 조항이 적용됨에 동의합니다. <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
+        </ThemedText>
+      </Pressable>
+
+      <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
+        제14조 (분쟁 해결)
       </ThemedText>
       <ThemedText style={[styles.contractText, { color: theme.text }]}>
         1. 본 계약과 관련한 분쟁은 당사자 간 협의하여 해결하며, 협의가 이루어지지 않을 경우 "을"의 본점 소재지를 관할하는 법원을 전속관할 법원으로 합니다.{"\n"}
@@ -292,7 +419,7 @@ export default function Step7Contract({
             </ThemedText>
           </View>
           <ThemedText style={[styles.stepCardDescription, { color: Colors.light.tabIconDefault }]}>
-            {getCompanyName()} 오더에 대한 운송주선 계약서입니다
+            계약서 확인, 필수 동의사항 체크, 잔금 입금일 설정
           </ThemedText>
           <Pressable
             style={[styles.actionButton, { borderColor: BrandColors.requester, backgroundColor: hasReadContract ? (isDark ? '#064E3B' : '#ECFDF5') : 'transparent' }]}
@@ -379,52 +506,6 @@ export default function Step7Contract({
           </Pressable>
         </View>
 
-        {/* 4. 필수 동의사항 */}
-        <View style={[styles.stepCard, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}>
-          <View style={styles.stepCardHeader}>
-            <View style={[styles.stepBadge, { backgroundColor: allAgreed ? '#10B981' : BrandColors.requester }]}>
-              {allAgreed ? (
-                <Icon name="checkmark-outline" size={16} color="#FFFFFF" />
-              ) : (
-                <ThemedText style={styles.stepBadgeText}>4</ThemedText>
-              )}
-            </View>
-            <ThemedText style={[styles.stepCardTitle, { color: theme.text }]}>
-              필수 동의사항
-            </ThemedText>
-          </View>
-          <ThemedText style={[styles.stepCardDescription, { color: Colors.light.tabIconDefault }]}>
-            아래 사항에 모두 동의하셔야 오더 제출이 가능합니다
-          </ThemedText>
-
-          <Pressable style={styles.consentRow} onPress={() => setAgreePayment(!agreePayment)}>
-            <View style={[styles.checkbox, { backgroundColor: agreePayment ? BrandColors.requester : 'transparent', borderColor: agreePayment ? BrandColors.requester : '#D1D5DB' }]}>
-              {agreePayment && <Icon name="checkmark-outline" size={14} color="#FFFFFF" />}
-            </View>
-            <ThemedText style={[styles.consentText, { color: theme.text }]}>
-              잔여금은 마감 자료(실제 배송 수량) 기준으로 확정되며, 청구일로부터 7일 이내 지급할 것에 동의합니다. <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
-            </ThemedText>
-          </Pressable>
-
-          <Pressable style={styles.consentRow} onPress={() => setAgreeCredit(!agreeCredit)}>
-            <View style={[styles.checkbox, { backgroundColor: agreeCredit ? BrandColors.requester : 'transparent', borderColor: agreeCredit ? BrandColors.requester : '#D1D5DB' }]}>
-              {agreeCredit && <Icon name="checkmark-outline" size={14} color="#FFFFFF" />}
-            </View>
-            <ThemedText style={[styles.consentText, { color: theme.text }]}>
-              잔여금 정산은 신용거래이며, 미지급 시 서비스 이용 제한 및 법적 조치(지연이자, 소송비용 부담 포함)가 발생할 수 있음에 동의합니다. <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
-            </ThemedText>
-          </Pressable>
-
-          <Pressable style={styles.consentRow} onPress={() => setAgreePrivate(!agreePrivate)}>
-            <View style={[styles.checkbox, { backgroundColor: agreePrivate ? BrandColors.requester : 'transparent', borderColor: agreePrivate ? BrandColors.requester : '#D1D5DB' }]}>
-              {agreePrivate && <Icon name="checkmark-outline" size={14} color="#FFFFFF" />}
-            </View>
-            <ThemedText style={[styles.consentText, { color: theme.text }]}>
-              본 거래는 개인 간 거래로서 플랫폼은 중개자임을 이해하며, 매칭 완료 후(연락처 전달 후) 취소 시 계약금이 환불되지 않음에 동의합니다. <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
-            </ThemedText>
-          </Pressable>
-        </View>
-
         {isAllComplete && (
           <View style={[styles.infoBox, { backgroundColor: isDark ? '#064E3B' : '#ECFDF5' }]}>
             <Icon name="checkmark-circle" size={20} color="#10B981" />
@@ -446,12 +527,17 @@ export default function Step7Contract({
           </View>
           {renderContractContent()}
           <View style={[styles.modalFooter, { backgroundColor: theme.backgroundRoot, borderTopColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}>
+            {!allAgreedInContract && (
+              <ThemedText style={[styles.modalFooterHint, { color: BrandColors.error }]}>
+                필수 동의사항을 모두 체크하고 입금 예정일을 선택해주세요
+              </ThemedText>
+            )}
             <Pressable
-              style={[styles.modalButton, { backgroundColor: BrandColors.requester }]}
+              style={[styles.modalButton, { backgroundColor: BrandColors.requester, opacity: allAgreedInContract ? 1 : 0.5 }]}
               onPress={handleConfirmContract}
             >
               <ThemedText style={[styles.modalButtonText, { color: '#FFFFFF' }]}>
-                {hasReadContract ? "확인 완료" : "계약서 내용을 확인하였습니다"}
+                {hasReadContract ? "계약서 확인 완료" : "위 내용에 동의하고 계약서를 확인합니다"}
               </ThemedText>
             </Pressable>
           </View>
@@ -587,6 +673,29 @@ export default function Step7Contract({
           </View>
         </View>
       </Modal>
+
+      {/* 잔금 입금일 달력 */}
+      {showPaymentDatePicker && Platform.OS !== 'web' && (
+        <DateTimePicker
+          value={paymentDueDate ? parseStringToDate(paymentDueDate) : getDefaultPaymentDueDate()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          minimumDate={new Date()}
+          onChange={handlePaymentDateChange}
+        />
+      )}
+
+      {Platform.OS === 'web' && (
+        <WebCalendar
+          visible={showPaymentDatePicker}
+          selectedDate={paymentDueDate ? parseStringToDate(paymentDueDate) : getDefaultPaymentDueDate()}
+          title="잔금 입금 예정일 선택"
+          onSelect={(date) => {
+            handlePaymentDateChange(null, date);
+          }}
+          onClose={() => setShowPaymentDatePicker(false)}
+        />
+      )}
 
       <View style={[styles.footer, { backgroundColor: theme.backgroundRoot, paddingBottom: bottomPadding || 0 }]}>
         <Pressable
@@ -846,14 +955,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: Spacing.sm,
   },
-  consentRow: {
+  contractConsentRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: Spacing.sm,
     marginBottom: Spacing.md,
     paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
   },
-  checkbox: {
+  contractCheckbox: {
     width: 22,
     height: 22,
     borderWidth: 2,
@@ -862,10 +972,39 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 2,
   },
-  consentText: {
+  contractConsentText: {
     ...Typography.caption,
     flex: 1,
     lineHeight: 20,
+  },
+  contractDatePicker: {
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.lg,
+    marginTop: Spacing.sm,
+  },
+  contractDatePickerLabel: {
+    ...Typography.body,
+    fontWeight: '600',
+    marginBottom: Spacing.sm,
+  },
+  contractDateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
+  contractDateButtonText: {
+    ...Typography.body,
+  },
+  modalFooterHint: {
+    ...Typography.caption,
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
   },
   footer: {
     position: 'absolute',
