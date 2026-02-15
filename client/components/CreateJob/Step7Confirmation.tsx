@@ -15,6 +15,7 @@ export default function Step7Confirmation({
   setColdTruckForm,
   onSubmit,
   isSubmitting,
+  onNext,
   onBack,
   theme,
   isDark,
