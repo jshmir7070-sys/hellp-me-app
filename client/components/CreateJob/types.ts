@@ -3,9 +3,6 @@ export type CategoryTab = "택배사" | "기타택배" | "냉탑전용";
 
 export interface ContractSettings {
   depositRate: number;
-  cancelBefore24hRefundRate: number;
-  cancelWithin24hRefundRate: number;
-  cancelSameDayRefundRate: number;
 }
 
 export interface CourierFormData {

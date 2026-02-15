@@ -21,9 +21,6 @@ export default function Step7Contract({
   contractSettings,
 }: Step7Props) {
   const depositRate = contractSettings?.depositRate ?? 10;
-  const cancelBefore24h = contractSettings?.cancelBefore24hRefundRate ?? 100;
-  const cancelWithin24h = contractSettings?.cancelWithin24hRefundRate ?? 50;
-  const cancelSameDay = contractSettings?.cancelSameDayRefundRate ?? 0;
   const { user } = useAuth();
   const [hasReadContract, setHasReadContract] = useState(false);
   const [showContractModal, setShowContractModal] = useState(false);
@@ -34,6 +31,9 @@ export default function Step7Contract({
   const [verificationCode, setVerificationCode] = useState("");
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [sentCode, setSentCode] = useState("");
+  const [agreePayment, setAgreePayment] = useState(false);
+  const [agreeCredit, setAgreeCredit] = useState(false);
+  const [agreePrivate, setAgreePrivate] = useState(false);
 
   const getCompanyName = () => {
     if (activeTab === "택배사") return courierForm.company;
@@ -42,8 +42,14 @@ export default function Step7Contract({
   };
 
   const getDeliveryArea = () => {
-    if (activeTab === "택배사") return `${courierForm.regionLarge} ${courierForm.regionMedium}`;
-    if (activeTab === "기타택배") return `${otherCourierForm.regionLarge} ${otherCourierForm.regionMedium}`;
+    if (activeTab === "택배사") {
+      const parts = [courierForm.regionLarge, courierForm.regionMedium, courierForm.regionSmall].filter(Boolean);
+      return parts.join(' ');
+    }
+    if (activeTab === "기타택배") {
+      const parts = [otherCourierForm.regionLarge, otherCourierForm.regionMedium, otherCourierForm.regionSmall].filter(Boolean);
+      return parts.join(' ');
+    }
     return coldTruckForm.loadingPoint;
   };
 
@@ -105,6 +111,10 @@ export default function Step7Contract({
       Alert.alert("알림", "계약서를 먼저 확인해주세요.");
       return;
     }
+    if (!agreePayment || !agreeCredit || !agreePrivate) {
+      Alert.alert("알림", "필수 동의사항을 모두 체크해주세요.");
+      return;
+    }
     if (!signatureData) {
       Alert.alert("알림", "서명을 완료해주세요.");
       return;
@@ -116,7 +126,14 @@ export default function Step7Contract({
     onSubmit();
   };
 
-  const isAllComplete = hasReadContract && !!signatureData && isVerified;
+  const allAgreed = agreePayment && agreeCredit && agreePrivate;
+  const isAllComplete = hasReadContract && allAgreed && !!signatureData && isVerified;
+
+  const getQuantityInfo = () => {
+    if (activeTab === "택배사") return courierForm.avgQuantity ? `평균 ${courierForm.avgQuantity}건` : "-";
+    if (activeTab === "기타택배") return otherCourierForm.boxCount ? `평균 ${otherCourierForm.boxCount}박스` : "-";
+    return coldTruckForm.freight ? `운임 ${parseInt(coldTruckForm.freight).toLocaleString()}원` : "-";
+  };
 
   const renderContractContent = () => (
     <ScrollView style={styles.contractScroll}>
@@ -125,23 +142,25 @@ export default function Step7Contract({
       </ThemedText>
 
       <ThemedText style={[styles.contractText, { color: theme.text }]}>
-        본 계약은 「화물자동차 운수사업법」 및 관련 법령에 따라 아래 당사자 간에 운송주선에 관한 사항을 정하기 위하여 체결합니다.
+        본 계약은 「화물자동차 운수사업법」 및 관련 법령에 따라 아래 당사자 간에 운송주선에 관한 사항을 정하기 위하여 체결합니다. 본 플랫폼은 운송 주선 중개 서비스를 제공하며, "갑"과 운송인(헬퍼) 간의 운송 계약은 개인 간 거래로서 플랫폼은 거래의 당사자가 아님을 확인합니다.
       </ThemedText>
 
       <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
-        제1조 (계약 당사자)
+        제1조 (계약 당사자 및 플랫폼의 지위)
       </ThemedText>
       <ThemedText style={[styles.contractText, { color: theme.text }]}>
         1. 위탁자(이하 "갑"): {user?.name || user?.username || "(요청자)"}{"\n"}
-        2. 수탁자(이하 "을"): 헬프미 주식회사{"\n"}
-        3. 운송사: {getCompanyName() || "(미정)"}
+        2. 플랫폼 운영자(이하 "을"): 헬프미 주식회사{"\n"}
+        3. 운송사: {getCompanyName() || "(미정)"}{"\n"}
+        4. "을"은 "갑"과 운송인(헬퍼) 간 운송 거래를 중개하는 플랫폼 운영자로서, 운송 용역의 직접적인 당사자가 아닙니다.{"\n"}
+        5. "갑"과 운송인(헬퍼) 간의 운송 계약은 개인 간 거래이며, 운송 용역의 이행에 관한 권리·의무는 "갑"과 운송인(헬퍼) 사이에 직접 발생합니다.
       </ThemedText>
 
       <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
         제2조 (계약 목적)
       </ThemedText>
       <ThemedText style={[styles.contractText, { color: theme.text }]}>
-        "을"은 "갑"의 위탁에 따라 화물 운송을 주선하며, "갑"은 이에 대한 대가를 지급합니다.
+        "을"은 "갑"의 의뢰에 따라 적합한 운송인(헬퍼)을 매칭하여 화물 운송을 주선하며, "갑"은 이에 대한 대가를 지급합니다.
       </ThemedText>
 
       <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
@@ -151,59 +170,93 @@ export default function Step7Contract({
         1. 운송 구간: {getDeliveryArea() || "-"}{"\n"}
         2. 차량 종류: {getVehicleType() || "-"}{"\n"}
         3. 운송 기간: {getSchedule()}{"\n"}
-        4. 운송 유형: {activeTab}
+        4. 운송 유형: {activeTab}{"\n"}
+        5. 예상 물량: {getQuantityInfo()} (본 수량은 평균 예상치이며, 확정 수량이 아닙니다)
       </ThemedText>
 
       <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
-        제4조 (운임 및 대금 지급)
+        제4조 (운임 산정 및 대금 지급)
       </ThemedText>
       <ThemedText style={[styles.contractText, { color: theme.text }]}>
-        1. 운임은 "갑"과 "을"이 합의한 단가 기준으로 산정합니다.{"\n"}
-        2. "갑"은 오더 등록 시 계약금(총 운임의 {depositRate}%)을 선납합니다.{"\n"}
-        3. 잔금은 운송 완료 후 정산일에 지급합니다.{"\n"}
-        4. 긴급 오더의 경우 추가 할증이 적용될 수 있습니다.
+        1. 오더 등록 시 기재되는 수량은 평균 예상치로서, 실제 운송 수량과 차이가 발생할 수 있습니다.{"\n"}
+        2. "갑"은 오더 등록 시 예상 운임의 {depositRate}%를 계약금으로 선납합니다.{"\n"}
+        3. 최종 운임은 운송인(헬퍼)이 업무 종료 후 제출하는 마감 자료(실제 배송 수량, 배송 완료 건수 등)를 기준으로 확정합니다.{"\n"}
+        4. 잔여금(최종 운임 - 계약금)은 마감 자료 확정 후 정산일에 청구되며, "갑"은 청구일로부터 7일 이내에 지급하여야 합니다.{"\n"}
+        5. 마감 자료에 이의가 있는 경우, "갑"은 자료 수신일로부터 3영업일 이내에 서면으로 이의를 제기하여야 하며, 기한 내 이의가 없는 경우 마감 자료를 승인한 것으로 간주합니다.{"\n"}
+        6. 긴급 오더의 경우 추가 할증이 적용될 수 있습니다.
       </ThemedText>
 
       <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
-        제5조 (갑의 의무)
+        제5조 (잔여금 미지급 및 신용거래)
+      </ThemedText>
+      <ThemedText style={[styles.contractText, { color: theme.text }]}>
+        1. "갑"이 정산일로부터 7일 이내에 잔여금을 지급하지 않을 경우, 지연일수에 대하여 연 12%의 지연이자가 발생합니다.{"\n"}
+        2. 잔여금 미지급이 14일 이상 지속될 경우, "을"은 "갑"의 서비스 이용을 제한(오더 등록 정지, 계정 이용 제한)할 수 있습니다.{"\n"}
+        3. 잔여금 미지급이 30일 이상 지속될 경우, "을"은 법적 절차(지급명령 신청, 민사소송 등)를 진행할 수 있으며, 이에 따른 법적 비용(소송비용, 변호사 비용 등)은 "갑"이 부담합니다.{"\n"}
+        4. "갑"은 본 계약 체결 시 잔여금 정산이 신용거래임을 인지하고, 미지급 시 상기 불이익이 발생할 수 있음에 동의합니다.
+      </ThemedText>
+
+      <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
+        제6조 (갑의 의무)
       </ThemedText>
       <ThemedText style={[styles.contractText, { color: theme.text }]}>
         1. "갑"은 정확한 화물 정보 및 배송지 정보를 제공하여야 합니다.{"\n"}
         2. "갑"은 합의된 일정에 따라 상·하차에 협조하여야 합니다.{"\n"}
-        3. "갑"은 위험물, 불법 화물을 의뢰할 수 없습니다.
+        3. "갑"은 위험물, 불법 화물을 의뢰할 수 없습니다.{"\n"}
+        4. "갑"은 마감 자료 확인 후 잔여금을 기한 내에 성실히 지급하여야 합니다.
       </ThemedText>
 
       <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
-        제6조 (을의 의무)
+        제7조 (을의 의무)
       </ThemedText>
       <ThemedText style={[styles.contractText, { color: theme.text }]}>
-        1. "을"은 적합한 운송 차량 및 인력을 배정하여야 합니다.{"\n"}
-        2. "을"은 화물의 안전한 운송을 위해 최선을 다하여야 합니다.{"\n"}
-        3. "을"은 운송 중 발생한 사고에 대해 관련 법령에 따라 책임을 집니다.
+        1. "을"은 적합한 운송인(헬퍼)을 매칭하기 위해 최선을 다하여야 합니다.{"\n"}
+        2. "을"은 플랫폼의 안정적 운영 및 거래 정보의 정확한 전달을 위해 노력합니다.{"\n"}
+        3. "을"은 운송 용역의 직접적인 이행 주체가 아니므로, 운송 과정에서 발생하는 사고·지연·품질 문제에 대하여 직접적인 책임을 부담하지 않습니다. 다만, "을"의 중개 과실이 있는 경우에는 그 범위 내에서 책임을 부담합니다.
       </ThemedText>
 
       <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
-        제7조 (계약 해지 및 위약금)
+        제8조 (계약 해지 및 취소)
       </ThemedText>
       <ThemedText style={[styles.contractText, { color: theme.text }]}>
-        1. 운송 시작 24시간 전까지 취소 시 계약금의 {cancelBefore24h}%가 환불됩니다.{"\n"}
-        2. 운송 시작 24시간 이내 취소 시 계약금의 {100 - cancelWithin24h}%가 위약금으로 공제됩니다.{"\n"}
-        3. 운송 당일 취소 시 계약금의 {100 - cancelSameDay}%가 위약금으로 공제됩니다.
+        1. 매칭 완료 전(운송인 배정 전) 취소 시: 계약금 전액(100%)이 환불됩니다.{"\n"}
+        2. 매칭 완료 후(운송인 연락처 전달 후) 취소 시: 계약금은 환불되지 않습니다(환불율 0%). 이는 운송인(헬퍼)이 이미 업무를 준비하였으므로, 개인 간 거래의 특성상 취소에 따른 운송인의 손해를 보전하기 위함입니다.{"\n"}
+        3. "갑"의 귀책 사유로 인한 취소 시, "을"은 운송인(헬퍼)에게 이미 발생한 비용을 정산할 수 있습니다.{"\n"}
+        4. 천재지변, 법령 변경 등 불가항력적 사유로 운송이 불가능한 경우, 양 당사자는 협의하여 계약을 해지할 수 있으며, 이 경우 상호 손해배상 의무를 부담하지 않습니다.
       </ThemedText>
 
       <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
-        제8조 (손해배상)
+        제9조 (손해배상)
       </ThemedText>
       <ThemedText style={[styles.contractText, { color: theme.text }]}>
-        1. 운송 중 "을"의 귀책 사유로 화물이 멸실·훼손된 경우, "을"은 실손해액 범위 내에서 배상합니다.{"\n"}
-        2. "갑"이 제공한 정보의 부정확으로 인한 손해는 "갑"이 부담합니다.
+        1. 운송 중 운송인(헬퍼)의 귀책 사유로 화물이 멸실·훼손된 경우, "갑"과 운송인(헬퍼) 간에 직접 손해배상을 청구·해결합니다.{"\n"}
+        2. "을"은 플랫폼 중개자로서, 분쟁 해결을 위한 중재 및 지원 서비스를 제공할 수 있으나, 손해배상의 직접적인 책임 주체가 아닙니다.{"\n"}
+        3. "갑"이 제공한 정보의 부정확으로 인한 손해는 "갑"이 부담합니다.
       </ThemedText>
 
       <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
-        제9조 (분쟁 해결)
+        제10조 (개인정보 처리)
       </ThemedText>
       <ThemedText style={[styles.contractText, { color: theme.text }]}>
-        본 계약과 관련한 분쟁은 당사자 간 협의하여 해결하며, 협의가 이루어지지 않을 경우 관할 법원에 따릅니다.
+        1. 매칭 완료 시 "갑"과 운송인(헬퍼)에게 상호 연락처가 제공됩니다. 제공된 연락처는 해당 운송 건의 업무 수행 목적으로만 사용하여야 하며, 그 외 목적으로 이용하거나 제3자에게 제공할 수 없습니다.{"\n"}
+        2. "을"은 「개인정보 보호법」에 따라 개인정보를 처리하며, 상세 사항은 개인정보 처리방침에 따릅니다.
+      </ThemedText>
+
+      <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
+        제11조 (면책)
+      </ThemedText>
+      <ThemedText style={[styles.contractText, { color: theme.text }]}>
+        1. "을"은 "갑"과 운송인(헬퍼) 간 개인 간 거래의 중개자로서, 운송 용역의 품질, 완전성, 적시성을 보증하지 않습니다.{"\n"}
+        2. "을"의 책임은 플랫폼 운영 및 중개 서비스 범위에 한정되며, 「전자상거래 등에서의 소비자보호에 관한 법률」 제20조에 따른 통신판매중개자의 책임 범위를 따릅니다.{"\n"}
+        3. "갑"은 본 거래가 개인 간 거래임을 충분히 이해하고 동의합니다.
+      </ThemedText>
+
+      <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
+        제12조 (분쟁 해결)
+      </ThemedText>
+      <ThemedText style={[styles.contractText, { color: theme.text }]}>
+        1. 본 계약과 관련한 분쟁은 당사자 간 협의하여 해결하며, 협의가 이루어지지 않을 경우 "을"의 본점 소재지를 관할하는 법원을 전속관할 법원으로 합니다.{"\n"}
+        2. "갑"과 운송인(헬퍼) 간의 분쟁에 대하여 "을"은 중재를 지원할 수 있으나, 법적 분쟁의 당사자가 되지 않습니다.
       </ThemedText>
 
       <ThemedText style={[styles.contractDate, { color: theme.text }]}>
@@ -322,6 +375,52 @@ export default function Step7Contract({
             <Icon name={isVerified ? "checkmark-circle-outline" : "shield-checkmark-outline"} size={20} color={isVerified ? '#10B981' : (signatureData ? BrandColors.requester : Colors.light.tabIconDefault)} />
             <ThemedText style={[styles.actionButtonText, { color: isVerified ? '#10B981' : (signatureData ? BrandColors.requester : Colors.light.tabIconDefault) }]}>
               {isVerified ? "인증 완료" : "본인인증 하기"}
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        {/* 4. 필수 동의사항 */}
+        <View style={[styles.stepCard, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}>
+          <View style={styles.stepCardHeader}>
+            <View style={[styles.stepBadge, { backgroundColor: allAgreed ? '#10B981' : BrandColors.requester }]}>
+              {allAgreed ? (
+                <Icon name="checkmark-outline" size={16} color="#FFFFFF" />
+              ) : (
+                <ThemedText style={styles.stepBadgeText}>4</ThemedText>
+              )}
+            </View>
+            <ThemedText style={[styles.stepCardTitle, { color: theme.text }]}>
+              필수 동의사항
+            </ThemedText>
+          </View>
+          <ThemedText style={[styles.stepCardDescription, { color: Colors.light.tabIconDefault }]}>
+            아래 사항에 모두 동의하셔야 오더 제출이 가능합니다
+          </ThemedText>
+
+          <Pressable style={styles.consentRow} onPress={() => setAgreePayment(!agreePayment)}>
+            <View style={[styles.checkbox, { backgroundColor: agreePayment ? BrandColors.requester : 'transparent', borderColor: agreePayment ? BrandColors.requester : '#D1D5DB' }]}>
+              {agreePayment && <Icon name="checkmark-outline" size={14} color="#FFFFFF" />}
+            </View>
+            <ThemedText style={[styles.consentText, { color: theme.text }]}>
+              잔여금은 마감 자료(실제 배송 수량) 기준으로 확정되며, 청구일로부터 7일 이내 지급할 것에 동의합니다. <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
+            </ThemedText>
+          </Pressable>
+
+          <Pressable style={styles.consentRow} onPress={() => setAgreeCredit(!agreeCredit)}>
+            <View style={[styles.checkbox, { backgroundColor: agreeCredit ? BrandColors.requester : 'transparent', borderColor: agreeCredit ? BrandColors.requester : '#D1D5DB' }]}>
+              {agreeCredit && <Icon name="checkmark-outline" size={14} color="#FFFFFF" />}
+            </View>
+            <ThemedText style={[styles.consentText, { color: theme.text }]}>
+              잔여금 정산은 신용거래이며, 미지급 시 서비스 이용 제한 및 법적 조치(지연이자, 소송비용 부담 포함)가 발생할 수 있음에 동의합니다. <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
+            </ThemedText>
+          </Pressable>
+
+          <Pressable style={styles.consentRow} onPress={() => setAgreePrivate(!agreePrivate)}>
+            <View style={[styles.checkbox, { backgroundColor: agreePrivate ? BrandColors.requester : 'transparent', borderColor: agreePrivate ? BrandColors.requester : '#D1D5DB' }]}>
+              {agreePrivate && <Icon name="checkmark-outline" size={14} color="#FFFFFF" />}
+            </View>
+            <ThemedText style={[styles.consentText, { color: theme.text }]}>
+              본 거래는 개인 간 거래로서 플랫폼은 중개자임을 이해하며, 매칭 완료 후(연락처 전달 후) 취소 시 계약금이 환불되지 않음에 동의합니다. <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
           </Pressable>
         </View>
@@ -746,6 +845,27 @@ const styles = StyleSheet.create({
   resendButton: {
     alignItems: 'center',
     paddingVertical: Spacing.sm,
+  },
+  consentRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderWidth: 2,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  consentText: {
+    ...Typography.caption,
+    flex: 1,
+    lineHeight: 20,
   },
   footer: {
     position: 'absolute',

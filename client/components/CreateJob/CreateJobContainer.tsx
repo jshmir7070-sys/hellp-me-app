@@ -188,9 +188,6 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
 
   const contractSettings: ContractSettings = contractSettingsData ?? {
     depositRate: 10,
-    cancelBefore24hRefundRate: 100,
-    cancelWithin24hRefundRate: 50,
-    cancelSameDayRefundRate: 0,
   };
 
   const getMinDeliveryFee = (courierName: string): number => {

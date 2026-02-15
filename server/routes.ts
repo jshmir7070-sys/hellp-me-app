@@ -1409,9 +1409,6 @@ export async function registerRoutes(
 
       res.json({
         depositRate: parseInt(settingsMap["deposit_rate"]) || 10,
-        cancelBefore24hRefundRate: parseInt(settingsMap["cancel_before_24h_refund_rate"]) || 100,
-        cancelWithin24hRefundRate: parseInt(settingsMap["cancel_within_24h_refund_rate"]) || 50,
-        cancelSameDayRefundRate: parseInt(settingsMap["cancel_same_day_refund_rate"]) || 0,
       });
     } catch (err) {
       console.error("Error fetching contract settings:", err);
