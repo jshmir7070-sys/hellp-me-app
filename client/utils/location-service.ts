@@ -16,7 +16,6 @@ let updateInterval: NodeJS.Timeout | null = null;
 
 export async function requestLocationPermission(): Promise<boolean> {
   if (Platform.OS === 'web') {
-    console.log('Location tracking limited on web');
     return false;
   }
 
@@ -62,7 +61,6 @@ export async function sendLocationToServer(location: LocationData): Promise<bool
   try {
     const token = await getToken();
     if (!token) {
-      console.log('No auth token, cannot send location');
       return false;
     }
 

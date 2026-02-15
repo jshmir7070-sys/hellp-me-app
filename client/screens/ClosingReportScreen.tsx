@@ -89,7 +89,7 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
 
     if (!res.ok) {
       const errorText = await res.text();
-      console.error("Upload error:", res.status, errorText);
+      if (__DEV__) console.error("Upload error:", res.status, errorText);
       throw new Error("이미지 업로드에 실패했습니다");
     }
 

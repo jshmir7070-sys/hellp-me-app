@@ -102,12 +102,12 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   
   const showOnboardingBanner = isHelper && user?.onboardingStatus !== 'approved';
 
-  const { data: helperStats, isLoading: isLoadingHelperStats } = useQuery<any>({
+  const { data: helperStats, isLoading: isLoadingHelperStats, isFetching: isFetchingHelperStats, refetch: refetchHelperStats } = useQuery<any>({
     queryKey: ['/api/helper/work-history', { limit: 10 }],
     enabled: isHelper,
   });
 
-  const { data: requesterOrders, isLoading: isLoadingRequesterOrders } = useQuery<any[]>({
+  const { data: requesterOrders, isLoading: isLoadingRequesterOrders, isFetching: isFetchingRequesterOrders, refetch: refetchRequesterOrders } = useQuery<any[]>({
     queryKey: ['/api/requester/orders'],
     enabled: !isHelper,
   });
@@ -132,9 +132,16 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   }, [isHelper, helperStats, requesterOrders]);
 
   const isLoadingStats = isHelper ? isLoadingHelperStats : isLoadingRequesterOrders;
-  const isRefetching = false;
+  const isRefetching = isHelper ? isFetchingHelperStats : isFetchingRequesterOrders;
 
-  const refetchStats = () => {};
+  const refetchStats = () => {
+    if (isHelper) {
+      refetchHelperStats();
+    } else {
+      refetchRequesterOrders();
+    }
+    refetchScheduled();
+  };
 
   const { data: scheduledOrdersRaw = [], refetch: refetchScheduled } = useQuery<any[]>({
     queryKey: ['/api/orders/scheduled'],
@@ -808,7 +815,7 @@ function RequesterDashboard({
       stars.push(
         <Icon
           key={i}
-          name={i <= displayRating ? "star-outline" : "star-outline"}
+          name={i <= displayRating ? "star" : "star-outline"}
           size={18}
           color={i <= displayRating ? BrandColors.warning : BrandColors.neutral}
           style={{ marginRight: 2 }}
@@ -1099,6 +1106,28 @@ function handleRequesterAction(action: string, data: OrderCardDTO, navigation: N
       navigation.navigate('CreateContract', { editMode: true, orderId: data.orderId });
       break;
     case 'CANCEL_ORDER':
+      Alert.alert(
+        '오더 취소',
+        '이 오더를 취소하시겠습니까?\n취소 후에는 되돌릴 수 없습니다.',
+        [
+          { text: '아니오', style: 'cancel' },
+          {
+            text: '취소하기',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const { apiRequest, queryClient: qc } = await import('@/lib/query-client');
+                await apiRequest('DELETE', `/api/orders/${data.orderId}`);
+                qc.invalidateQueries({ queryKey: ['/api/requester/orders'] });
+                qc.invalidateQueries({ queryKey: ['/api/orders'] });
+                Alert.alert('완료', '오더가 취소되었습니다.');
+              } catch (err: any) {
+                Alert.alert('오류', err.message || '오더 취소에 실패했습니다.');
+              }
+            },
+          },
+        ]
+      );
       break;
   }
 }

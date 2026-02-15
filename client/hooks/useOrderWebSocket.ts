@@ -52,7 +52,6 @@ export function useOrderWebSocket() {
       const ws = new WebSocket(`${wsUrl}/ws/notifications?userId=${userId}`);
 
       ws.onopen = () => {
-        console.log('[WebSocket] Connected for real-time order updates');
         isConnectingRef.current = false;
       };
 
@@ -61,10 +60,8 @@ export function useOrderWebSocket() {
           const message: WebSocketEvent = JSON.parse(event.data);
           
           if (message.event === 'new_order') {
-            console.log('[WebSocket] New order received:', message.data);
             queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
           } else if (message.event === 'order_status_updated') {
-            console.log('[WebSocket] Order status updated:', message.data);
             queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
             queryClient.invalidateQueries({ queryKey: ['/api/orders/my-applications'] });
           } else if (message.event === 'data_refresh') {
@@ -83,7 +80,6 @@ export function useOrderWebSocket() {
       };
 
       ws.onclose = () => {
-        console.log('[WebSocket] Disconnected, will reconnect in 5s');
         isConnectingRef.current = false;
         wsRef.current = null;
         

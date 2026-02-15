@@ -16,6 +16,7 @@ import { apiRequest } from "@/lib/query-client";
 
 type DisputeCreateScreenProps = NativeStackScreenProps<JobsStackParamList, 'DisputeCreate'>;
 
+// 이의제기 유형 (서버 disputes 테이블 disputeType 컬럼과 동기화 필요)
 const DISPUTE_TYPES = [
   { value: "count_mismatch", label: "수량 불일치" },
   { value: "amount_error", label: "금액 오류" },

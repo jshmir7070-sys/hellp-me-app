@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, BrandColors, Spacing, BorderRadius, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
 import { Card } from '@/components/Card';
+import { QueryErrorState } from "@/components/QueryErrorState";
 
 interface Evidence {
   id: number;
@@ -100,9 +101,11 @@ export default function RequesterIncidentDetailScreen() {
   const insets = useSafeAreaInsets();
   const { incidentId } = route.params;
 
-  const { data: incident, isLoading } = useQuery<IncidentDetail>({
+  const { data: incident, isLoading, isError, error, refetch } = useQuery<IncidentDetail>({
     queryKey: ['/api/incidents', incidentId],
   });
+
+  if (isError) return <QueryErrorState error={error as Error} onRetry={refetch} />;
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-';

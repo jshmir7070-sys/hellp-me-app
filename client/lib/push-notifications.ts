@@ -42,7 +42,6 @@ export function usePushNotifications(
 
   const registerForPushNotifications = useCallback(async (): Promise<string | null> => {
     if (!Device.isDevice) {
-      console.log('Push notifications require a physical device');
       return null;
     }
 

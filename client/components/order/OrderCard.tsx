@@ -113,7 +113,6 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
   };
 
   const handleCardPress = () => {
-    console.log("[OrderCard] Card pressed, orderId:", data.orderId);
     if (onPress) {
       onPress(data);
     }

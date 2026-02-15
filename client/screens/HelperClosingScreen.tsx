@@ -14,7 +14,8 @@ import { Card } from "@/components/Card";
 import { OrderCard } from "@/components/order/OrderCard";
 import { adaptHelperMyOrder, type OrderCardDTO } from "@/adapters/orderCardAdapter";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
-import { apiRequest, getApiUrl, getAuthToken } from "@/lib/query-client";
+import { apiRequest, apiUpload } from "@/lib/query-client";
+import { QueryErrorState } from "@/components/QueryErrorState";
 
 type ClosingStackParamList = {
   HelperClosing: undefined;
@@ -37,9 +38,11 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
   const tabBarHeight = useBottomTabBarHeight();
   const queryClient = useQueryClient();
 
-  const { data: orders = [], isLoading, refetch, isRefetching } = useQuery<any[]>({
+  const { data: orders = [], isLoading, refetch, isRefetching, isError, error } = useQuery<any[]>({
     queryKey: ['/api/helper/my-orders'],
   });
+
+  if (isError) return <QueryErrorState error={error as Error} onRetry={refetch} />;
 
   const inProgressOrders = React.useMemo(() => {
     return orders
@@ -267,15 +270,14 @@ export function ClosingInputScreen({ route, navigation }: any) {
 
   const uploadImages = async (images: UploadedImage[]): Promise<string[]> => {
     const fileKeys: string[] = [];
-    const token = await getAuthToken();
-    
+
     for (const img of images) {
       try {
         const formData = new FormData();
         const filename = img.uri.split('/').pop() || 'image.jpg';
         const ext = filename.split('.').pop()?.toLowerCase() || 'jpg';
         const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-        
+
         if (Platform.OS === 'web') {
           const response = await fetch(img.uri);
           const blob = await response.blob();
@@ -287,33 +289,17 @@ export function ClosingInputScreen({ route, navigation }: any) {
             type: mimeType,
           } as any);
         }
-        
+
         formData.append('imageType', img.type);
-        
-        const headers: Record<string, string> = {};
-        if (token) {
-          headers['Authorization'] = `Bearer ${token}`;
-        }
-        
-        const uploadRes = await fetch(new URL('/api/upload/closing-image', getApiUrl()).toString(), {
-          method: 'POST',
-          body: formData,
-          headers,
-          credentials: 'include',
-        });
-        
-        if (uploadRes.ok) {
-          const data = await uploadRes.json();
-          fileKeys.push(data.fileKey);
-        } else {
-          const errorText = await uploadRes.text();
-          console.error('Upload failed:', uploadRes.status, errorText);
-        }
+
+        const uploadRes = await apiUpload('/api/upload/closing-image', formData);
+        const data = await uploadRes.json();
+        fileKeys.push(data.fileKey);
       } catch (err) {
         console.error('Upload error:', err);
       }
     }
-    
+
     return fileKeys;
   };
 

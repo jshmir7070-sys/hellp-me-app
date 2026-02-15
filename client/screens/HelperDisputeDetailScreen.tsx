@@ -10,6 +10,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
+import { QueryErrorState } from "@/components/QueryErrorState";
 
 type HelperDisputeDetailScreenProps = NativeStackScreenProps<any, 'HelperDisputeDetail'>;
 
@@ -61,10 +62,12 @@ export default function HelperDisputeDetailScreen({ route }: HelperDisputeDetail
   const { theme } = useTheme();
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
-  const { data: dispute, isLoading } = useQuery<DisputeDetail>({
+  const { data: dispute, isLoading, isError, error, refetch } = useQuery<DisputeDetail>({
     queryKey: ["/api/helper/disputes", disputeId],
     enabled: !!disputeId,
   });
+
+  if (isError) return <QueryErrorState error={error as Error} onRetry={refetch} />;
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "-";

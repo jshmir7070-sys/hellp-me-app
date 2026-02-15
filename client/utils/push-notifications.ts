@@ -26,12 +26,10 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   let token: string | null = null;
 
   if (Platform.OS === 'web') {
-    console.log('Push notifications not supported on web');
     return null;
   }
 
   if (!Device.isDevice) {
-    console.log('Must use physical device for Push Notifications');
     return null;
   }
 
@@ -44,7 +42,6 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   }
 
   if (finalStatus !== 'granted') {
-    console.log('Failed to get push token for push notification!');
     return null;
   }
 
@@ -74,7 +71,6 @@ export async function savePushTokenToServer(token: string): Promise<boolean> {
   try {
     const authToken = await getToken();
     if (!authToken) {
-      console.log('No auth token, cannot save push token');
       return false;
     }
 
@@ -95,7 +91,7 @@ export async function savePushTokenToServer(token: string): Promise<boolean> {
     );
 
     if (!response.ok) {
-      console.error('Failed to save push token to server');
+      if (__DEV__) console.error('Failed to save push token to server');
       return false;
     }
 

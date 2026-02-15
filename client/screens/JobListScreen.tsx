@@ -72,7 +72,18 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
     },
   });
 
-  const categories = ['전체', '택배사', '기타택배', '냉잡전용'];
+  // 카테고리 목록을 서버 메타데이터에서 가져오되, 실패 시 기본값 사용
+  const { data: metaCategories } = useQuery<any[]>({
+    queryKey: ['/api/meta/couriers'],
+    staleTime: 5 * 60 * 1000, // 5분 캐시
+  });
+  const categories = useMemo(() => {
+    if (metaCategories && Array.isArray(metaCategories) && metaCategories.length > 0) {
+      const names = metaCategories.map((c: any) => c.courierName || c.name).filter(Boolean);
+      return ['전체', ...names];
+    }
+    return ['전체', '택배사', '기타택배', '냉탑전용'];
+  }, [metaCategories]);
 
   const filteredOrders = useMemo(() => {
     const filtered = selectedCategory && selectedCategory !== '전체'
@@ -113,7 +124,6 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
   };
 
   const handlePress = (data: OrderCardDTO) => {
-    console.log("[JobListScreen] handlePress called, opening modal", data.orderId);
     setSelectedOrder(data);
     setModalVisible(true);
   };

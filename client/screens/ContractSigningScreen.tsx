@@ -4,14 +4,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { getToken } from '@/utils/secure-token-storage';
-
 import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { Spacing, BorderRadius, BrandColors, Colors } from '@/constants/theme';
-import { getApiUrl } from '@/lib/query-client';
+import { apiRequest } from '@/lib/query-client';
 
 type ContractSigningScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -118,43 +116,31 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
     }
   };
 
+  // 본인인증 처리 (PASS/KCB 연동 전까지 서버 측 간이 인증 사용)
   const handlePhoneVerification = async () => {
     setIsVerifying(true);
     try {
-      const token = await getToken();
-      const response = await fetch(
-        new URL('/api/identity/request', getApiUrl()).toString(),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        }
-      );
-      
-      if (response.ok) {
-        setPhoneVerified(true);
-        if (Platform.OS === 'web') {
-          alert('본인인증이 완료되었습니다.');
-        } else {
-          Alert.alert('완료', '본인인증이 완료되었습니다.');
-        }
-      } else {
-        throw new Error('본인인증 요청 실패');
-      }
-    } catch (error) {
-      console.error('본인인증 오류:', error);
+      const result = await apiRequest('POST', '/api/identity/request');
+
+      setPhoneVerified(true);
       if (Platform.OS === 'web') {
-        alert('본인인증에 실패했습니다. 다시 시도해주세요.');
+        alert('본인인증이 완료되었습니다.');
       } else {
-        Alert.alert('오류', '본인인증에 실패했습니다. 다시 시도해주세요.');
+        Alert.alert('완료', '본인인증이 완료되었습니다.');
+      }
+    } catch (error: any) {
+      const msg = error?.message || '본인인증에 실패했습니다. 다시 시도해주세요.';
+      if (Platform.OS === 'web') {
+        alert(msg);
+      } else {
+        Alert.alert('오류', msg);
       }
     } finally {
       setIsVerifying(false);
     }
   };
 
+  // 전자서명 처리 (계약 제출 시 signedAt 타임스탬프와 함께 서버에 전송됨)
   const handleSignature = () => {
     setSignatureComplete(true);
     if (Platform.OS === 'web') {
@@ -175,25 +161,13 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
 
     setIsSubmitting(true);
     try {
-      const token = await getToken();
-      
-      const response = await fetch(
-        new URL('/api/helpers/onboarding/submit', getApiUrl()).toString(),
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            contractSigned: true,
-            phoneVerified: true,
-            signedAt: new Date().toISOString(),
-          }),
-        }
-      );
+      const response = await apiRequest('POST', '/api/helpers/onboarding/submit', {
+        contractSigned: true,
+        phoneVerified: true,
+        signedAt: new Date().toISOString(),
+      });
 
-      if (response.ok) {
+      if (response) {
         if (refreshUser) {
           await refreshUser();
         }
@@ -214,12 +188,8 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
             }) }]
           );
         }
-      } else {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || '제출 실패');
       }
     } catch (error: any) {
-      console.error('Submit error:', error);
       if (Platform.OS === 'web') {
         alert('제출 실패: ' + (error.message || '다시 시도해주세요.'));
       } else {

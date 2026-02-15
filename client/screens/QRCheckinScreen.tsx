@@ -271,7 +271,7 @@ function RequesterQRView({
         message: `Hellp Me 출근용 QR\n코드: ${qrCode}\n이름: ${requesterName}\n전화번호: ${requesterPhone}`,
       });
     } catch (error) {
-      console.log('Share error:', error);
+      // Share cancelled or failed
     }
   };
 

@@ -10,15 +10,18 @@ import { OrderListPage } from "@/components/order/OrderListPage";
 import { adaptRequesterOrder, type OrderCardDTO } from "@/adapters/orderCardAdapter";
 import { Spacing, Typography, BrandColors } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
+import { QueryErrorState } from "@/components/QueryErrorState";
 type RequesterClosingScreenProps = NativeStackScreenProps<any, 'RequesterClosing'>;
 
 export default function RequesterClosingScreen({ navigation }: RequesterClosingScreenProps) {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, isRefetching, refetch } = useQuery<any[]>({
+  const { data, isLoading, isRefetching, refetch, isError, error } = useQuery<any[]>({
     queryKey: ['/api/requester/orders'],
   });
+
+  if (isError) return <QueryErrorState error={error as Error} onRetry={refetch} />;
 
   const closingOrders = React.useMemo(() => {
     if (!data) return [];

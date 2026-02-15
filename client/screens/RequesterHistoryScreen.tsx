@@ -11,6 +11,7 @@ import { ProfileStackParamList } from "@/navigation/ProfileStackNavigator";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, BrandColors, Colors } from "@/constants/theme";
+import { QueryErrorState } from "@/components/QueryErrorState";
 
 type RequesterHistoryScreenProps = NativeStackScreenProps<ProfileStackParamList, 'RequesterHistory'>;
 
@@ -19,9 +20,11 @@ export default function RequesterHistoryScreen({ navigation }: RequesterHistoryS
   const queryClient = useQueryClient();
   const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
 
-  const { data, isLoading, isRefetching, refetch } = useQuery<any[]>({
+  const { data, isLoading, isRefetching, refetch, isError, error } = useQuery<any[]>({
     queryKey: ['/api/requester/orders?status=completed'],
   });
+
+  if (isError) return <QueryErrorState error={error as Error} onRetry={refetch} />;
 
   const months = useMemo(() => {
     const result = [];

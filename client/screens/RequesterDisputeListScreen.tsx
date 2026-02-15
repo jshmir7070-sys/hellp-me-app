@@ -10,6 +10,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
+import { QueryErrorState } from "@/components/QueryErrorState";
 
 type ProfileStackParamList = {
   RequesterDisputeList: undefined;
@@ -54,9 +55,11 @@ export default function RequesterDisputeListScreen({ navigation }: RequesterDisp
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
 
-  const { data: disputes = [], isLoading, refetch, isRefetching } = useQuery<Dispute[]>({
+  const { data: disputes = [], isLoading, refetch, isRefetching, isError, error } = useQuery<Dispute[]>({
     queryKey: ["/api/requester/disputes"],
   });
+
+  if (isError) return <QueryErrorState error={error as Error} onRetry={refetch} />;
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);

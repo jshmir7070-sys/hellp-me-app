@@ -83,7 +83,6 @@ export function handleNotificationDeepLink(
   navigationRef: React.RefObject<NavigationContainerRef<any>>
 ): void {
   if (!navigationRef.current) {
-    console.log('Navigation not ready');
     return;
   }
 

@@ -321,7 +321,7 @@ export default function IdentityVerificationScreen({ navigation, route }: Identi
         thirdPartyCookiesEnabled
         onError={(syntheticEvent: any) => {
           const { nativeEvent } = syntheticEvent;
-          console.error('WebView error:', nativeEvent);
+          if (__DEV__) console.error('WebView error:', nativeEvent);
           setStatus('failed');
           setErrorMessage('인증 페이지를 불러올 수 없습니다');
         }}

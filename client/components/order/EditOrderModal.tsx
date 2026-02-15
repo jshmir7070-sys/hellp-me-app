@@ -110,6 +110,7 @@ export function EditOrderModal({
       onRequestClose={onClose}
     >
       <Pressable style={styles.overlay} onPress={onClose}>
+        {/* 내부 Pressable: 모달 내부 클릭 시 overlay onClose 전파 방지 */}
         <Pressable onPress={() => {}} style={styles.contentWrapper}>
           <Card style={styles.modalContent}>
             <View style={styles.header}>

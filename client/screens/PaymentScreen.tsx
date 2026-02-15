@@ -349,7 +349,7 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
         thirdPartyCookiesEnabled
         onError={(syntheticEvent: any) => {
           const { nativeEvent } = syntheticEvent;
-          console.error('WebView error:', nativeEvent);
+          if (__DEV__) console.error('WebView error:', nativeEvent);
           setPaymentStatus('failed');
           setErrorMessage('결제 페이지를 불러올 수 없습니다');
         }}

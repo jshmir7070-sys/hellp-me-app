@@ -128,6 +128,15 @@ export default function HelperDisputeListScreen({ navigation }: HelperDisputeLis
       <ThemedText style={[styles.emptyText, { color: theme.tabIconDefault }]}>
         접수한 이의제기가 없습니다
       </ThemedText>
+      <Pressable
+        style={styles.emptyButton}
+        onPress={() => navigation.navigate('HelperDisputeSubmit')}
+      >
+        <Icon name="add-circle-outline" size={20} color="#fff" />
+        <ThemedText style={styles.emptyButtonText}>
+          이의제기 접수하기
+        </ThemedText>
+      </Pressable>
     </View>
   );
 
@@ -230,6 +239,21 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 15,
+  },
+  emptyButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.xs,
+    marginTop: Spacing.lg,
+    backgroundColor: BrandColors.helper,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  emptyButtonText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
   },
   fab: {
     position: "absolute",

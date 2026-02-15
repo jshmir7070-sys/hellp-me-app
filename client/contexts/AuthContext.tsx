@@ -76,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (!isApiConfigured()) {
         const configError = getApiConfigError();
-        console.error('API not configured:', configError);
+        if (__DEV__) console.error('API not configured:', configError);
         setState({ user: null, isLoading: false, isAuthenticated: false });
         return;
       }
