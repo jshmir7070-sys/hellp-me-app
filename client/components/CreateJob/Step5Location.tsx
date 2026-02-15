@@ -154,24 +154,24 @@ export default function Step5Location({
 
             <View style={styles.section}>
               <ThemedText style={[styles.label, { color: theme.text }]}>
-                캠프 주소 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
+                캠프 및 터미널 주소 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
               </ThemedText>
               {activeTab === "택배사" ? (
                 <AddressInput
                   value={courierForm.campAddress}
-                  onChange={(address) => setCourierForm({ ...courierForm, campAddress: address })}
+                  onChangeAddress={(address) => setCourierForm({ ...courierForm, campAddress: address })}
                 />
               ) : (
                 <AddressInput
                   value={otherCourierForm.campAddress}
-                  onChange={(address) => setOtherCourierForm({ ...otherCourierForm, campAddress: address })}
+                  onChangeAddress={(address) => setOtherCourierForm({ ...otherCourierForm, campAddress: address })}
                 />
               )}
             </View>
 
             <View style={styles.section}>
               <ThemedText style={[styles.label, { color: theme.text }]}>
-                캠프 주소 상세
+                캠프 및 터미널 주소 상세
               </ThemedText>
               <TextInput
                 style={[
@@ -205,7 +205,7 @@ export default function Step5Location({
               </ThemedText>
               <AddressInput
                 value={coldTruckForm.loadingPoint}
-                onChange={(address) => setColdTruckForm({ ...coldTruckForm, loadingPoint: address })}
+                onChangeAddress={(address) => setColdTruckForm({ ...coldTruckForm, loadingPoint: address })}
               />
             </View>
 

@@ -49,8 +49,8 @@ export default function Step7Confirmation({
           {renderInfoRow("차량 타입", courierForm.vehicleType)}
           {renderInfoRow("담당자 연락처", courierForm.managerContact)}
           {renderInfoRow("지역", `${courierForm.regionLarge} > ${courierForm.regionMedium}`)}
-          {renderInfoRow("캠프 주소", courierForm.campAddress)}
-          {courierForm.campAddressDetail && renderInfoRow("캠프 주소 상세", courierForm.campAddressDetail)}
+          {renderInfoRow("캠프 및 터미널 주소", courierForm.campAddress)}
+          {courierForm.campAddressDetail && renderInfoRow("캠프 및 터미널 주소 상세", courierForm.campAddressDetail)}
           {courierForm.deliveryGuide && renderInfoRow("배송 가이드", courierForm.deliveryGuide)}
           {renderInfoRow("긴급 오더", courierForm.isUrgent)}
         </>
@@ -66,8 +66,8 @@ export default function Step7Confirmation({
           {renderInfoRow("차량 타입", otherCourierForm.vehicleType)}
           {renderInfoRow("연락처", otherCourierForm.contact)}
           {renderInfoRow("지역", `${otherCourierForm.regionLarge} > ${otherCourierForm.regionMedium}`)}
-          {renderInfoRow("캠프 주소", otherCourierForm.campAddress)}
-          {otherCourierForm.campAddressDetail && renderInfoRow("캠프 주소 상세", otherCourierForm.campAddressDetail)}
+          {renderInfoRow("캠프 및 터미널 주소", otherCourierForm.campAddress)}
+          {otherCourierForm.campAddressDetail && renderInfoRow("캠프 및 터미널 주소 상세", otherCourierForm.campAddressDetail)}
           {otherCourierForm.deliveryGuide && renderInfoRow("배송 가이드", otherCourierForm.deliveryGuide)}
           {renderInfoRow("긴급 오더", otherCourierForm.isUrgent)}
         </>
