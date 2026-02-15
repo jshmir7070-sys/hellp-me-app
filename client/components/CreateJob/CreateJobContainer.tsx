@@ -31,11 +31,12 @@ import {
 import { CategoryTab, CourierFormData, OtherCourierFormData, ColdTruckFormData } from "./types";
 import Step1BasicInfo from "./Step1BasicInfo";
 import Step2Quantity from "./Step2Quantity";
-import Step3Schedule from "./Step3Schedule";
 import Step4Vehicle from "./Step4Vehicle";
 import Step5Location from "./Step5Location";
 import Step6AdditionalInfo from "./Step6AdditionalInfo";
 import Step7Confirmation from "./Step7Confirmation";
+import Step7Contract from "./Step7Contract";
+import Step8Payment from "./Step8Payment";
 
 interface CreateJobContainerProps {
   navigation: NativeStackNavigationProp<any>;
@@ -252,10 +253,9 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     },
     onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
-      await clearDraft();
-      Alert.alert("성공", "오더가 등록되었습니다", [
-        { text: "확인", onPress: () => navigation.goBack() }
-      ]);
+      if (data?.id) setOrderId(data.id.toString());
+      // Step7에서 오더 제출 후 Step8(결제)로 이동
+      setCurrentStep(currentStep + 1);
     },
     onError: (error: any) => {
       Alert.alert("오류", error.message || "오더 등록에 실패했습니다");
@@ -336,7 +336,8 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     setShowSelectModal(false);
   };
 
-  const totalSteps = activeTab === "냉탑전용" ? 6 : 7;
+  const [orderId, setOrderId] = useState<string>("");
+  const totalSteps = activeTab === "냉탑전용" ? 7 : 8;
   const displayStep = Math.min(currentStep, totalSteps);
 
   const renderStepIndicator = () => (
@@ -390,6 +391,13 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     </View>
   );
 
+  const handleComplete = async () => {
+    await clearDraft();
+    Alert.alert("완료", "오더 등록이 최종 완료되었습니다!", [
+      { text: "확인", onPress: () => navigation.goBack() }
+    ]);
+  };
+
   const renderCurrentStep = () => {
     const baseProps = {
       activeTab,
@@ -401,7 +409,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     };
 
     switch (currentStep) {
-      case 1:
+      case 1: // 기본 정보
         return (
           <Step1BasicInfo
             {...baseProps}
@@ -416,7 +424,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             onOpenSelectModal={openSelectModal}
           />
         );
-      case 2:
+      case 2: // 수량·단가 + 요청일
         return (
           <Step2Quantity
             {...baseProps}
@@ -435,20 +443,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             onOpenSelectModal={openSelectModal}
           />
         );
-      case 3:
-        return (
-          <Step3Schedule
-            {...baseProps}
-            courierForm={courierForm}
-            setCourierForm={setCourierForm}
-            otherCourierForm={otherCourierForm}
-            setOtherCourierForm={setOtherCourierForm}
-            coldTruckForm={coldTruckForm}
-            setColdTruckForm={setColdTruckForm}
-            onOpenDatePicker={() => {}}
-          />
-        );
-      case 4:
+      case 3: // 차종·담당자 연락처
         return (
           <Step4Vehicle
             {...baseProps}
@@ -462,7 +457,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             onOpenSelectModal={openSelectModal}
           />
         );
-      case 5:
+      case 4: // 배송지역·캠프/터미널 주소
         return (
           <Step5Location
             {...baseProps}
@@ -476,7 +471,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             onOpenSelectModal={openSelectModal}
           />
         );
-      case 6:
+      case 5: // 배송가이드·파일 업로드 (선택)
         return (
           <Step6AdditionalInfo
             {...baseProps}
@@ -488,7 +483,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             setColdTruckForm={setColdTruckForm}
           />
         );
-      case 7:
+      case 6: // 오더확인·계약금확인·동의
         return (
           <Step7Confirmation
             {...baseProps}
@@ -500,6 +495,35 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             setColdTruckForm={setColdTruckForm}
             onSubmit={handleSubmit}
             isSubmitting={createJobMutation.isPending}
+          />
+        );
+      case 7: // 계약서 작성·서명·본인인증
+        return (
+          <Step7Contract
+            {...baseProps}
+            courierForm={courierForm}
+            otherCourierForm={otherCourierForm}
+            coldTruckForm={coldTruckForm}
+            setCourierForm={setCourierForm}
+            setOtherCourierForm={setOtherCourierForm}
+            setColdTruckForm={setColdTruckForm}
+            onSubmit={handleSubmit}
+            isSubmitting={createJobMutation.isPending}
+          />
+        );
+      case 8: // 계약금 입금·최종 완료
+        return (
+          <Step8Payment
+            activeTab={activeTab}
+            courierForm={courierForm}
+            otherCourierForm={otherCourierForm}
+            coldTruckForm={coldTruckForm}
+            orderId={orderId}
+            onComplete={handleComplete}
+            onBack={() => setCurrentStep(currentStep - 1)}
+            theme={theme}
+            isDark={isDark}
+            bottomPadding={tabBarHeight}
           />
         );
       default:

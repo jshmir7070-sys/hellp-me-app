@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Pressable, StyleSheet, ScrollView, ActivityIndicator } from "react-native";
+import { View, Pressable, StyleSheet, ScrollView } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { Icon } from "@/components/Icon";
 import { Colors, Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
@@ -112,10 +112,10 @@ export default function Step7Confirmation({
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
-            7단계: 최종 확인
+            6단계: 오더확인 · 계약금확인 · 동의
           </ThemedText>
           <ThemedText style={[styles.stepDescription, { color: Colors.light.tabIconDefault }]}>
-            입력하신 정보를 확인해주세요
+            입력하신 정보와 계약금을 확인 후 동의해주세요
           </ThemedText>
         </View>
 
@@ -161,7 +161,7 @@ export default function Step7Confirmation({
           <Icon name="information-circle-outline" size={20} color={BrandColors.requester} />
           <View style={styles.infoTextContainer}>
             <ThemedText style={[styles.infoText, { color: theme.text }]}>
-              오더 등록 후 계약서 작성 → 서명 → 본인인증 단계가 진행됩니다
+              동의 후 다음 단계에서 계약서 작성 → 서명 → 본인인증이 진행됩니다
             </ThemedText>
           </View>
         </View>
@@ -171,7 +171,6 @@ export default function Step7Confirmation({
         <Pressable
           style={[styles.button, styles.buttonSecondary, { borderColor: BrandColors.requester }]}
           onPress={onBack}
-          disabled={isSubmitting}
         >
           <ThemedText style={[styles.buttonText, { color: BrandColors.requester }]}>이전</ThemedText>
         </Pressable>
@@ -179,16 +178,12 @@ export default function Step7Confirmation({
           style={[
             styles.button,
             styles.buttonPrimary,
-            { backgroundColor: BrandColors.requester, opacity: isAgreed && !isSubmitting ? 1 : 0.6 },
+            { backgroundColor: BrandColors.requester, opacity: isAgreed ? 1 : 0.6 },
           ]}
-          onPress={onSubmit}
-          disabled={!isAgreed || isSubmitting}
+          onPress={() => { if (isAgreed) onNext(); }}
+          disabled={!isAgreed}
         >
-          {isSubmitting ? (
-            <ActivityIndicator color="#FFFFFF" size="small" />
-          ) : (
-            <ThemedText style={[styles.buttonText, { color: '#FFFFFF' }]}>요청</ThemedText>
-          )}
+          <ThemedText style={[styles.buttonText, { color: '#FFFFFF' }]}>다음</ThemedText>
         </Pressable>
       </View>
     </View>

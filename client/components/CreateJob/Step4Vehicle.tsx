@@ -36,7 +36,7 @@ export default function Step4Vehicle({
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
-            4단계: 차량 & 연락처
+            3단계: 차종 · 담당자 연락처
           </ThemedText>
           <ThemedText style={[styles.stepDescription, { color: Colors.light.tabIconDefault }]}>
             차량 타입과 담당자 연락처를 입력해주세요

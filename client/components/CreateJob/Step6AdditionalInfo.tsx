@@ -25,10 +25,10 @@ export default function Step6AdditionalInfo({
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
-            6단계: 추가 정보
+            5단계: 배송가이드 · 파일 업로드
           </ThemedText>
           <ThemedText style={[styles.stepDescription, { color: Colors.light.tabIconDefault }]}>
-            배송 가이드와 긴급 여부를 설정해주세요 (선택사항)
+            배송 가이드, 배송지 파일 업로드, 긴급 여부를 설정해주세요 (선택사항)
           </ThemedText>
         </View>
 

@@ -37,7 +37,7 @@ export default function Step5Location({
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
-            5단계: 배송 지역
+            4단계: 배송지역 · 캠프/터미널 주소
           </ThemedText>
           <ThemedText style={[styles.stepDescription, { color: Colors.light.tabIconDefault }]}>
             {activeTab === "냉탑전용" ? "상차지 정보를 입력해주세요" : "배송 지역을 선택해주세요"}
