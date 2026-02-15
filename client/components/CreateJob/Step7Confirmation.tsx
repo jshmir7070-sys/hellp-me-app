@@ -18,6 +18,7 @@ export default function Step7Confirmation({
   onBack,
   theme,
   isDark,
+  bottomPadding,
 }: Step7Props) {
   
   const isAgreed = 
@@ -166,7 +167,7 @@ export default function Step7Confirmation({
         </View>
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot, paddingBottom: bottomPadding || 0 }]}>
         <Pressable
           style={[styles.button, styles.buttonSecondary, { borderColor: BrandColors.requester }]}
           onPress={onBack}

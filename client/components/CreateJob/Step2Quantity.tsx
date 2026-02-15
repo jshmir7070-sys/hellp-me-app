@@ -22,6 +22,7 @@ export default function Step2Quantity({
   onBack,
   theme,
   isDark,
+  bottomPadding,
 }: Step2Props) {
   
   const handleNext = () => {
@@ -260,7 +261,7 @@ export default function Step2Quantity({
         )}
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot, paddingBottom: bottomPadding || 0 }]}>
         <Pressable
           style={[styles.button, styles.buttonSecondary, { borderColor: BrandColors.requester }]}
           onPress={onBack}

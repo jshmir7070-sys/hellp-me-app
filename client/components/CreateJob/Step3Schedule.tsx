@@ -19,6 +19,7 @@ export default function Step3Schedule({
   onBack,
   theme,
   isDark,
+  bottomPadding,
 }: Step3Props) {
   
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -181,7 +182,7 @@ export default function Step3Schedule({
         />
       )}
 
-      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot, paddingBottom: bottomPadding || 0 }]}>
         <Pressable
           style={[styles.button, styles.buttonSecondary, { borderColor: BrandColors.requester }]}
           onPress={onBack}

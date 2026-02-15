@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useHeaderHeight } from "@react-navigation/elements";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -45,6 +46,7 @@ const DRAFT_STORAGE_KEY = "order_draft_v2";
 export default function CreateJobContainer({ navigation }: CreateJobContainerProps) {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
+  const headerHeight = useHeaderHeight();
   const { theme, isDark } = useTheme();
   const queryClient = useQueryClient();
   
@@ -334,23 +336,26 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     setShowSelectModal(false);
   };
 
+  const totalSteps = activeTab === "냉탑전용" ? 6 : 7;
+  const displayStep = Math.min(currentStep, totalSteps);
+
   const renderStepIndicator = () => (
-    <View style={[styles.stepIndicator, { backgroundColor: isDark ? '#1a365d' : '#EBF8FF', borderBottomColor: isDark ? '#2c5282' : '#BEE3F8' }]}>
+    <View style={[styles.stepIndicator, { paddingTop: headerHeight + Spacing.sm, backgroundColor: isDark ? '#1a365d' : '#EBF8FF', borderBottomColor: isDark ? '#2c5282' : '#BEE3F8' }]}>
       <View style={styles.stepDots}>
-        {[1, 2, 3, 4, 5, 6, 7].map((step) => (
+        {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => (
           <View
             key={step}
             style={[
               styles.stepDot,
               {
-                backgroundColor: step <= currentStep ? BrandColors.requester : Colors.light.backgroundSecondary,
+                backgroundColor: step <= displayStep ? BrandColors.requester : Colors.light.backgroundSecondary,
               },
             ]}
           />
         ))}
       </View>
       <ThemedText style={[styles.stepText, { color: BrandColors.requester }]}>
-        {currentStep}/7 단계
+        {displayStep}/{totalSteps} 단계
       </ThemedText>
     </View>
   );
@@ -390,6 +395,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
       activeTab,
       theme,
       isDark,
+      bottomPadding: tabBarHeight,
       onNext: () => setCurrentStep(currentStep + 1),
       onBack: () => setCurrentStep(currentStep - 1),
     };

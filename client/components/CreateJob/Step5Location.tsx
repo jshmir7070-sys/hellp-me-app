@@ -20,6 +20,7 @@ export default function Step5Location({
   onBack,
   theme,
   isDark,
+  bottomPadding,
 }: Step5Props) {
   
   const isValid = 
@@ -243,7 +244,7 @@ export default function Step5Location({
         )}
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot, paddingBottom: bottomPadding || 0 }]}>
         <Pressable
           style={[styles.button, styles.buttonSecondary, { borderColor: BrandColors.requester }]}
           onPress={onBack}

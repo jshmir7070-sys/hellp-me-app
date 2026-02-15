@@ -20,6 +20,7 @@ export default function Step1BasicInfo({
   onBack,
   theme,
   isDark,
+  bottomPadding,
 }: Step1Props) {
   
   const handleNext = () => {
@@ -130,7 +131,7 @@ export default function Step1BasicInfo({
         )}
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot, paddingBottom: bottomPadding || 0 }]}>
         <Pressable
           style={[
             styles.button,

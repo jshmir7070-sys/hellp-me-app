@@ -68,6 +68,7 @@ export interface BaseStepProps {
   onBack: () => void;
   theme: any;
   isDark: boolean;
+  bottomPadding?: number;
 }
 
 export interface Step1Props extends BaseStepProps {

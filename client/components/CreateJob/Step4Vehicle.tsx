@@ -19,6 +19,7 @@ export default function Step4Vehicle({
   onBack,
   theme,
   isDark,
+  bottomPadding,
 }: Step4Props) {
   
   const isValid = 
@@ -237,7 +238,7 @@ export default function Step4Vehicle({
         )}
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot, paddingBottom: bottomPadding || 0 }]}>
         <Pressable
           style={[styles.button, styles.buttonSecondary, { borderColor: BrandColors.requester }]}
           onPress={onBack}
