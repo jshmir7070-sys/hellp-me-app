@@ -1,9 +1,10 @@
-import React from "react";
-import { View, TextInput, Pressable, StyleSheet, ScrollView, Switch } from "react-native";
+import React, { useState } from "react";
+import { View, TextInput, Pressable, StyleSheet, ScrollView, Switch, Image, Alert } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { Icon } from "@/components/Icon";
 import { Colors, Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 import { Step6Props } from "./types";
+import { pickImage } from "@/lib/image-upload";
 
 export default function Step6AdditionalInfo({
   activeTab,
@@ -19,7 +20,20 @@ export default function Step6AdditionalInfo({
   isDark,
   bottomPadding,
 }: Step6Props) {
-  
+  const [uploadedFiles, setUploadedFiles] = useState<{ uri: string; name: string }[]>([]);
+
+  const handlePickFile = async () => {
+    const uri = await pickImage({ source: 'library', allowsEditing: false, quality: 0.8 });
+    if (uri) {
+      const fileName = uri.split('/').pop() || '배송지_파일';
+      setUploadedFiles((prev) => [...prev, { uri, name: fileName }]);
+    }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -67,6 +81,37 @@ export default function Step6AdditionalInfo({
               }
             }}
           />
+        </View>
+
+        <View style={styles.section}>
+          <ThemedText style={[styles.label, { color: theme.text }]}>
+            배송지 파일 업로드
+          </ThemedText>
+          <ThemedText style={[styles.uploadDescription, { color: Colors.light.tabIconDefault }]}>
+            배송지 지도, 엑셀 파일 등을 사진으로 촬영하여 업로드해주세요
+          </ThemedText>
+
+          {uploadedFiles.map((file, index) => (
+            <View key={index} style={[styles.fileItem, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}>
+              <Image source={{ uri: file.uri }} style={styles.fileThumbnail} />
+              <ThemedText style={[styles.fileName, { color: theme.text }]} numberOfLines={1}>
+                {file.name}
+              </ThemedText>
+              <Pressable onPress={() => handleRemoveFile(index)}>
+                <Icon name="close-circle-outline" size={22} color={BrandColors.error} />
+              </Pressable>
+            </View>
+          ))}
+
+          <Pressable
+            style={[styles.uploadButton, { borderColor: BrandColors.requester }]}
+            onPress={handlePickFile}
+          >
+            <Icon name="cloud-upload-outline" size={24} color={BrandColors.requester} />
+            <ThemedText style={[styles.uploadButtonText, { color: BrandColors.requester }]}>
+              파일 선택
+            </ThemedText>
+          </Pressable>
         </View>
 
         <View style={styles.section}>
@@ -176,6 +221,42 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.md,
     ...Typography.body,
     minHeight: 100,
+  },
+  uploadDescription: {
+    ...Typography.caption,
+    marginBottom: Spacing.md,
+  },
+  fileItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
+    gap: Spacing.sm,
+  },
+  fileThumbnail: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.sm,
+  },
+  fileName: {
+    ...Typography.caption,
+    flex: 1,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: BorderRadius.md,
+    gap: Spacing.sm,
+  },
+  uploadButtonText: {
+    ...Typography.body,
+    fontWeight: '600',
   },
   urgentBox: {
     padding: Spacing.lg,
