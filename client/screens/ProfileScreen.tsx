@@ -243,16 +243,18 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                 <ActivityIndicator size="large" color={primaryColor} />
               </View>
             ) : (
-              <Avatar 
-                uri={profile?.profileImage ? (profile.profileImage.startsWith('avatar:') ? profile.profileImage : profile.profileImage.startsWith('http') ? profile.profileImage : `${getApiUrl()}${profile.profileImage}`) : undefined}
+              <Avatar
+                uri={(() => {
+                  const img = profile?.profileImage || user?.profileImageUrl;
+                  if (!img) return undefined;
+                  if (img.startsWith('avatar:') || img.startsWith('http')) return img;
+                  return `${getApiUrl()}${img}`;
+                })()}
                 size={80}
                 isHelper={isHelper}
                 style={styles.avatarContainer}
               />
             )}
-            <View style={[styles.cameraIcon, { backgroundColor: primaryColor }]}>
-              <Icon name="camera-outline" size={14} color="#fff" />
-            </View>
           </View>
         </Pressable>
         <ThemedText style={[styles.userName, { color: theme.text }]}>

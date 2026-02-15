@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { View, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Image, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as ImagePicker from 'expo-image-picker';
@@ -25,6 +26,7 @@ type EditProfileScreenProps = {
 export default function EditProfileScreen({ navigation }: EditProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
   const { user, refreshUser } = useAuth();
 
@@ -274,7 +276,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: insets.bottom + Spacing.xl,
+        paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
     >
@@ -302,11 +304,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
             <View style={styles.profileImageOverlay}>
               <ActivityIndicator size="small" color="#fff" />
             </View>
-          ) : (
-            <View style={[styles.profileImageEditBadge, { backgroundColor: primaryColor }]}>
-              <Icon name="camera-outline" size={16} color="#fff" />
-            </View>
-          )}
+          ) : null}
         </Pressable>
         <ThemedText style={[styles.profileImageHint, { color: theme.tabIconDefault }]}>
           프로필 사진을 등록하세요
