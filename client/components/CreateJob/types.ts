@@ -1,6 +1,13 @@
 // 공통 타입 정의
 export type CategoryTab = "택배사" | "기타택배" | "냉탑전용";
 
+export interface ContractSettings {
+  depositRate: number;
+  cancelBefore24hRefundRate: number;
+  cancelWithin24hRefundRate: number;
+  cancelSameDayRefundRate: number;
+}
+
 export interface CourierFormData {
   company: string;
   avgQuantity: string;
@@ -139,6 +146,7 @@ export interface Step7Props extends BaseStepProps {
   setColdTruckForm: React.Dispatch<React.SetStateAction<ColdTruckFormData>>;
   onSubmit: () => void;
   isSubmitting: boolean;
+  contractSettings?: ContractSettings;
 }
 
 export interface Step8Props {
@@ -152,6 +160,7 @@ export interface Step8Props {
   theme: any;
   isDark: boolean;
   bottomPadding?: number;
+  contractSettings?: ContractSettings;
 }
 
 // 유틸리티 함수

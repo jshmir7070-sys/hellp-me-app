@@ -1399,6 +1399,26 @@ export async function registerRoutes(
       res.status(500).json({ message: "Internal server error" });
     }
   });
+  app.get("/api/meta/contract-settings", async (req, res) => {
+    try {
+      const settings = await storage.getAllSystemSettings();
+      const settingsMap: Record<string, string> = {};
+      settings.forEach(s => {
+        settingsMap[s.settingKey] = s.settingValue;
+      });
+
+      res.json({
+        depositRate: parseInt(settingsMap["deposit_rate"]) || 10,
+        cancelBefore24hRefundRate: parseInt(settingsMap["cancel_before_24h_refund_rate"]) || 100,
+        cancelWithin24hRefundRate: parseInt(settingsMap["cancel_within_24h_refund_rate"]) || 50,
+        cancelSameDayRefundRate: parseInt(settingsMap["cancel_same_day_refund_rate"]) || 0,
+      });
+    } catch (err) {
+      console.error("Error fetching contract settings:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Get carrier rate items by courier name (for helper work confirmation)
   app.get("/api/meta/couriers/:courierName/rate-items", async (req, res) => {
     try {

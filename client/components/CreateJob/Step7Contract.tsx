@@ -18,7 +18,12 @@ export default function Step7Contract({
   theme,
   isDark,
   bottomPadding,
+  contractSettings,
 }: Step7Props) {
+  const depositRate = contractSettings?.depositRate ?? 10;
+  const cancelBefore24h = contractSettings?.cancelBefore24hRefundRate ?? 100;
+  const cancelWithin24h = contractSettings?.cancelWithin24hRefundRate ?? 50;
+  const cancelSameDay = contractSettings?.cancelSameDayRefundRate ?? 0;
   const { user } = useAuth();
   const [hasReadContract, setHasReadContract] = useState(false);
   const [showContractModal, setShowContractModal] = useState(false);
@@ -154,7 +159,7 @@ export default function Step7Contract({
       </ThemedText>
       <ThemedText style={[styles.contractText, { color: theme.text }]}>
         1. 운임은 "갑"과 "을"이 합의한 단가 기준으로 산정합니다.{"\n"}
-        2. "갑"은 오더 등록 시 계약금(총 운임의 10%)을 선납합니다.{"\n"}
+        2. "갑"은 오더 등록 시 계약금(총 운임의 {depositRate}%)을 선납합니다.{"\n"}
         3. 잔금은 운송 완료 후 정산일에 지급합니다.{"\n"}
         4. 긴급 오더의 경우 추가 할증이 적용될 수 있습니다.
       </ThemedText>
@@ -181,9 +186,9 @@ export default function Step7Contract({
         제7조 (계약 해지 및 위약금)
       </ThemedText>
       <ThemedText style={[styles.contractText, { color: theme.text }]}>
-        1. 운송 시작 24시간 전까지 취소 시 계약금 전액 환불됩니다.{"\n"}
-        2. 운송 시작 24시간 이내 취소 시 계약금의 50%가 위약금으로 공제됩니다.{"\n"}
-        3. 운송 당일 취소 시 계약금은 환불되지 않습니다.
+        1. 운송 시작 24시간 전까지 취소 시 계약금의 {cancelBefore24h}%가 환불됩니다.{"\n"}
+        2. 운송 시작 24시간 이내 취소 시 계약금의 {100 - cancelWithin24h}%가 위약금으로 공제됩니다.{"\n"}
+        3. 운송 당일 취소 시 계약금의 {100 - cancelSameDay}%가 위약금으로 공제됩니다.
       </ThemedText>
 
       <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>

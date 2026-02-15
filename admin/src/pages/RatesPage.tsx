@@ -48,9 +48,10 @@ const CATEGORY_TABS = [
 const MAIN_TABS = [
   { value: 'rates', label: '운임 정책' },
   { value: 'teams', label: '팀 수수료' },
+  { value: 'deposit', label: '계약금/취소규정' },
 ] as const;
 
-type MainTabType = 'rates' | 'teams';
+type MainTabType = 'rates' | 'teams' | 'deposit';
 type CategoryType = 'parcel' | 'other' | 'cold';
 type EditableFields = Partial<CourierSetting>;
 
@@ -89,6 +90,12 @@ export default function RatesPage() {
   });
   const [otherSettings, setOtherSettings] = useState({ destinationPrice: '', boxPrice: '', minDailyFee: '' });
   const [coldSettings, setColdSettings] = useState({ minDailyFee: '' });
+  const [depositSettings, setDepositSettings] = useState({
+    depositRate: '10',
+    cancelBefore24hRefundRate: '100',
+    cancelWithin24hRefundRate: '50',
+    cancelSameDayRefundRate: '0',
+  });
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -194,6 +201,16 @@ export default function RatesPage() {
       setColdSettings({
         minDailyFee: coldMinFee?.settingValue || '100000',
       });
+      const depRate = systemSettings.find(s => s.settingKey === 'deposit_rate');
+      const cancelBefore24h = systemSettings.find(s => s.settingKey === 'cancel_before_24h_refund_rate');
+      const cancelWithin24h = systemSettings.find(s => s.settingKey === 'cancel_within_24h_refund_rate');
+      const cancelSameDay = systemSettings.find(s => s.settingKey === 'cancel_same_day_refund_rate');
+      setDepositSettings({
+        depositRate: depRate?.settingValue || '10',
+        cancelBefore24hRefundRate: cancelBefore24h?.settingValue || '100',
+        cancelWithin24hRefundRate: cancelWithin24h?.settingValue || '50',
+        cancelSameDayRefundRate: cancelSameDay?.settingValue || '0',
+      });
     }
   }, [systemSettings]);
 
@@ -231,6 +248,21 @@ export default function RatesPage() {
     try {
       await saveSystemSettingMutation.mutateAsync({ key: 'cold_min_daily_fee', value: coldSettings.minDailyFee });
       window.alert('냉탑전용 설정이 저장되었습니다.');
+    } catch {
+      toast({ title: '저장 실패', variant: 'destructive' });
+    }
+  };
+
+  const saveDepositSettings = async () => {
+    if (!window.confirm('계약금/취소 규정을 저장하시겠습니까?')) return;
+    try {
+      await Promise.all([
+        saveSystemSettingMutation.mutateAsync({ key: 'deposit_rate', value: depositSettings.depositRate }),
+        saveSystemSettingMutation.mutateAsync({ key: 'cancel_before_24h_refund_rate', value: depositSettings.cancelBefore24hRefundRate }),
+        saveSystemSettingMutation.mutateAsync({ key: 'cancel_within_24h_refund_rate', value: depositSettings.cancelWithin24hRefundRate }),
+        saveSystemSettingMutation.mutateAsync({ key: 'cancel_same_day_refund_rate', value: depositSettings.cancelSameDayRefundRate }),
+      ]);
+      window.alert('계약금/취소 규정이 저장되었습니다.');
     } catch {
       toast({ title: '저장 실패', variant: 'destructive' });
     }
@@ -1132,6 +1164,107 @@ export default function RatesPage() {
         </Card>
       )}
         </>
+      )}
+
+      {/* 계약금/취소규정 섹션 */}
+      {mainTab === 'deposit' && (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm">계약금 및 취소 규정 설정</CardTitle>
+            <CardDescription className="text-xs">
+              계약금 비율과 취소 시 환불 규정을 설정합니다. 변경 시 계약서에 자동 반영됩니다.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="py-2 space-y-6">
+            {/* 계약금 비율 */}
+            <div>
+              <label className="text-sm font-medium">계약금 비율 (%)</label>
+              <Input
+                type="number"
+                value={depositSettings.depositRate}
+                onChange={(e) => setDepositSettings({ ...depositSettings, depositRate: e.target.value })}
+                placeholder="예: 10"
+                className="mt-2 max-w-xs"
+                min={0}
+                max={100}
+              />
+              <p className="text-xs text-muted-foreground mt-1">오더 등록 시 총 운임 대비 계약금 비율 (예: 10 → 총 운임의 10%)</p>
+            </div>
+
+            {/* 취소 규정 */}
+            <div className="border-t pt-4">
+              <h3 className="text-sm font-medium mb-4">취소 시 환불 규정</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="text-sm font-medium">운송 시작 24시간 전 취소</label>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Input
+                      type="number"
+                      value={depositSettings.cancelBefore24hRefundRate}
+                      onChange={(e) => setDepositSettings({ ...depositSettings, cancelBefore24hRefundRate: e.target.value })}
+                      placeholder="100"
+                      className="max-w-[100px]"
+                      min={0}
+                      max={100}
+                    />
+                    <span className="text-sm text-muted-foreground">% 환불</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">24시간 전 취소 시 계약금 환불 비율</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">운송 시작 24시간 이내 취소</label>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Input
+                      type="number"
+                      value={depositSettings.cancelWithin24hRefundRate}
+                      onChange={(e) => setDepositSettings({ ...depositSettings, cancelWithin24hRefundRate: e.target.value })}
+                      placeholder="50"
+                      className="max-w-[100px]"
+                      min={0}
+                      max={100}
+                    />
+                    <span className="text-sm text-muted-foreground">% 환불</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">24시간 이내 취소 시 계약금 환불 비율</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">운송 당일 취소</label>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Input
+                      type="number"
+                      value={depositSettings.cancelSameDayRefundRate}
+                      onChange={(e) => setDepositSettings({ ...depositSettings, cancelSameDayRefundRate: e.target.value })}
+                      placeholder="0"
+                      className="max-w-[100px]"
+                      min={0}
+                      max={100}
+                    />
+                    <span className="text-sm text-muted-foreground">% 환불</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">당일 취소 시 계약금 환불 비율</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 현재 규정 미리보기 */}
+            <div className="border-t pt-4">
+              <h3 className="text-sm font-medium mb-2">계약서 반영 미리보기</h3>
+              <div className="bg-muted/50 rounded p-4 text-sm space-y-1">
+                <p>• 계약금: 총 운임의 <strong>{depositSettings.depositRate}%</strong></p>
+                <p>• 운송 시작 24시간 전 취소: 계약금의 <strong>{depositSettings.cancelBefore24hRefundRate}%</strong> 환불</p>
+                <p>• 운송 시작 24시간 이내 취소: 계약금의 <strong>{depositSettings.cancelWithin24hRefundRate}%</strong> 환불 (위약금 {100 - Number(depositSettings.cancelWithin24hRefundRate)}%)</p>
+                <p>• 운송 당일 취소: 계약금의 <strong>{depositSettings.cancelSameDayRefundRate}%</strong> 환불 (위약금 {100 - Number(depositSettings.cancelSameDayRefundRate)}%)</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={saveDepositSettings} disabled={saveSystemSettingMutation.isPending}>
+                <Check className="h-4 w-4 mr-2" />
+                {saveSystemSettingMutation.isPending ? '저장중...' : '저장'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
     </div>
   );

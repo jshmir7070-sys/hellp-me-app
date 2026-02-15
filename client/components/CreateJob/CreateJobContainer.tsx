@@ -28,7 +28,7 @@ import {
   coldTruckCompanies,
 } from "@/constants/regionData";
 
-import { CategoryTab, CourierFormData, OtherCourierFormData, ColdTruckFormData } from "./types";
+import { CategoryTab, CourierFormData, OtherCourierFormData, ColdTruckFormData, ContractSettings } from "./types";
 import Step1BasicInfo from "./Step1BasicInfo";
 import Step2Quantity from "./Step2Quantity";
 import Step4Vehicle from "./Step4Vehicle";
@@ -181,6 +181,17 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     queryKey: ['/api/meta/couriers', courierForm.company, 'tiered-pricing'],
     enabled: !!courierForm.company,
   });
+
+  const { data: contractSettingsData } = useQuery<ContractSettings>({
+    queryKey: ['/api/meta/contract-settings'],
+  });
+
+  const contractSettings: ContractSettings = contractSettingsData ?? {
+    depositRate: 10,
+    cancelBefore24hRefundRate: 100,
+    cancelWithin24hRefundRate: 50,
+    cancelSameDayRefundRate: 0,
+  };
 
   const getMinDeliveryFee = (courierName: string): number => {
     if (couriers && Array.isArray(couriers)) {
@@ -509,6 +520,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             setColdTruckForm={setColdTruckForm}
             onSubmit={handleSubmit}
             isSubmitting={createJobMutation.isPending}
+            contractSettings={contractSettings}
           />
         );
       case 8: // 계약금 입금·최종 완료
@@ -524,6 +536,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             theme={theme}
             isDark={isDark}
             bottomPadding={tabBarHeight}
+            contractSettings={contractSettings}
           />
         );
       default:

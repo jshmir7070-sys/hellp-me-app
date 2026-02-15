@@ -16,21 +16,23 @@ export default function Step8Payment({
   isDark,
   bottomPadding,
   onBack,
+  contractSettings,
 }: Step8Props) {
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'confirmed' | 'failed'>('pending');
+  const depositRate = (contractSettings?.depositRate ?? 10) / 100;
 
   const getDepositAmount = () => {
     if (activeTab === "택배사") {
       const qty = parseInt(courierForm.avgQuantity) || 0;
       const price = parseInt(courierForm.unitPrice) || 0;
-      return Math.round(qty * price * 0.1); // 10% 계약금
+      return Math.round(qty * price * depositRate);
     } else if (activeTab === "기타택배") {
       const qty = parseInt(otherCourierForm.boxCount) || 0;
       const price = parseInt(otherCourierForm.unitPrice) || 0;
-      return Math.round(qty * price * 0.1);
+      return Math.round(qty * price * depositRate);
     } else {
       const freight = parseInt(coldTruckForm.freight) || 0;
-      return Math.round(freight * 0.1);
+      return Math.round(freight * depositRate);
     }
   };
 
@@ -92,7 +94,7 @@ export default function Step8Payment({
             <ThemedText style={[styles.depositValue, { color: theme.text }]}>{getCompanyName()}</ThemedText>
           </View>
           <View style={styles.depositRow}>
-            <ThemedText style={[styles.depositLabel, { color: Colors.light.tabIconDefault }]}>계약금 (10%)</ThemedText>
+            <ThemedText style={[styles.depositLabel, { color: Colors.light.tabIconDefault }]}>계약금 ({contractSettings?.depositRate ?? 10}%)</ThemedText>
             <ThemedText style={[styles.depositAmount, { color: BrandColors.requester }]}>
               {deposit.toLocaleString()}원
             </ThemedText>
