@@ -113,6 +113,45 @@ export default function Step5Location({
               </View>
             )}
 
+            {(activeTab === "택배사" ? courierForm.regionMedium : otherCourierForm.regionMedium) && (
+              <View style={styles.section}>
+                <ThemedText style={[styles.label, { color: theme.text }]}>
+                  소분류 (법정동)
+                </ThemedText>
+                <Pressable
+                  style={[
+                    styles.selectButton,
+                    {
+                      backgroundColor: theme.backgroundDefault,
+                      borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                    },
+                  ]}
+                  onPress={() => {
+                    const currentRegionLarge = activeTab === "택배사" ? courierForm.regionLarge : otherCourierForm.regionLarge;
+                    const currentRegionMedium = activeTab === "택배사" ? courierForm.regionMedium : otherCourierForm.regionMedium;
+                    const regionSmallOptions = (currentRegionLarge && currentRegionMedium)
+                      ? (regionData[currentRegionLarge]?.[currentRegionMedium] || [])
+                      : [];
+                    onOpenSelectModal("소분류(법정동)", regionSmallOptions, (value) => {
+                      if (activeTab === "택배사") {
+                        setCourierForm({ ...courierForm, regionSmall: value });
+                      } else {
+                        setOtherCourierForm({ ...otherCourierForm, regionSmall: value });
+                      }
+                    });
+                  }}
+                >
+                  <ThemedText style={[
+                    styles.selectButtonText,
+                    { color: (activeTab === "택배사" ? courierForm.regionSmall : otherCourierForm.regionSmall) ? theme.text : Colors.light.tabIconDefault }
+                  ]}>
+                    {(activeTab === "택배사" ? courierForm.regionSmall : otherCourierForm.regionSmall) || "법정동 선택"}
+                  </ThemedText>
+                  <Icon name="chevron-down-outline" size={20} color={theme.text} />
+                </Pressable>
+              </View>
+            )}
+
             <View style={styles.section}>
               <ThemedText style={[styles.label, { color: theme.text }]}>
                 캠프 주소 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
