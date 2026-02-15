@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,8 +70,18 @@ const statusColors: Record<string, string> = {
 export default function MembersPageV2() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  
-  const [activeTab, setActiveTab] = useState<'helpers' | 'requesters'>('helpers');
+  const [searchParams] = useSearchParams();
+
+  const initialTab = searchParams.get('tab') === 'requesters' ? 'requesters' : 'helpers';
+  const [activeTab, setActiveTab] = useState<'helpers' | 'requesters'>(initialTab);
+
+  // URL 파라미터 변경 시 탭 동기화
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'helpers' || tabParam === 'requesters') {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
   const [helperTab, setHelperTab] = useState<'all' | 'pending'>('all');
   const [requesterTab, setRequesterTab] = useState<'all' | 'pending'>('all');
   const [searchTerm, setSearchTerm] = useState('');

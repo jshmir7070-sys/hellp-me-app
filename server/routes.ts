@@ -17531,8 +17531,8 @@ export async function registerRoutes(
         if (u.role !== "helper" || !u.createdAt) return false;
         return new Date(u.createdAt) >= sevenDaysAgo;
       }).length;
-      const newMembers = users.filter(u => {
-        if (!u.createdAt) return false;
+      const newRequesters = users.filter(u => {
+        if (u.role !== "requester" || !u.createdAt) return false;
         return new Date(u.createdAt) >= sevenDaysAgo;
       }).length;
       const openDisputes = incidents.filter(i => 
@@ -17546,7 +17546,7 @@ export async function registerRoutes(
         realtime: {
           activeOrders: realtimeOrders,
           newHelpers,
-          newMembers,
+          newRequesters,
           openDisputes,
         },
       });

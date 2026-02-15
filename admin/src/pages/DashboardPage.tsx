@@ -13,7 +13,7 @@ interface ChartData {
   realtime: {
     activeOrders: number;
     newHelpers: number;
-    newMembers: number;
+    newRequesters: number;
     openDisputes: number;
   };
 }
@@ -59,16 +59,16 @@ export default function DashboardPage() {
       icon: <UserPlus className="h-5 w-5 text-green-500" />,
       value: chartData?.realtime.newHelpers || 0,
       description: '최근 7일',
-      href: '/users?role=helper',
+      href: '/members?tab=helpers',
       bgColor: 'bg-green-50',
       borderColor: 'border-green-200',
     },
     {
-      title: '신규 회원',
+      title: '신규 요청자',
       icon: <Users className="h-5 w-5 text-purple-500" />,
-      value: chartData?.realtime.newMembers || 0,
+      value: chartData?.realtime.newRequesters || 0,
       description: '최근 7일',
-      href: '/users',
+      href: '/members?tab=requesters',
       bgColor: 'bg-purple-50',
       borderColor: 'border-purple-200',
     },
