@@ -75,6 +75,9 @@ export default function HelperSettlementPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
   const [isTaxInvoiceModalOpen, setIsTaxInvoiceModalOpen] = useState(false);
   const [taxInvoiceTarget, setTaxInvoiceTarget] = useState<HelperSettlement | null>(null);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [transferDate, setTransferDate] = useState(new Date().toISOString().split('T')[0]);
+  const [transferNote, setTransferNote] = useState('');
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -89,7 +92,7 @@ export default function HelperSettlementPage() {
     },
   });
 
-  const { data: taxInvoices = [] } = useQuery<{ targetId: string; targetType: string; year: number; month: number; status: string }[]>({
+  const { data: taxInvoices = [] } = useQuery<{ id: number; targetId: string; targetType: string; year: number; month: number; status: string }[]>({
     queryKey: ['/api/admin/tax-invoices', 'helper', selectedYear, selectedMonth],
     queryFn: async () => {
       const res = await adminFetch(`/api/admin/tax-invoices?targetType=helper&year=${selectedYear}&month=${selectedMonth + 1}`);
@@ -99,6 +102,33 @@ export default function HelperSettlementPage() {
   });
 
   const issuedHelperIds = new Set(taxInvoices.map(t => String(t.targetId)));
+  const taxInvoiceMap = new Map(taxInvoices.map(t => [String(t.targetId), t.id]));
+
+  const downloadTaxInvoicePdfMutation = useMutation({
+    mutationFn: async (taxInvoiceId: number) => {
+      const res = await adminFetch(`/api/admin/tax-invoices/${taxInvoiceId}/popbill-pdf`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'PDF 조회 실패');
+      }
+      return res.json();
+    },
+    onSuccess: (data: { success: boolean; pdfUrl: string }) => {
+      if (data.pdfUrl) {
+        window.open(data.pdfUrl, '_blank');
+        toast({ title: 'PDF가 열렸습니다.' });
+      } else {
+        toast({ title: 'PDF URL을 가져오지 못했습니다.', variant: 'destructive' });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'PDF 다운로드 실패',
+        description: error.message || '오류가 발생했습니다.',
+        variant: 'destructive',
+      });
+    },
+  });
 
   const { data: helperOrdersData, isLoading: isLoadingOrders } = useQuery<{ orders: HelperOrderDetail[], summary: HelperOrdersSummary }>({
     queryKey: ['/api/admin/settlements/helper/orders', selectedHelper?.helperId, dateRange.from, dateRange.to],
@@ -160,6 +190,33 @@ export default function HelperSettlementPage() {
     onError: (error: any) => {
       toast({
         title: '일괄 세금계산서 발행 실패',
+        description: error.message || '오류가 발생했습니다.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const bulkTransferMutation = useMutation({
+    mutationFn: async (data: { helperIds: (string | number)[]; transferDate: string; transferNote: string }) => {
+      return apiRequest('/settlements/bulk-transfer', {
+        method: 'POST',
+        body: JSON.stringify({
+          helperIds: data.helperIds,
+          transferDate: data.transferDate,
+          transferNote: data.transferNote,
+        }),
+      });
+    },
+    onSuccess: (data: any) => {
+      toast({ title: `${data.count || 0}건의 송금이 처리되었습니다.` });
+      setSelectedIds(new Set());
+      setTransferModalOpen(false);
+      setTransferNote('');
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/settlements/helper'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: '일괄 송금 처리 실패',
         description: error.message || '오류가 발생했습니다.',
         variant: 'destructive',
       });
@@ -288,40 +345,55 @@ export default function HelperSettlementPage() {
     {
       key: 'helperId',
       header: '액션',
-      width: 140,
+      width: 200,
       align: 'center',
-      render: (_, row) => (
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedHelper(row);
-            }}
-          >
-            <Eye className="h-4 w-4" />
-          </Button>
-          {issuedHelperIds.has(String(row.helperId)) ? (
-            <Badge variant="secondary" className="text-xs">
-              발행완료
-            </Badge>
-          ) : (
+      render: (_, row) => {
+        const taxInvoiceId = taxInvoiceMap.get(String(row.helperId));
+        return (
+          <div className="flex items-center gap-1">
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                setTaxInvoiceTarget(row);
-                setIsTaxInvoiceModalOpen(true);
+                setSelectedHelper(row);
               }}
             >
-              <FileText className="h-4 w-4 mr-1" />
-              미발행
+              <Eye className="h-4 w-4" />
             </Button>
-          )}
-        </div>
-      ),
+            {taxInvoiceId ? (
+              <div className="flex items-center gap-1">
+                <Badge variant="secondary" className="text-xs">발행완료</Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    downloadTaxInvoicePdfMutation.mutate(taxInvoiceId);
+                  }}
+                  disabled={downloadTaxInvoicePdfMutation.isPending}
+                  title="PDF 다운로드"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTaxInvoiceTarget(row);
+                  setIsTaxInvoiceModalOpen(true);
+                }}
+              >
+                <FileText className="h-4 w-4 mr-1" />
+                미발행
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -425,11 +497,7 @@ export default function HelperSettlementPage() {
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
-                onClick={() => {
-                  if (confirm(`${selectedIds.size}건을 일괄 송금 처리하시겠습니까?`)) {
-                    alert('일괄 송금 API 연동 필요');
-                  }
-                }}
+                onClick={() => setTransferModalOpen(true)}
               >
                 일괄 송금
               </Button>
@@ -664,6 +732,70 @@ export default function HelperSettlementPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 일괄 송금 확인 모달 */}
+      <Dialog open={transferModalOpen} onOpenChange={(open) => { setTransferModalOpen(open); if (!open) setTransferNote(''); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>일괄 송금 처리</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="text-sm text-muted-foreground">선택된 헬퍼</div>
+              <div className="text-2xl font-bold">{selectedIds.size}명</div>
+              <div className="text-sm text-muted-foreground mt-1">
+                총 지급액: {formatAmount(
+                  filteredSettlements
+                    .filter((s: HelperSettlement) => selectedIds.has(s.helperId))
+                    .reduce((sum: number, s: HelperSettlement) => sum + (s.driverPayout || 0), 0)
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">송금일 <span className="text-red-500">*</span></label>
+              <Input
+                type="date"
+                value={transferDate}
+                onChange={(e) => setTransferDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">메모 (선택)</label>
+              <Input
+                placeholder="송금 메모를 입력해주세요..."
+                value={transferNote}
+                onChange={(e) => setTransferNote(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setTransferModalOpen(false)}>
+              취소
+            </Button>
+            <Button
+              onClick={() => {
+                if (!transferDate) {
+                  toast({ title: '송금일을 선택해주세요.', variant: 'destructive' });
+                  return;
+                }
+                bulkTransferMutation.mutate({
+                  helperIds: Array.from(selectedIds),
+                  transferDate,
+                  transferNote,
+                });
+              }}
+              disabled={bulkTransferMutation.isPending}
+            >
+              {bulkTransferMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              {bulkTransferMutation.isPending ? '처리중...' : '송금 확인'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -15519,6 +15519,44 @@ export async function registerRoutes(
     }
   });
 
+  // 일괄 송금 완료 처리 API
+  app.post("/api/admin/settlements/bulk-transfer", adminAuth, requirePermission("settlements.edit"), async (req, res) => {
+    try {
+      const { helperIds, transferDate, transferNote } = req.body;
+      const adminUserId = (req as any).adminUser?.id;
+
+      if (!helperIds || !Array.isArray(helperIds) || helperIds.length === 0) {
+        return res.status(400).json({ message: "helperIds는 필수 항목입니다." });
+      }
+
+      if (!transferDate) {
+        return res.status(400).json({ message: "송금일(transferDate)을 지정해주세요." });
+      }
+
+      // 해당 헬퍼들의 CALCULATED 상태 정산 건을 PAID로 업데이트
+      const result = await db.update(settlementRecords)
+        .set({
+          status: "PAID",
+          paidAt: new Date(transferDate),
+          paidBy: adminUserId,
+          paymentReference: transferNote || `일괄 송금 처리 (${new Date(transferDate).toLocaleDateString('ko-KR')})`,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            inArray(settlementRecords.helperId, helperIds.map(String)),
+            eq(settlementRecords.status, "CALCULATED"),
+          )
+        )
+        .returning({ id: settlementRecords.id });
+
+      res.json({ success: true, count: result.length });
+    } catch (err) {
+      console.error("Bulk transfer error:", err);
+      res.status(500).json({ message: "일괄 송금 처리 실패" });
+    }
+  });
+
   // 헬퍼별 상세 이용내역 API (거래명세서 스타일)
   app.get("/api/admin/settlements/helper/:helperId/orders", adminAuth, requirePermission("settlements.view"), async (req, res) => {
     try {

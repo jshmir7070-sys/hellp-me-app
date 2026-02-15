@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,7 @@ import {
   RotateCcw,
   Wallet,
 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
@@ -161,6 +162,64 @@ export default function PaymentsPageV2() {
   const [selectedDeposit, setSelectedDeposit] = useState<DepositPayment | null>(null);
   const [selectedBalance, setSelectedBalance] = useState<BalancePayment | null>(null);
   const [selectedRefund, setSelectedRefund] = useState<Refund | null>(null);
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+
+  // ============ 환불 처리 Mutation ============
+
+  const processRefundMutation = useMutation({
+    mutationFn: async (data: { refundId: number; status: 'completed' | 'rejected'; adminNotes?: string }) => {
+      return apiRequest(`/refunds/${data.refundId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status: data.status,
+          adminNotes: data.adminNotes,
+        }),
+      });
+    },
+    onSuccess: (_data, variables) => {
+      toast({
+        title: variables.status === 'completed' ? '환불이 승인되었습니다.' : '환불이 거절되었습니다.',
+      });
+      setSelectedRefund(null);
+      setRejectModalOpen(false);
+      setRejectReason('');
+      queryClient.invalidateQueries({ queryKey: ['refunds'] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: '환불 처리 실패',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const bulkRefundApproveMutation = useMutation({
+    mutationFn: async (refundIds: number[]) => {
+      const results = await Promise.allSettled(
+        refundIds.map(id =>
+          apiRequest(`/refunds/${id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status: 'completed' }),
+          })
+        )
+      );
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+      return { succeeded, failed };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: `일괄 승인 완료: ${data.succeeded}건 성공${data.failed > 0 ? `, ${data.failed}건 실패` : ''}`,
+      });
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ['refunds'] });
+    },
+    onError: (error: any) => {
+      toast({ title: '일괄 승인 실패', description: error.message, variant: 'destructive' });
+    },
+  });
 
   // ============ 데이터 조회 ============
 
@@ -804,6 +863,32 @@ export default function PaymentsPageV2() {
                 </Card>
               </div>
 
+              {/* 일괄 승인 버튼 */}
+              {activeTab === 'refunds' && selectedIds.size > 0 && (
+                <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <span className="text-sm font-medium">{selectedIds.size}건 선택됨</span>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const pendingIds = filteredRefunds
+                        .filter(r => selectedIds.has(r.id) && r.status === 'pending')
+                        .map(r => r.id);
+                      if (pendingIds.length === 0) {
+                        toast({ title: '승인 가능한 환불 건이 없습니다.', variant: 'destructive' });
+                        return;
+                      }
+                      if (confirm(`처리대기 중인 ${pendingIds.length}건을 일괄 승인하시겠습니까?`)) {
+                        bulkRefundApproveMutation.mutate(pendingIds);
+                      }
+                    }}
+                    disabled={bulkRefundApproveMutation.isPending}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    {bulkRefundApproveMutation.isPending ? '처리중...' : '일괄 환불 승인'}
+                  </Button>
+                </div>
+              )}
+
               {/* 테이블 */}
               <ExcelTable
                 columns={refundColumns}
@@ -1148,22 +1233,82 @@ export default function PaymentsPageV2() {
                   <>
                     <Button
                       variant="outline"
-                      onClick={() => toast({ title: '환불 거절 기능은 개발 예정입니다.' })}
+                      onClick={() => setRejectModalOpen(true)}
+                      disabled={processRefundMutation.isPending}
                     >
                       <AlertTriangle className="h-4 w-4 mr-2" />
                       거절
                     </Button>
                     <Button
-                      onClick={() => toast({ title: '환불 승인 기능은 개발 예정입니다.' })}
+                      onClick={() => {
+                        if (confirm(`환불 ${selectedRefund.refundAmount.toLocaleString()}원을 승인하시겠습니까?`)) {
+                          processRefundMutation.mutate({
+                            refundId: selectedRefund.id,
+                            status: 'completed',
+                          });
+                        }
+                      }}
+                      disabled={processRefundMutation.isPending}
                     >
                       <CheckCircle className="h-4 w-4 mr-2" />
-                      환불 승인
+                      {processRefundMutation.isPending ? '처리중...' : '환불 승인'}
                     </Button>
                   </>
                 )}
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 환불 거절 사유 모달 */}
+      <Dialog open={rejectModalOpen} onOpenChange={(open) => { setRejectModalOpen(open); if (!open) setRejectReason(''); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>환불 거절</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <div className="text-sm text-muted-foreground mb-1">오더 #{selectedRefund?.orderId}</div>
+              <div className="text-lg font-bold text-orange-600">
+                환불 금액: {selectedRefund?.refundAmount.toLocaleString()}원
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">거절 사유 <span className="text-red-500">*</span></label>
+              <Textarea
+                placeholder="환불 거절 사유를 입력해주세요..."
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setRejectModalOpen(false); setRejectReason(''); }}>
+              취소
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (!rejectReason.trim()) {
+                  toast({ title: '거절 사유를 입력해주세요.', variant: 'destructive' });
+                  return;
+                }
+                if (selectedRefund) {
+                  processRefundMutation.mutate({
+                    refundId: selectedRefund.id,
+                    status: 'rejected',
+                    adminNotes: rejectReason.trim(),
+                  });
+                }
+              }}
+              disabled={processRefundMutation.isPending || !rejectReason.trim()}
+            >
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              {processRefundMutation.isPending ? '처리중...' : '거절 확인'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

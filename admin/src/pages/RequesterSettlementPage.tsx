@@ -87,7 +87,7 @@ export default function RequesterSettlementPage() {
     },
   });
 
-  const { data: taxInvoices = [] } = useQuery<{ targetId: string; targetType: string; year: number; month: number; status: string }[]>({
+  const { data: taxInvoices = [] } = useQuery<{ id: number; targetId: string; targetType: string; year: number; month: number; status: string }[]>({
     queryKey: ['/api/admin/tax-invoices', 'requester', selectedYear, selectedMonth],
     queryFn: async () => {
       const res = await adminFetch(`/api/admin/tax-invoices?targetType=requester&year=${selectedYear}&month=${selectedMonth + 1}`);
@@ -110,6 +110,33 @@ export default function RequesterSettlementPage() {
   const ordersSummary = ordersData?.summary || { totalAmount: 0, totalDeposit: 0, totalBalance: 0 };
 
   const issuedRequesterIds = new Set(taxInvoices.map(t => String(t.targetId)));
+  const taxInvoiceMap = new Map(taxInvoices.map(t => [String(t.targetId), t.id]));
+
+  const downloadTaxInvoicePdfMutation = useMutation({
+    mutationFn: async (taxInvoiceId: number) => {
+      const res = await adminFetch(`/api/admin/tax-invoices/${taxInvoiceId}/popbill-pdf`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'PDF 조회 실패');
+      }
+      return res.json();
+    },
+    onSuccess: (data: { success: boolean; pdfUrl: string }) => {
+      if (data.pdfUrl) {
+        window.open(data.pdfUrl, '_blank');
+        toast({ title: 'PDF가 열렸습니다.' });
+      } else {
+        toast({ title: 'PDF URL을 가져오지 못했습니다.', variant: 'destructive' });
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: 'PDF 다운로드 실패',
+        description: error.message || '오류가 발생했습니다.',
+        variant: 'destructive',
+      });
+    },
+  });
 
   const handleOpenOrdersModal = (requester: RequesterSettlement) => {
     setOrdersModalRequester(requester);
@@ -279,40 +306,55 @@ export default function RequesterSettlementPage() {
     {
       key: 'requesterId',
       header: '액션',
-      width: 140,
+      width: 200,
       align: 'center',
-      render: (_, row) => (
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedRequester(row);
-            }}
-          >
-            <Eye className="h-4 w-4" />
-          </Button>
-          {issuedRequesterIds.has(String(row.requesterId)) ? (
-            <Badge variant="secondary" className="text-xs">
-              발행완료
-            </Badge>
-          ) : (
+      render: (_, row) => {
+        const taxInvoiceId = taxInvoiceMap.get(String(row.requesterId));
+        return (
+          <div className="flex items-center gap-1">
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                setTaxInvoiceTarget(row);
-                setIsTaxInvoiceModalOpen(true);
+                setSelectedRequester(row);
               }}
             >
-              <FileText className="h-4 w-4 mr-1" />
-              미발행
+              <Eye className="h-4 w-4" />
             </Button>
-          )}
-        </div>
-      ),
+            {taxInvoiceId ? (
+              <div className="flex items-center gap-1">
+                <Badge variant="secondary" className="text-xs">발행완료</Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    downloadTaxInvoicePdfMutation.mutate(taxInvoiceId);
+                  }}
+                  disabled={downloadTaxInvoicePdfMutation.isPending}
+                  title="PDF 다운로드"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTaxInvoiceTarget(row);
+                  setIsTaxInvoiceModalOpen(true);
+                }}
+              >
+                <FileText className="h-4 w-4 mr-1" />
+                미발행
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
   ];
 
