@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Platform, Image } from 'react-native';
+import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Platform, Image, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { Icon } from "@/components/Icon";
@@ -29,6 +29,9 @@ interface DocumentData {
   businessNumber?: string;
   businessName?: string;
   representativeName?: string;
+  businessAddress?: string;
+  businessType?: string;
+  businessCategory?: string;
 }
 
 export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSubmitScreenProps) {
@@ -44,6 +47,9 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
     businessNumber: '',
     businessName: '',
     representativeName: '',
+    businessAddress: '',
+    businessType: '',
+    businessCategory: '',
   });
 
   // 기존 서류 조회
@@ -60,6 +66,9 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
         businessNumber: document.businessNumber || '',
         businessName: document.businessName || '',
         representativeName: document.representativeName || '',
+        businessAddress: document.businessAddress || '',
+        businessType: document.businessType || '',
+        businessCategory: document.businessCategory || '',
       });
     }
   }, [document]);
@@ -68,7 +77,7 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
+        allowsEditing: false,
         quality: 0.8,
       });
 
@@ -95,7 +104,7 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
+        allowsEditing: false,
         quality: 0.8,
       });
 
@@ -139,6 +148,9 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
       formData.append('businessNumber', businessInfo.businessNumber);
       formData.append('businessName', businessInfo.businessName);
       formData.append('representativeName', businessInfo.representativeName);
+      formData.append('businessAddress', businessInfo.businessAddress);
+      formData.append('businessType', businessInfo.businessType);
+      formData.append('businessCategory', businessInfo.businessCategory);
 
       const uploadResponse = await fetch(
         new URL('/api/helpers/documents/businessCert', getApiUrl()).toString(),
@@ -154,7 +166,7 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
       if (uploadResponse.ok) {
         await queryClient.invalidateQueries({ queryKey: ['/api/helpers/documents'] });
         await queryClient.invalidateQueries({ queryKey: ['/api/helpers/documents/status'] });
-        Alert.alert('완료', '사업자등록증이 제출되었습니다', [
+        Alert.alert('완료', '저장되었습니다.', [
           { text: '확인', onPress: () => navigation.goBack() }
         ]);
       } else {
@@ -169,14 +181,24 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
     }
   };
 
-  const canResubmit = document?.status === 'rejected' || !document;
+  const canResubmit = true; // 승인 후에도 수정 가능
+  const isReadOnly = document?.status === 'reviewing'; // 검토중일 때만 읽기전용
+
+  // 이미지 URL 처리 (상대 경로면 전체 URL로 변환)
+  const displayImageUrl = React.useMemo(() => {
+    if (!selectedImage) return null;
+    if (selectedImage.startsWith('http') || selectedImage.startsWith('file://')) {
+      return selectedImage;
+    }
+    return `${getApiUrl()}${selectedImage}`;
+  }, [selectedImage]);
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.xl,
-        paddingBottom: insets.bottom + Spacing.xl,
+        paddingBottom: insets.bottom + Spacing.xl + 60,
         paddingHorizontal: Spacing.lg,
       }}
     >
@@ -237,20 +259,22 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
 
         {selectedImage ? (
           <View style={styles.imagePreview}>
-            <Image 
-              source={{ uri: selectedImage }} 
+            <Image
+              source={{ uri: displayImageUrl || selectedImage }}
               style={styles.previewImage}
               resizeMode="contain"
             />
-            <Pressable
-              style={({ pressed }) => [
-                styles.removeImageButton,
-                { opacity: pressed ? 0.7 : 1 },
-              ]}
-              onPress={() => setSelectedImage(null)}
-            >
-              <Icon name="close-circle" size={28} color="#EF4444" />
-            </Pressable>
+            {!isReadOnly && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.removeImageButton,
+                  { opacity: pressed ? 0.7 : 1 },
+                ]}
+                onPress={() => setSelectedImage(null)}
+              >
+                <Icon name="close-circle" size={28} color="#EF4444" />
+              </Pressable>
+            )}
           </View>
         ) : (
           <View style={[styles.uploadPlaceholder, { backgroundColor: isDark ? '#374151' : '#F3F4F6' }]}>
@@ -261,41 +285,43 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
           </View>
         )}
 
-        <View style={styles.uploadButtons}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.uploadButton,
-              { 
-                backgroundColor: BrandColors.helperLight,
-                opacity: pressed ? 0.7 : 1,
-              },
-            ]}
-            onPress={handlePickImage}
-          >
-            <Icon name="images-outline" size={20} color={BrandColors.helper} />
-            <ThemedText style={[styles.uploadButtonText, { color: BrandColors.helper }]}>
-              갤러리
-            </ThemedText>
-          </Pressable>
-
-          {Platform.OS !== 'web' && (
+        {!isReadOnly && (
+          <View style={styles.uploadButtons}>
             <Pressable
               style={({ pressed }) => [
                 styles.uploadButton,
-                { 
+                {
                   backgroundColor: BrandColors.helperLight,
                   opacity: pressed ? 0.7 : 1,
                 },
               ]}
-              onPress={handleTakePhoto}
+              onPress={handlePickImage}
             >
-              <Icon name="camera-outline" size={20} color={BrandColors.helper} />
+              <Icon name="images-outline" size={20} color={BrandColors.helper} />
               <ThemedText style={[styles.uploadButtonText, { color: BrandColors.helper }]}>
-                카메라
+                갤러리
               </ThemedText>
             </Pressable>
-          )}
-        </View>
+
+            {Platform.OS !== 'web' && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.uploadButton,
+                  {
+                    backgroundColor: BrandColors.helperLight,
+                    opacity: pressed ? 0.7 : 1,
+                  },
+                ]}
+                onPress={handleTakePhoto}
+              >
+                <Icon name="camera-outline" size={20} color={BrandColors.helper} />
+                <ThemedText style={[styles.uploadButtonText, { color: BrandColors.helper }]}>
+                  카메라
+                </ThemedText>
+              </Pressable>
+            )}
+          </View>
+        )}
       </Card>
 
       {/* 사업자 정보 입력 */}
@@ -308,16 +334,18 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
           <ThemedText style={[styles.inputLabel, { color: theme.text }]}>
             사업자번호 <ThemedText style={{ color: '#EF4444' }}>*</ThemedText>
           </ThemedText>
-          <input
-            type="text"
+          <TextInput
             placeholder="000-00-00000"
+            placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
             value={businessInfo.businessNumber}
-            onChange={(e) => setBusinessInfo({ ...businessInfo, businessNumber: e.target.value })}
+            onChangeText={(value) => setBusinessInfo({ ...businessInfo, businessNumber: value })}
+            editable={!isReadOnly}
             style={{
               padding: Spacing.md,
               borderRadius: BorderRadius.sm,
-              border: `1px solid ${isDark ? '#4B5563' : '#D1D5DB'}`,
-              backgroundColor: theme.backgroundDefault,
+              borderWidth: 1,
+              borderColor: isDark ? '#4B5563' : '#D1D5DB',
+              backgroundColor: isReadOnly ? (isDark ? '#1F2937' : '#F9FAFB') : theme.backgroundDefault,
               color: theme.text,
               fontSize: 15,
             }}
@@ -328,16 +356,18 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
           <ThemedText style={[styles.inputLabel, { color: theme.text }]}>
             상호명 <ThemedText style={{ color: '#EF4444' }}>*</ThemedText>
           </ThemedText>
-          <input
-            type="text"
+          <TextInput
             placeholder="상호명을 입력하세요"
+            placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
             value={businessInfo.businessName}
-            onChange={(e) => setBusinessInfo({ ...businessInfo, businessName: e.target.value })}
+            onChangeText={(value) => setBusinessInfo({ ...businessInfo, businessName: value })}
+            editable={!isReadOnly}
             style={{
               padding: Spacing.md,
               borderRadius: BorderRadius.sm,
-              border: `1px solid ${isDark ? '#4B5563' : '#D1D5DB'}`,
-              backgroundColor: theme.backgroundDefault,
+              borderWidth: 1,
+              borderColor: isDark ? '#4B5563' : '#D1D5DB',
+              backgroundColor: isReadOnly ? (isDark ? '#1F2937' : '#F9FAFB') : theme.backgroundDefault,
               color: theme.text,
               fontSize: 15,
             }}
@@ -348,16 +378,84 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
           <ThemedText style={[styles.inputLabel, { color: theme.text }]}>
             대표자명
           </ThemedText>
-          <input
-            type="text"
+          <TextInput
             placeholder="대표자명을 입력하세요"
+            placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
             value={businessInfo.representativeName}
-            onChange={(e) => setBusinessInfo({ ...businessInfo, representativeName: e.target.value })}
+            onChangeText={(value) => setBusinessInfo({ ...businessInfo, representativeName: value })}
+            editable={!isReadOnly}
             style={{
               padding: Spacing.md,
               borderRadius: BorderRadius.sm,
-              border: `1px solid ${isDark ? '#4B5563' : '#D1D5DB'}`,
-              backgroundColor: theme.backgroundDefault,
+              borderWidth: 1,
+              borderColor: isDark ? '#4B5563' : '#D1D5DB',
+              backgroundColor: isReadOnly ? (isDark ? '#1F2937' : '#F9FAFB') : theme.backgroundDefault,
+              color: theme.text,
+              fontSize: 15,
+            }}
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <ThemedText style={[styles.inputLabel, { color: theme.text }]}>
+            사업장주소
+          </ThemedText>
+          <TextInput
+            placeholder="사업장주소를 입력하세요"
+            placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+            value={businessInfo.businessAddress}
+            onChangeText={(value) => setBusinessInfo({ ...businessInfo, businessAddress: value })}
+            editable={!isReadOnly}
+            style={{
+              padding: Spacing.md,
+              borderRadius: BorderRadius.sm,
+              borderWidth: 1,
+              borderColor: isDark ? '#4B5563' : '#D1D5DB',
+              backgroundColor: isReadOnly ? (isDark ? '#1F2937' : '#F9FAFB') : theme.backgroundDefault,
+              color: theme.text,
+              fontSize: 15,
+            }}
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <ThemedText style={[styles.inputLabel, { color: theme.text }]}>
+            업종
+          </ThemedText>
+          <TextInput
+            placeholder="업종을 입력하세요"
+            placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+            value={businessInfo.businessType}
+            onChangeText={(value) => setBusinessInfo({ ...businessInfo, businessType: value })}
+            editable={!isReadOnly}
+            style={{
+              padding: Spacing.md,
+              borderRadius: BorderRadius.sm,
+              borderWidth: 1,
+              borderColor: isDark ? '#4B5563' : '#D1D5DB',
+              backgroundColor: isReadOnly ? (isDark ? '#1F2937' : '#F9FAFB') : theme.backgroundDefault,
+              color: theme.text,
+              fontSize: 15,
+            }}
+          />
+        </View>
+
+        <View style={styles.inputGroup}>
+          <ThemedText style={[styles.inputLabel, { color: theme.text }]}>
+            업태
+          </ThemedText>
+          <TextInput
+            placeholder="업태를 입력하세요"
+            placeholderTextColor={isDark ? '#6B7280' : '#9CA3AF'}
+            value={businessInfo.businessCategory}
+            onChangeText={(value) => setBusinessInfo({ ...businessInfo, businessCategory: value })}
+            editable={!isReadOnly}
+            style={{
+              padding: Spacing.md,
+              borderRadius: BorderRadius.sm,
+              borderWidth: 1,
+              borderColor: isDark ? '#4B5563' : '#D1D5DB',
+              backgroundColor: isReadOnly ? (isDark ? '#1F2937' : '#F9FAFB') : theme.backgroundDefault,
               color: theme.text,
               fontSize: 15,
             }}
@@ -386,20 +484,20 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
         style={({ pressed }) => [
           styles.submitButton,
           {
-            backgroundColor: BrandColors.helper,
-            opacity: (pressed || isUploading || !canResubmit) ? 0.7 : 1,
+            backgroundColor: isReadOnly ? (isDark ? '#374151' : '#E5E7EB') : BrandColors.helper,
+            opacity: (pressed || isUploading) ? 0.7 : 1,
           },
         ]}
-        onPress={handleSubmit}
-        disabled={isUploading || !canResubmit}
+        onPress={isReadOnly ? () => navigation.goBack() : handleSubmit}
+        disabled={isUploading}
       >
         {isUploading ? (
           <ActivityIndicator color="#fff" />
         ) : (
           <>
-            <Icon name="checkmark-circle-outline" size={20} color="#fff" />
-            <ThemedText style={styles.submitButtonText}>
-              {document?.status === 'rejected' ? '재제출하기' : '제출하기'}
+            <Icon name={isReadOnly ? "checkmark-outline" : "checkmark-circle-outline"} size={20} color={isReadOnly ? theme.text : "#fff"} />
+            <ThemedText style={[styles.submitButtonText, { color: isReadOnly ? theme.text : '#fff' }]}>
+              {isReadOnly ? '확인' : document?.status === 'rejected' ? '재제출하기' : document?.status === 'approved' ? '수정하기' : '제출하기'}
             </ThemedText>
           </>
         )}

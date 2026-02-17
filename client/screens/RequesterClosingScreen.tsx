@@ -2,6 +2,7 @@ import React, { useCallback } from "react";
 import { View, StyleSheet, Alert, Platform } from "react-native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { CompositeScreenProps } from "@react-navigation/native";
 
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
@@ -11,7 +12,13 @@ import { adaptRequesterOrder, type OrderCardDTO } from "@/adapters/orderCardAdap
 import { Spacing, Typography, BrandColors } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
 import { QueryErrorState } from "@/components/QueryErrorState";
-type RequesterClosingScreenProps = NativeStackScreenProps<any, 'RequesterClosing'>;
+import { ClosingStackParamList } from "@/navigation/ClosingStackNavigator";
+import { RootStackParamList } from "@/navigation/types";
+
+type RequesterClosingScreenProps = CompositeScreenProps<
+  NativeStackScreenProps<ClosingStackParamList, 'RequesterClosing'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 export default function RequesterClosingScreen({ navigation }: RequesterClosingScreenProps) {
   const { theme } = useTheme();
@@ -61,7 +68,7 @@ export default function RequesterClosingScreen({ navigation }: RequesterClosingS
       if (hasClosingDetail) {
         navigation.navigate('ClosingDetail', { orderId });
       } else {
-        navigation.navigate('Main' as any, { screen: 'WorkStatusTab', params: { screen: 'ClosingDetail', params: { orderId } } });
+        navigation.navigate('Main', { screen: 'WorkStatusTab', params: { screen: 'ClosingDetail', params: { orderId } } });
       }
     }
   }, [navigation]);

@@ -10,11 +10,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
-
-type ProfileStackParamList = {
-  IncidentList: undefined;
-  IncidentDetail: { incidentId: number };
-};
+import { ProfileStackParamList } from "@/navigation/types";
 
 type IncidentListScreenProps = NativeStackScreenProps<ProfileStackParamList, 'IncidentList'>;
 
@@ -64,7 +60,7 @@ export default function IncidentListScreen({ navigation }: IncidentListScreenPro
     const statusConfig = STATUS_CONFIG[item.status] || STATUS_CONFIG.pending;
 
     return (
-      <Pressable onPress={() => navigation.navigate("IncidentDetail" as any, { incidentId: item.id })}>
+      <Pressable onPress={() => navigation.navigate("IncidentDetail", { incidentId: item.id })}>
         <Card style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.typeContainer}>

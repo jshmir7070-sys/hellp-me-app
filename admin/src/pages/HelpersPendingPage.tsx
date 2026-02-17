@@ -38,7 +38,11 @@ interface HelperDetail {
 const getImageUrl = (url?: string) => {
   if (!url) return '';
   if (url.startsWith('http')) return url;
-  return `/api/files/${url}`;
+  if (url.startsWith('data:')) return url;
+  const token = localStorage.getItem('admin_token');
+  const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+  if (url.startsWith('/uploads/')) return `${url}${tokenParam}`;
+  return `/uploads/${url}${tokenParam}`;
 };
 
 export default function HelpersPendingPage() {

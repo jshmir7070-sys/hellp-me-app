@@ -166,7 +166,7 @@ export default function AdminIncidentListScreen({ navigation }: AdminIncidentLis
                 피해금액
               </ThemedText>
               <ThemedText style={[styles.value, { color: BrandColors.error }]}>
-                {item.damageAmount.toLocaleString()}원
+                {(item.damageAmount || 0).toLocaleString()}원
               </ThemedText>
             </View>
           ) : null}

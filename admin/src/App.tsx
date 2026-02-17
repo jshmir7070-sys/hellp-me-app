@@ -36,6 +36,7 @@ import DisputesPage from './pages/DisputesPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import HelperDocumentsPage from './pages/HelperDocumentsPage';
+import HelperBankAccountsPage from './pages/HelperBankAccountsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -83,6 +84,7 @@ function AppRoutes() {
                   
                   {/* 헬퍼 서류 검토 */}
                   <Route path="/helper-documents" element={<HelperDocumentsPage />} />
+                  <Route path="/helper-bank-accounts" element={<HelperBankAccountsPage />} />
                   
                   {/* 통합 사고 페이지 */}
                   <Route path="/incidents" element={<IncidentsPageV2 />} />

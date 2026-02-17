@@ -83,7 +83,8 @@
           "color": "#E6F4FE"
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "reactCompiler": true

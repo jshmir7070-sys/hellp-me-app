@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
+  Alert,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Icon } from "@/components/Icon";
@@ -62,6 +63,9 @@ export function EditOrderModal({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/requester/orders"] });
       onClose();
+    },
+    onError: (err: any) => {
+      Alert.alert("오류", err?.message || "오더 수정에 실패했습니다.");
     },
   });
 

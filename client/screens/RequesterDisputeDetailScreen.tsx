@@ -159,7 +159,7 @@ export default function RequesterDisputeDetailScreen({ route }: RequesterDispute
           <View style={[styles.amountSection, { backgroundColor: theme.backgroundDefault }]}>
             <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>요청 금액</ThemedText>
             <ThemedText style={[styles.amountValue, { color: BrandColors.requester }]}>
-              {dispute.requestedAmount.toLocaleString()}원
+              {(dispute.requestedAmount || 0).toLocaleString()}원
             </ThemedText>
           </View>
         ) : null}
@@ -195,7 +195,7 @@ export default function RequesterDisputeDetailScreen({ route }: RequesterDispute
             <ThemedText style={[styles.sectionTitle, { color: theme.text, marginLeft: Spacing.xs }]}>처리결과</ThemedText>
           </View>
           <ThemedText style={[styles.resolvedAmount, { color: theme.text }]}>
-            {dispute.resolvedAmount.toLocaleString()}원 {dispute.resolvedAmount > 0 ? "보상 확정" : "보상 없음"}
+            {(dispute.resolvedAmount || 0).toLocaleString()}원 {(dispute.resolvedAmount || 0) > 0 ? "보상 확정" : "보상 없음"}
           </ThemedText>
           {dispute.resolvedNote ? (
             <ThemedText style={[styles.replyText, { color: theme.text, marginTop: Spacing.sm }]}>{dispute.resolvedNote}</ThemedText>

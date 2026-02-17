@@ -49,15 +49,22 @@ export default function HelperHistoryScreen({ navigation }: HelperHistoryScreenP
   const handleCardPress = useCallback((item: OrderCardDTO) => {
     const orderId = Number(item.orderId);
     if (!isNaN(orderId)) {
-      navigation.navigate('HistoryDetail' as any, { orderId, settlementId: item.contractId });
+      navigation.navigate('HistoryDetail', { orderId, settlementId: item.contractId });
     }
   }, [navigation]);
 
   const handleCardAction = useCallback((action: string, item: OrderCardDTO) => {
     if (action === 'view_detail') {
       handleCardPress(item);
+    } else if (action === 'dispute') {
+      const orderId = Number(item.orderId);
+      if (!isNaN(orderId)) {
+        navigation.navigate('DisputeCreate', { orderId });
+      } else {
+        navigation.navigate('Disputes');
+      }
     }
-  }, [handleCardPress]);
+  }, [handleCardPress, navigation]);
 
   const theme = isDark ? Colors.dark : Colors.light;
 

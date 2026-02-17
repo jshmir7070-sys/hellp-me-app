@@ -33,7 +33,7 @@ export default function Step4Vehicle({
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
             3단계: 차종 · 담당자 연락처
@@ -238,7 +238,7 @@ export default function Step4Vehicle({
         )}
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot, paddingBottom: bottomPadding || 0 }]}>
+      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot }]}>
         <Pressable
           style={[styles.button, styles.buttonSecondary, { borderColor: BrandColors.requester }]}
           onPress={onBack}
@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.lg,
-    paddingBottom: 100,
+    paddingBottom: Spacing.lg,
   },
   section: {
     marginBottom: Spacing.xl,
@@ -315,10 +315,6 @@ const styles = StyleSheet.create({
     ...Typography.body,
   },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     padding: Spacing.lg,
     flexDirection: 'row',
     gap: Spacing.md,

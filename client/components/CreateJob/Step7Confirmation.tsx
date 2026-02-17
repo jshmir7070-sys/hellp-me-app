@@ -110,7 +110,7 @@ export default function Step7Confirmation({
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
             6단계: 오더확인 · 계약금확인 · 동의
@@ -168,7 +168,7 @@ export default function Step7Confirmation({
         </View>
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot, paddingBottom: bottomPadding || 0 }]}>
+      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot }]}>
         <Pressable
           style={[styles.button, styles.buttonSecondary, { borderColor: BrandColors.requester }]}
           onPress={onBack}
@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.lg,
-    paddingBottom: 150,
+    paddingBottom: Spacing.lg,
   },
   section: {
     marginBottom: Spacing.xl,
@@ -279,10 +279,6 @@ const styles = StyleSheet.create({
     ...Typography.caption,
   },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     padding: Spacing.lg,
     flexDirection: 'row',
     gap: Spacing.md,

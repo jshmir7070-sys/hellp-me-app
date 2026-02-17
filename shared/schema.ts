@@ -177,6 +177,9 @@ export const helperDocuments = pgTable("helper_documents", {
   businessNumber: text("business_number"), // 사업자번호
   businessName: text("business_name"), // 상호명
   representativeName: text("representative_name"), // 대표자명
+  businessAddress: text("business_address"), // 사업장주소
+  businessType: text("business_type_doc"), // 업종
+  businessCategory: text("business_category_doc"), // 업태
   
   // 운전면허증 관련
   licenseNumber: text("license_number"), // 면허번호
@@ -189,9 +192,12 @@ export const helperDocuments = pgTable("helper_documents", {
   vehicleType: text("vehicle_type"), // 차량종류
   vehicleOwnerName: text("vehicle_owner_name"), // 소유자명
   
-  // 용달계약서 관련
+  // 화물위탁계약서 관련
   contractCompanyName: text("contract_company_name"), // 계약 회사명
   contractDate: text("contract_date"), // 계약일
+  signatureName: text("signature_name"), // 서명자 성명
+  verificationPhone: text("verification_phone"), // 인증 전화번호
+  contractConsent: text("contract_consent"), // 동의사항 JSON
   
   uploadedAt: timestamp("uploaded_at"), // 제출일시
   reviewedAt: timestamp("reviewed_at"), // 검토일시
@@ -1173,7 +1179,10 @@ export const closingReports = pgTable("closing_reports", {
   pricingSnapshotJson: text("pricing_snapshot_json"), // 정책 스냅샷 JSON
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => ({
+  // 동일 오더에 동일 헬퍼가 중복 마감보고서 제출 방지
+  uniqueOrderHelperClosing: unique().on(table.orderId, table.helperId),
+}));
 
 // Work confirmations table (작업 완료 확인)
 export const workConfirmations = pgTable("work_confirmations", {

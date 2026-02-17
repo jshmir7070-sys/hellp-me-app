@@ -134,6 +134,12 @@ export interface Step6Props extends BaseStepProps {
   setColdTruckForm: React.Dispatch<React.SetStateAction<ColdTruckFormData>>;
 }
 
+export interface ContractSubmitData {
+  balancePaymentDueDate: string;
+  signatureName: string;
+  verificationPhone: string;
+}
+
 export interface Step7Props extends BaseStepProps {
   courierForm: CourierFormData;
   otherCourierForm: OtherCourierFormData;
@@ -141,7 +147,7 @@ export interface Step7Props extends BaseStepProps {
   setCourierForm: React.Dispatch<React.SetStateAction<CourierFormData>>;
   setOtherCourierForm: React.Dispatch<React.SetStateAction<OtherCourierFormData>>;
   setColdTruckForm: React.Dispatch<React.SetStateAction<ColdTruckFormData>>;
-  onSubmit: () => void;
+  onSubmit: (contractData: ContractSubmitData) => void;
   isSubmitting: boolean;
   contractSettings?: ContractSettings;
 }

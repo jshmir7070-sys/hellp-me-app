@@ -106,7 +106,7 @@ export default function RequesterDisputeListScreen({ navigation }: RequesterDisp
           </ThemedText>
           {item.requestedAmount ? (
             <ThemedText style={[styles.amount, { color: BrandColors.requester }]}>
-              요청금액: {item.requestedAmount.toLocaleString()}원
+              요청금액: {(item.requestedAmount || 0).toLocaleString()}원
             </ThemedText>
           ) : null}
         </View>
@@ -115,7 +115,7 @@ export default function RequesterDisputeListScreen({ navigation }: RequesterDisp
           <View style={[styles.resolvedSection, { backgroundColor: theme.backgroundDefault }]}>
             <ThemedText style={[styles.resolvedLabel, { color: theme.tabIconDefault }]}>처리 결과</ThemedText>
             <ThemedText style={[styles.resolvedAmount, { color: theme.text }]}>
-              {item.resolvedAmount.toLocaleString()}원 {item.resolvedAmount > 0 ? "지급 확정" : "미지급"}
+              {(item.resolvedAmount || 0).toLocaleString()}원 {(item.resolvedAmount || 0) > 0 ? "지급 확정" : "미지급"}
             </ThemedText>
             {item.resolvedNote ? (
               <ThemedText style={[styles.resolvedNote, { color: theme.tabIconDefault }]}>

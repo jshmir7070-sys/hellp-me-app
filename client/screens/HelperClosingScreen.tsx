@@ -7,6 +7,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Icon } from "@/components/Icon";
 import * as ImagePicker from 'expo-image-picker';
+import { compressImage } from "@/lib/image-upload";
 
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
@@ -191,7 +192,7 @@ export function ClosingInputScreen({ route, navigation }: any) {
   const [dynamicFieldValues, setDynamicFieldValues] = useState<Record<string, string>>({});
 
   const { data: orderDetail } = useQuery<any>({
-    queryKey: ['/api/orders', orderId],
+    queryKey: [`/api/orders/${orderId}`],
   });
 
   const { data: closingFields = [] } = useQuery<ClosingField[]>({
@@ -273,10 +274,19 @@ export function ClosingInputScreen({ route, navigation }: any) {
 
     for (const img of images) {
       try {
+        // 이미지 압축 (1200x1200, quality 0.7 JPEG)
+        let imageUri = img.uri;
+        if (Platform.OS !== 'web') {
+          try {
+            imageUri = await compressImage(img.uri, { maxWidth: 1200, maxHeight: 1200, quality: 0.7 });
+          } catch (compressErr) {
+            console.warn("Image compression failed, using original:", compressErr);
+          }
+        }
+
         const formData = new FormData();
-        const filename = img.uri.split('/').pop() || 'image.jpg';
-        const ext = filename.split('.').pop()?.toLowerCase() || 'jpg';
-        const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+        const filename = imageUri.split('/').pop() || 'image.jpg';
+        const mimeType = 'image/jpeg'; // 압축 후 항상 JPEG
 
         if (Platform.OS === 'web') {
           const response = await fetch(img.uri);
@@ -284,7 +294,7 @@ export function ClosingInputScreen({ route, navigation }: any) {
           formData.append('file', blob, filename);
         } else {
           formData.append('file', {
-            uri: img.uri,
+            uri: imageUri,
             name: filename,
             type: mimeType,
           } as any);
@@ -297,6 +307,7 @@ export function ClosingInputScreen({ route, navigation }: any) {
         fileKeys.push(data.fileKey);
       } catch (err) {
         console.error('Upload error:', err);
+        Alert.alert('업로드 실패', `이미지 업로드에 실패했습니다. 네트워크 상태를 확인해주세요.`);
       }
     }
 
@@ -309,7 +320,12 @@ export function ClosingInputScreen({ route, navigation }: any) {
       
       const deliveryHistoryFileKeys = await uploadImages(deliveryHistoryImages);
       const etcFileKeys = await uploadImages(etcImages);
-      
+
+      // 필수 이미지(집배송 이력) 업로드 실패 시 제출 중단
+      if (deliveryHistoryImages.length > 0 && deliveryHistoryFileKeys.length === 0) {
+        throw new Error('집배송 이력 이미지 업로드에 실패했습니다. 다시 시도해주세요.');
+      }
+
       const res = await apiRequest('POST', `/api/orders/${orderId}/close`, {
         text: closingText,
         deliveredCount: parseInt(deliveredCount) || 0,

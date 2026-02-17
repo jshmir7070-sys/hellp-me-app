@@ -75,8 +75,14 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
   };
 
   const formatDateRange = (start?: string, end?: string) => {
-    const startDate = formatDate(start);
-    const endDate = formatDate(end);
+    // 날짜 순서 보정: 시작일이 종료일보다 뒤면 교환
+    let s = start;
+    let e = end;
+    if (s && e && new Date(s) > new Date(e)) {
+      [s, e] = [e, s];
+    }
+    const startDate = formatDate(s);
+    const endDate = formatDate(e);
     if (!startDate) return "-";
     if (!endDate || startDate === endDate) return startDate;
     return `${startDate} ~ ${endDate}`;
@@ -125,8 +131,15 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
   };
 
   const displayName = data.courierName || data.companyName || data.title || "오더";
-  const displayAddress = data.deliveryArea || data.addressShort || 
-    (data.region1 ? `${data.region1} ${data.region2 || ""}`.trim() : "위치 미정");
+  // 배송지 표기: "서울특별시 > 강남구" → "서울특별시 \ 강남구 \ 역삼동" 형식
+  const formatAddress = () => {
+    const raw = data.deliveryArea || data.addressShort ||
+      (data.region1 ? `${data.region1} ${data.region2 || ""}`.trim() : "");
+    if (!raw) return "위치 미정";
+    // ">" 구분자를 "\" 구분자로 변경
+    return raw.replace(/\s*>\s*/g, " \\ ");
+  };
+  const displayAddress = formatAddress();
 
   return (
     <Card style={styles.card} onPress={handleCardPress}>
@@ -395,7 +408,10 @@ function getButtonsForContext(context: CardContext, data: OrderCardDTO): ActionB
     case "requester_history":
       return getRequesterHistoryButtons(data.hasReview || false);
     case "helper_history":
-      return [{ label: "상세보기", action: "view_detail", variant: "outline" }];
+      return [
+        { label: "이의제기", action: "dispute", variant: "primary" },
+        { label: "상세보기", action: "view_detail", variant: "outline" },
+      ];
     default:
       return [];
   }
@@ -491,13 +507,13 @@ const styles = StyleSheet.create({
   },
   infoRow: {
     flexDirection: "row",
-    gap: Spacing.xl,
+    justifyContent: "space-between",
   },
   infoItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.xs,
-    minWidth: 120,
+    flex: 1,
   },
   infoLabel: {
     fontSize: 12,

@@ -55,7 +55,7 @@ export default function RequesterHistoryScreen({ navigation }: RequesterHistoryS
   const handleCardPress = useCallback((item: OrderCardDTO) => {
     const orderId = Number(item.orderId);
     if (!isNaN(orderId)) {
-      navigation.navigate('HistoryDetail' as any, { orderId });
+      navigation.navigate('HistoryDetail', { orderId });
     }
   }, [navigation]);
 

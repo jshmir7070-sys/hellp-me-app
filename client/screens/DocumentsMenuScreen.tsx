@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
 import { useTheme } from '@/hooks/useTheme';
+import { useAuth } from '@/contexts/AuthContext';
 import { Spacing, BorderRadius, BrandColors } from '@/constants/theme';
 
 type DocumentsMenuScreenProps = {
@@ -17,7 +18,7 @@ type DocumentsMenuScreenProps = {
 };
 
 interface DocumentStatus {
-  type: 'businessCert' | 'driverLicense' | 'cargoLicense' | 'vehicleCert' | 'transportContract';
+  documentType: 'businessCert' | 'driverLicense' | 'cargoLicense' | 'vehicleCert' | 'transportContract';
   status: 'pending' | 'reviewing' | 'approved' | 'rejected' | 'not_submitted';
   uploadedAt?: string;
   reviewedAt?: string;
@@ -46,7 +47,7 @@ const DOCUMENT_CONFIG = [
     title: '화물운송종사자격증',
     description: '화물자동차 운송사업 종사자격증',
     icon: 'shield-checkmark-outline',
-    required: false,
+    required: true,
     screen: 'CargoLicenseSubmit',
   },
   {
@@ -59,10 +60,10 @@ const DOCUMENT_CONFIG = [
   },
   {
     type: 'transportContract' as const,
-    title: '용달계약서',
-    description: '운송사업 위수탁 계약서',
+    title: '화물위탁계약서',
+    description: '화물자동차 운송사업 위수탁 계약서',
     icon: 'document-outline',
-    required: false,
+    required: true,
     screen: 'TransportContractSubmit',
   },
 ];
@@ -105,19 +106,33 @@ export default function DocumentsMenuScreen({ navigation }: DocumentsMenuScreenP
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
+  const { user, refreshUser } = useAuth();
 
-  // 서류 상태 조회
+  // 서류 상태 조회 (서버에서 onboardingStatus 자동 보정 트리거)
   const { data: documentsStatus = [], isLoading } = useQuery<DocumentStatus[]>({
     queryKey: ['/api/helpers/documents/status'],
   });
 
+  // 서류 API 호출 후 서버에서 onboardingStatus가 갱신되었을 수 있으므로 사용자 정보 새로고침
+  useEffect(() => {
+    if (documentsStatus.length > 0 && user?.onboardingStatus !== 'approved') {
+      const requiredTypes = ['businessCert', 'driverLicense', 'cargoLicense', 'vehicleCert', 'transportContract'];
+      const allApproved = requiredTypes.every(type =>
+        documentsStatus.some((d: any) => d.documentType === type && d.status === 'approved')
+      );
+      if (allApproved) {
+        refreshUser();
+      }
+    }
+  }, [documentsStatus]);
+
   const getDocumentStatus = (type: string): DocumentStatus['status'] => {
-    const doc = documentsStatus.find(d => d.type === type);
+    const doc = documentsStatus.find(d => d.documentType === type);
     return doc?.status || 'not_submitted';
   };
 
   const getDocumentData = (type: string) => {
-    return documentsStatus.find(d => d.type === type);
+    return documentsStatus.find(d => d.documentType === type);
   };
 
   // 완료된 서류 수 계산
@@ -130,7 +145,7 @@ export default function DocumentsMenuScreen({ navigation }: DocumentsMenuScreenP
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.xl,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: tabBarHeight + Spacing.xl + 40,
         paddingHorizontal: Spacing.lg,
       }}
     >
@@ -185,8 +200,10 @@ export default function DocumentsMenuScreen({ navigation }: DocumentsMenuScreenP
             ]} 
           />
         </View>
-        <ThemedText style={[styles.progressHint, { color: theme.tabIconDefault }]}>
-          필수 서류를 모두 제출해주세요
+        <ThemedText style={[styles.progressHint, { color: approvedCount >= requiredCount ? BrandColors.success : theme.tabIconDefault }]}>
+          {approvedCount >= requiredCount
+            ? '모든 필수 서류가 승인되었습니다'
+            : '필수 서류를 모두 제출해주세요'}
         </ThemedText>
       </Card>
 

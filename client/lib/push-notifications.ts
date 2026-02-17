@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { Platform, Linking } from 'react-native';
 import { getApiUrl } from '@/lib/query-client';
 
@@ -70,12 +71,26 @@ export function usePushNotifications(
     }
 
     try {
-      const tokenData = await Notifications.getExpoPushTokenAsync();
+      const projectId =
+        process.env.EXPO_PUBLIC_PROJECT_ID ||
+        Constants.expoConfig?.extra?.eas?.projectId ||
+        Constants.easConfig?.projectId;
+
+      if (!projectId) {
+        if (__DEV__) {
+          console.log('[Push] projectId 미설정 - 푸시 알림 비활성화 (개발 모드)');
+        }
+        return null;
+      }
+
+      const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
       const token = tokenData.data;
       setExpoPushToken(token);
       return token;
     } catch (error) {
-      console.error('Failed to get push token:', error);
+      if (__DEV__) {
+        console.log('[Push] 푸시 토큰 가져오기 실패 (개발 모드에서 정상):', (error as Error).message);
+      }
       return null;
     }
   }, []);

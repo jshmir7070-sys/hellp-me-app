@@ -22,6 +22,7 @@ import WriteReviewScreen from "@/screens/WriteReviewScreen";
 import RequesterDisputeScreen from "@/screens/RequesterDisputeScreen";
 import RequesterDisputeListScreen from "@/screens/RequesterDisputeListScreen";
 import RequesterDisputeDetailScreen from "@/screens/RequesterDisputeDetailScreen";
+import DisputesScreen from "@/screens/DisputesScreen";
 import HelperDisputeSubmitScreen from "@/screens/HelperDisputeSubmitScreen";
 import HelperDisputeListScreen from "@/screens/HelperDisputeListScreen";
 import HelperDisputeDetailScreen from "@/screens/HelperDisputeDetailScreen";
@@ -67,6 +68,9 @@ export type ProfileStackParamList = {
   RequesterDispute: { orderId: number };
   RequesterDisputeList: undefined;
   RequesterDisputeDetail: { disputeId: number };
+  Disputes: undefined;
+  DisputeCreate: { orderId?: number; type?: string };
+  DisputeDetail: { disputeId: number };
   HelperDisputeSubmit: undefined;
   HelperDisputeList: undefined;
   HelperDisputeDetail: { disputeId: number };
@@ -245,6 +249,27 @@ export default function ProfileStackNavigator() {
         }}
       />
       <Stack.Screen
+        name="Disputes"
+        component={DisputesScreen}
+        options={{
+          headerTitle: '이의제기',
+        }}
+      />
+      <Stack.Screen
+        name="DisputeCreate"
+        component={HelperDisputeSubmitScreen}
+        options={{
+          headerTitle: '이의제기 접수',
+        }}
+      />
+      <Stack.Screen
+        name="DisputeDetail"
+        component={HelperDisputeDetailScreen}
+        options={{
+          headerTitle: '이의제기 상세',
+        }}
+      />
+      <Stack.Screen
         name="HelperDisputeSubmit"
         component={HelperDisputeSubmitScreen}
         options={{
@@ -381,7 +406,7 @@ export default function ProfileStackNavigator() {
         name="TransportContractSubmit"
         component={TransportContractSubmitScreen}
         options={{
-          headerTitle: '용달계약서',
+          headerTitle: '화물위탁계약서',
         }}
       />
     </Stack.Navigator>

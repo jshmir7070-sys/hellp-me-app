@@ -101,7 +101,7 @@ export default function HelperSettlementPage() {
     },
   });
 
-  const issuedHelperIds = new Set(taxInvoices.map(t => String(t.targetId)));
+  // const issuedHelperIds = new Set(taxInvoices.map(t => String(t.targetId)));
   const taxInvoiceMap = new Map(taxInvoices.map(t => [String(t.targetId), t.id]));
 
   const downloadTaxInvoicePdfMutation = useMutation({

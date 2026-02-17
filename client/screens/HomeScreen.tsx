@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import { View, FlatList, Pressable, StyleSheet, RefreshControl, ActivityIndicator, ScrollView, Dimensions, Modal, Alert, Platform, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -89,7 +89,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const { isDesktop, isTablet, isMobile, containerMaxWidth } = useResponsive();
 
   const [editOrder, setEditOrder] = useState<any>(null);
@@ -100,6 +100,25 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const isHelper = user?.role === 'helper';
   const primaryColor = isHelper ? BrandColors.helper : BrandColors.requester;
   
+  // 서류 상태 조회 → 서버에서 onboardingStatus 자동 보정 트리거
+  const { data: docStatusData } = useQuery<any[]>({
+    queryKey: ['/api/helpers/documents/status'],
+    enabled: isHelper && user?.onboardingStatus !== 'approved',
+  });
+
+  // 서류 API 호출 후 서버에서 onboardingStatus가 갱신되었을 수 있으므로 사용자 정보 새로고침
+  useEffect(() => {
+    if (docStatusData && isHelper && user?.onboardingStatus !== 'approved') {
+      const requiredTypes = ['businessCert', 'driverLicense', 'cargoLicense', 'vehicleCert', 'transportContract'];
+      const allApproved = requiredTypes.every(type =>
+        docStatusData.some((d: any) => d.documentType === type && d.status === 'approved')
+      );
+      if (allApproved) {
+        refreshUser();
+      }
+    }
+  }, [docStatusData]);
+
   const showOnboardingBanner = isHelper && user?.onboardingStatus !== 'approved';
 
   const { data: helperStats, isLoading: isLoadingHelperStats, isFetching: isFetchingHelperStats, refetch: refetchHelperStats } = useQuery<any>({
@@ -219,7 +238,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       {bannerContent ? (
         <Pressable 
           style={[styles.onboardingBanner, { backgroundColor: bannerContent.color + '15', borderColor: bannerContent.color }]}
-          onPress={bannerContent.buttonText ? () => navigation.navigate('HelperOnboarding' as any) : undefined}
+          onPress={bannerContent.buttonText ? () => (navigation as any).navigate('ProfileTab', { screen: 'DocumentsMenu' }) : undefined}
         >
           <View style={styles.onboardingBannerContent}>
             <Icon name={bannerContent.icon} size={24} color={bannerContent.color} />

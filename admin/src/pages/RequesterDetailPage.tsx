@@ -69,9 +69,12 @@ export default function RequesterDetailPage() {
   const getImageUrl = (path: string | null | undefined) => {
     if (!path) return null;
     if (path.startsWith('http')) return path;
-    if (path.startsWith('/api/')) return path;
     if (path.startsWith('data:')) return path;
-    return `/api/files/${path}`;
+    const token = localStorage.getItem('admin_token');
+    const tokenParam = token ? `?token=${encodeURIComponent(token)}` : '';
+    if (path.startsWith('/uploads/')) return `${path}${tokenParam}`;
+    if (path.startsWith('/api/')) return path;
+    return `/uploads/${path}${tokenParam}`;
   };
 
   const downloadExcel = () => {

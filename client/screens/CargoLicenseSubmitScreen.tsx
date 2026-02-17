@@ -68,7 +68,7 @@ export default function CargoLicenseSubmitScreen({ navigation }: CargoLicenseSub
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
+        allowsEditing: false,
         quality: 0.8,
       });
       if (!result.canceled && result.assets[0]) setSelectedImage(result.assets[0].uri);
@@ -89,7 +89,7 @@ export default function CargoLicenseSubmitScreen({ navigation }: CargoLicenseSub
         Alert.alert('권한 필요', '카메라 권한이 필요합니다');
         return;
       }
-      const result = await ImagePicker.launchCameraAsync({ allowsEditing: true, quality: 0.8 });
+      const result = await ImagePicker.launchCameraAsync({ allowsEditing: false, quality: 0.8 });
       if (!result.canceled && result.assets[0]) setSelectedImage(result.assets[0].uri);
     } catch (error) {
       console.error('Camera error:', error);
@@ -147,7 +147,7 @@ export default function CargoLicenseSubmitScreen({ navigation }: CargoLicenseSub
       if (uploadResponse.ok) {
         await queryClient.invalidateQueries({ queryKey: ['/api/helpers/documents'] });
         await queryClient.invalidateQueries({ queryKey: ['/api/helpers/documents/status'] });
-        Alert.alert('완료', '화물운송종사자격증이 제출되었습니다', [{ text: '확인', onPress: () => navigation.goBack() }]);
+        Alert.alert('완료', '저장되었습니다.', [{ text: '확인', onPress: () => navigation.goBack() }]);
       } else {
         const data = await uploadResponse.json();
         Alert.alert('오류', data.message || '제출에 실패했습니다');
@@ -160,14 +160,24 @@ export default function CargoLicenseSubmitScreen({ navigation }: CargoLicenseSub
     }
   };
 
-  const canResubmit = document?.status === 'rejected' || !document;
+  const canResubmit = true; // 승인 후에도 수정 가능
+  const isReadOnly = document?.status === 'reviewing'; // 검토중일 때만 읽기전용
+
+  // 이미지 URL 처리 (상대 경로면 전체 URL로 변환)
+  const displayImageUrl = React.useMemo(() => {
+    if (!selectedImage) return null;
+    if (selectedImage.startsWith('http') || selectedImage.startsWith('file://')) {
+      return selectedImage;
+    }
+    return `${getApiUrl()}${selectedImage}`;
+  }, [selectedImage]);
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.xl,
-        paddingBottom: insets.bottom + Spacing.xl,
+        paddingBottom: insets.bottom + Spacing.xl + 60,
         paddingHorizontal: Spacing.lg,
       }}
     >
@@ -216,10 +226,12 @@ export default function CargoLicenseSubmitScreen({ navigation }: CargoLicenseSub
         </View>
         {selectedImage ? (
           <View style={styles.imagePreview}>
-            <Image source={{ uri: selectedImage }} style={styles.previewImage} resizeMode="contain" />
-            <Pressable style={({ pressed }) => [styles.removeImageButton, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setSelectedImage(null)}>
-              <Icon name="close-circle" size={28} color="#EF4444" />
-            </Pressable>
+            <Image source={{ uri: displayImageUrl || selectedImage }} style={styles.previewImage} resizeMode="contain" />
+            {!isReadOnly && (
+              <Pressable style={({ pressed }) => [styles.removeImageButton, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setSelectedImage(null)}>
+                <Icon name="close-circle" size={28} color="#EF4444" />
+              </Pressable>
+            )}
           </View>
         ) : (
           <View style={[styles.uploadPlaceholder, { backgroundColor: isDark ? '#374151' : '#F3F4F6' }]}>
@@ -227,18 +239,20 @@ export default function CargoLicenseSubmitScreen({ navigation }: CargoLicenseSub
             <ThemedText style={[styles.uploadHint, { color: theme.tabIconDefault }]}>화물운송종사자격증을 촬영하거나 선택해주세요</ThemedText>
           </View>
         )}
-        <View style={styles.uploadButtons}>
-          <Pressable style={({ pressed }) => [styles.uploadButton, { backgroundColor: BrandColors.helperLight, opacity: pressed ? 0.7 : 1 }]} onPress={handlePickImage}>
-            <Icon name="images-outline" size={20} color={BrandColors.helper} />
-            <ThemedText style={[styles.uploadButtonText, { color: BrandColors.helper }]}>갤러리</ThemedText>
-          </Pressable>
-          {Platform.OS !== 'web' && (
-            <Pressable style={({ pressed }) => [styles.uploadButton, { backgroundColor: BrandColors.helperLight, opacity: pressed ? 0.7 : 1 }]} onPress={handleTakePhoto}>
-              <Icon name="camera-outline" size={20} color={BrandColors.helper} />
-              <ThemedText style={[styles.uploadButtonText, { color: BrandColors.helper }]}>카메라</ThemedText>
+        {!isReadOnly && (
+          <View style={styles.uploadButtons}>
+            <Pressable style={({ pressed }) => [styles.uploadButton, { backgroundColor: BrandColors.helperLight, opacity: pressed ? 0.7 : 1 }]} onPress={handlePickImage}>
+              <Icon name="images-outline" size={20} color={BrandColors.helper} />
+              <ThemedText style={[styles.uploadButtonText, { color: BrandColors.helper }]}>갤러리</ThemedText>
             </Pressable>
-          )}
-        </View>
+            {Platform.OS !== 'web' && (
+              <Pressable style={({ pressed }) => [styles.uploadButton, { backgroundColor: BrandColors.helperLight, opacity: pressed ? 0.7 : 1 }]} onPress={handleTakePhoto}>
+                <Icon name="camera-outline" size={20} color={BrandColors.helper} />
+                <ThemedText style={[styles.uploadButtonText, { color: BrandColors.helper }]}>카메라</ThemedText>
+              </Pressable>
+            )}
+          </View>
+        )}
       </Card>
 
       <Card style={styles.infoCard}>
@@ -246,16 +260,21 @@ export default function CargoLicenseSubmitScreen({ navigation }: CargoLicenseSub
         <View style={styles.inputGroup}>
           <ThemedText style={[styles.inputLabel, { color: theme.text }]}>자격증 번호 <ThemedText style={{ color: '#EF4444' }}>*</ThemedText></ThemedText>
           <TextInput
-            style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? '#4B5563' : '#D1D5DB' }]}
+            style={[styles.input, { backgroundColor: isReadOnly ? (isDark ? '#1F2937' : '#F9FAFB') : theme.backgroundDefault, color: theme.text, borderColor: isDark ? '#4B5563' : '#D1D5DB' }]}
             placeholder="자격증 번호를 입력하세요"
             placeholderTextColor={theme.tabIconDefault}
             value={licenseNumber}
             onChangeText={setLicenseNumber}
+            editable={!isReadOnly}
           />
         </View>
         <View style={styles.inputGroup}>
           <ThemedText style={[styles.inputLabel, { color: theme.text }]}>발급일 <ThemedText style={{ color: '#EF4444' }}>*</ThemedText></ThemedText>
-          <Pressable style={[styles.dateButton, { backgroundColor: theme.backgroundDefault, borderColor: isDark ? '#4B5563' : '#D1D5DB' }]} onPress={openDatePicker}>
+          <Pressable
+            style={[styles.dateButton, { backgroundColor: isReadOnly ? (isDark ? '#1F2937' : '#F9FAFB') : theme.backgroundDefault, borderColor: isDark ? '#4B5563' : '#D1D5DB' }]}
+            onPress={() => !isReadOnly && openDatePicker()}
+            disabled={isReadOnly}
+          >
             <Icon name="calendar-outline" size={18} color={issueDate ? theme.text : theme.tabIconDefault} />
             <ThemedText style={{ color: issueDate ? theme.text : theme.tabIconDefault, marginLeft: Spacing.sm }}>{issueDate || '발급일 선택'}</ThemedText>
           </Pressable>
@@ -275,14 +294,22 @@ export default function CargoLicenseSubmitScreen({ navigation }: CargoLicenseSub
       </Card>
 
       <Pressable
-        style={({ pressed }) => [styles.submitButton, { backgroundColor: BrandColors.helper, opacity: (pressed || isUploading || !canResubmit) ? 0.7 : 1 }]}
-        onPress={handleSubmit}
-        disabled={isUploading || !canResubmit}
+        style={({ pressed }) => [
+          styles.submitButton,
+          {
+            backgroundColor: isReadOnly ? (isDark ? '#374151' : '#E5E7EB') : BrandColors.helper,
+            opacity: (pressed || isUploading) ? 0.7 : 1
+          }
+        ]}
+        onPress={isReadOnly ? () => navigation.goBack() : handleSubmit}
+        disabled={isUploading}
       >
         {isUploading ? <ActivityIndicator color="#fff" /> : (
           <>
-            <Icon name="checkmark-circle-outline" size={20} color="#fff" />
-            <ThemedText style={styles.submitButtonText}>{document?.status === 'rejected' ? '재제출하기' : '제출하기'}</ThemedText>
+            <Icon name={isReadOnly ? "checkmark-outline" : "checkmark-circle-outline"} size={20} color={isReadOnly ? theme.text : "#fff"} />
+            <ThemedText style={[styles.submitButtonText, { color: isReadOnly ? theme.text : '#fff' }]}>
+              {isReadOnly ? '확인' : document?.status === 'rejected' ? '재제출하기' : document?.status === 'approved' ? '수정하기' : '제출하기'}
+            </ThemedText>
           </>
         )}
       </Pressable>

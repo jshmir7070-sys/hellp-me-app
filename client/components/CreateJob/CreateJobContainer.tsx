@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from "react";
-import { 
-  View, 
-  StyleSheet, 
-  KeyboardAvoidingView, 
-  Platform, 
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import {
+  View,
+  StyleSheet,
+  Platform,
   Modal,
   FlatList,
   Pressable,
@@ -13,10 +12,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import { useFocusEffect } from "@react-navigation/native";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { ThemedText } from "@/components/ThemedText";
 import { Icon } from "@/components/Icon";
 import { Colors, Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
@@ -28,7 +29,7 @@ import {
   coldTruckCompanies,
 } from "@/constants/regionData";
 
-import { CategoryTab, CourierFormData, OtherCourierFormData, ColdTruckFormData, ContractSettings } from "./types";
+import { CategoryTab, CourierFormData, OtherCourierFormData, ColdTruckFormData, ContractSettings, ContractSubmitData } from "./types";
 import Step1BasicInfo from "./Step1BasicInfo";
 import Step2Quantity from "./Step2Quantity";
 import Step4Vehicle from "./Step4Vehicle";
@@ -49,6 +50,11 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
   const tabBarHeight = useBottomTabBarHeight();
   const headerHeight = useHeaderHeight();
   const { theme, isDark } = useTheme();
+  const { isDesktop, isTablet } = useResponsive();
+  // 웹 사이드바 모드일 때는 하단 탭바가 없으므로 bottomPadding 불필요
+  // 탭바가 position: absolute이므로 tabBarHeight 전체를 사용해야 콘텐츠가 탭바 아래로 가려지지 않음
+  const showSidebar = (isDesktop || isTablet) && Platform.OS === 'web';
+  const effectiveBottomPadding = showSidebar ? 0 : tabBarHeight;
   const queryClient = useQueryClient();
   
   const [currentStep, setCurrentStep] = useState(1);
@@ -116,17 +122,115 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     agreeToSubmit: false,
   });
 
-  // 임시 저장 로드
-  useEffect(() => {
-    loadDraft();
-  }, []);
+  // 작성 중 여부 (1단계 이후 진행 시 true)
+  const hasUnsavedProgress = useRef(false);
+
+  // 화면 포커스 시 임시 저장 체크 (탭 전환 후 돌아왔을 때도 동작)
+  useFocusEffect(
+    useCallback(() => {
+      const checkDraft = async () => {
+        // 이미 작성 중이면 다시 물어보지 않음
+        if (hasUnsavedProgress.current && currentStep > 1) return;
+
+        try {
+          const draft = await AsyncStorage.getItem(DRAFT_STORAGE_KEY);
+          if (draft) {
+            const parsed = JSON.parse(draft);
+            if (parsed.currentStep && parsed.currentStep > 1) {
+              Alert.alert(
+                "임시 저장된 오더",
+                "작성 중이던 오더가 있습니다. 이어서 작성하시겠습니까?",
+                [
+                  {
+                    text: "처음부터",
+                    style: "destructive",
+                    onPress: async () => {
+                      await clearDraft();
+                      resetForm();
+                    },
+                  },
+                  {
+                    text: "이어서 작성",
+                    onPress: () => {
+                      loadDraft();
+                    },
+                  },
+                ]
+              );
+            }
+          }
+        } catch (error) {
+          console.error("Failed to check draft:", error);
+        }
+      };
+      checkDraft();
+    }, [])
+  );
 
   // 임시 저장 자동 저장
   useEffect(() => {
     if (currentStep > 1) {
+      hasUnsavedProgress.current = true;
       saveDraft();
+    } else {
+      hasUnsavedProgress.current = false;
     }
   }, [currentStep, courierForm, otherCourierForm, coldTruckForm, activeTab]);
+
+  // 다른 탭으로 이동 시 저장/초기화 확인 다이얼로그
+  // 탭 전환 시: 자동으로 임시 저장하고, 돌아왔을 때 이어서 할지 물어봄
+  // (탭 전환은 preventDefault가 불가하므로 blur 시 자동 저장)
+  useEffect(() => {
+    const parentNav = navigation.getParent(); // CreateJobStack의 부모 = TabNavigator
+    if (!parentNav) return;
+
+    const unsubscribe = parentNav.addListener('blur', () => {
+      if (hasUnsavedProgress.current) {
+        saveDraft();
+      }
+    });
+
+    return () => unsubscribe();
+  }, [navigation]);
+
+  // 스택 내에서 뒤로가기(back 버튼, 제스처) 시 확인 다이얼로그
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
+      if (!hasUnsavedProgress.current) return;
+
+      e.preventDefault();
+
+      Alert.alert(
+        "오더 작성 중",
+        "작성 중인 오더를 어떻게 하시겠습니까?",
+        [
+          {
+            text: "취소",
+            style: "cancel",
+          },
+          {
+            text: "초기화",
+            style: "destructive",
+            onPress: async () => {
+              await clearDraft();
+              resetForm();
+              navigation.dispatch(e.data.action);
+            },
+          },
+          {
+            text: "저장",
+            onPress: async () => {
+              await saveDraft();
+              hasUnsavedProgress.current = false;
+              navigation.dispatch(e.data.action);
+            },
+          },
+        ]
+      );
+    });
+
+    return () => unsubscribe();
+  }, [navigation]);
 
   const loadDraft = async () => {
     try {
@@ -166,6 +270,67 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     } catch (error) {
       console.error("Failed to clear draft:", error);
     }
+  };
+
+  const resetForm = () => {
+    setCurrentStep(1);
+    setActiveTab("택배사");
+    setCourierForm({
+      company: "",
+      avgQuantity: "",
+      unitPrice: "",
+      requestDate: "",
+      requestDateEnd: "",
+      managerContact: "",
+      vehicleType: "",
+      regionLarge: "",
+      regionMedium: "",
+      regionSmall: "",
+      campAddress: "",
+      campAddressDetail: "",
+      deliveryGuide: "",
+      isUrgent: false,
+      agreeToSubmit: false,
+    });
+    setOtherCourierForm({
+      companyName: "",
+      boxCount: "",
+      unitPrice: "",
+      isDayDelivery: false,
+      isNightDelivery: false,
+      isPerBox: false,
+      isPerDrop: false,
+      requestDate: "",
+      requestDateEnd: "",
+      vehicleType: "",
+      campAddress: "",
+      campAddressDetail: "",
+      contact: "",
+      deliveryGuide: "",
+      isUrgent: false,
+      agreeToSubmit: false,
+      regionLarge: "",
+      regionMedium: "",
+      regionSmall: "",
+    });
+    setColdTruckForm({
+      company: "",
+      hasTachometer: false,
+      hasPartition: false,
+      requestDate: "",
+      requestDateEnd: "",
+      vehicleType: "",
+      contact: "",
+      loadingPoint: "",
+      loadingPointDetail: "",
+      waypoints: [""],
+      freight: "",
+      recommendedFee: "200000",
+      deliveryGuide: "",
+      isUrgent: false,
+      agreeToSubmit: false,
+    });
+    hasUnsavedProgress.current = false;
   };
 
   // API 쿼리
@@ -270,7 +435,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     },
   });
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (contractData: ContractSubmitData) => {
     let orderData: any = {};
 
     if (activeTab === "택배사") {
@@ -279,7 +444,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
         carrierCode: courierForm.company,
         courierCompany: courierForm.company,
         courierCategory: "parcel",
-        deliveryArea: `${courierForm.regionLarge} > ${courierForm.regionMedium}`,
+        deliveryArea: [courierForm.regionLarge, courierForm.regionMedium, courierForm.regionSmall].filter(Boolean).join(' \\ '),
         campAddress: courierForm.campAddress,
         campAddressDetail: courierForm.campAddressDetail,
         averageQuantity: courierForm.avgQuantity,
@@ -295,7 +460,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
       orderData = {
         companyName: otherCourierForm.companyName,
         courierCategory: "other",
-        deliveryArea: `${otherCourierForm.regionLarge} > ${otherCourierForm.regionMedium}`,
+        deliveryArea: [otherCourierForm.regionLarge, otherCourierForm.regionMedium, otherCourierForm.regionSmall].filter(Boolean).join(' \\ '),
         campAddress: otherCourierForm.campAddress,
         campAddressDetail: otherCourierForm.campAddressDetail,
         averageQuantity: otherCourierForm.boxCount,
@@ -326,6 +491,16 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
         isUrgent: coldTruckForm.isUrgent,
       };
     }
+
+    // 날짜 순서 보정: 시작일이 종료일보다 뒤면 교환
+    if (orderData.scheduledDate && orderData.scheduledDateEnd && orderData.scheduledDate > orderData.scheduledDateEnd) {
+      [orderData.scheduledDate, orderData.scheduledDateEnd] = [orderData.scheduledDateEnd, orderData.scheduledDate];
+    }
+
+    // 계약서 데이터 추가 (잔금입금예정일, 서명, 인증전화번호)
+    orderData.balancePaymentDueDate = contractData.balancePaymentDueDate;
+    orderData.signatureName = contractData.signatureName;
+    orderData.verificationPhone = contractData.verificationPhone;
 
     createJobMutation.mutate(orderData);
   };
@@ -401,6 +576,8 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
 
   const handleComplete = async () => {
     await clearDraft();
+    hasUnsavedProgress.current = false;
+    resetForm();
     Alert.alert("완료", "오더 등록이 최종 완료되었습니다!", [
       { text: "확인", onPress: () => navigation.goBack() }
     ]);
@@ -411,7 +588,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
       activeTab,
       theme,
       isDark,
-      bottomPadding: tabBarHeight,
+      bottomPadding: effectiveBottomPadding,
       onNext: () => setCurrentStep(currentStep + 1),
       onBack: () => setCurrentStep(currentStep - 1),
     };
@@ -532,7 +709,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             onBack={() => setCurrentStep(currentStep - 1)}
             theme={theme}
             isDark={isDark}
-            bottomPadding={tabBarHeight}
+            bottomPadding={effectiveBottomPadding}
             contractSettings={contractSettings}
           />
         );
@@ -542,15 +719,16 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
   };
 
   return (
-    <KeyboardAvoidingView 
+    <View
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       {renderStepIndicator()}
       <View style={{ paddingTop: Spacing.md, paddingHorizontal: Spacing.lg }}>
         {renderTabs()}
       </View>
-      {renderCurrentStep()}
+      <View style={{ flex: 1, marginBottom: effectiveBottomPadding }}>
+        {renderCurrentStep()}
+      </View>
 
       {/* Select Modal */}
       <Modal visible={showSelectModal} transparent animationType="slide">
@@ -581,7 +759,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
           </View>
         </View>
       </Modal>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

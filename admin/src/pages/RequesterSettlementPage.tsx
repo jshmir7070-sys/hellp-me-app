@@ -109,7 +109,7 @@ export default function RequesterSettlementPage() {
   const requesterOrders = ordersData?.orders || [];
   const ordersSummary = ordersData?.summary || { totalAmount: 0, totalDeposit: 0, totalBalance: 0 };
 
-  const issuedRequesterIds = new Set(taxInvoices.map(t => String(t.targetId)));
+  // const issuedRequesterIds = new Set(taxInvoices.map(t => String(t.targetId)));
   const taxInvoiceMap = new Map(taxInvoices.map(t => [String(t.targetId), t.id]));
 
   const downloadTaxInvoicePdfMutation = useMutation({

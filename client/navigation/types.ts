@@ -1,3 +1,6 @@
+import { NavigatorScreenParams } from "@react-navigation/native";
+import { ClosingStackParamList } from "@/navigation/ClosingStackNavigator";
+
 export type JobsStackParamList = {
   JobList: undefined;
   JobDetail: { jobId: string };
@@ -31,6 +34,15 @@ export type ProfileStackParamList = {
   RequesterHistory: undefined;
   HistoryDetail: { orderId: number; settlementId?: string };
   WriteReview: { orderId: number };
+  RequesterDispute: { orderId: number };
+  RequesterDisputeList: undefined;
+  RequesterDisputeDetail: { disputeId: number };
+  Disputes: undefined;
+  DisputeCreate: { orderId?: number; type?: string };
+  DisputeDetail: { disputeId: number };
+  IncidentList: undefined;
+  IncidentDetail: { incidentId: number };
+  IncidentReport: { orderId: number };
 };
 
 export type AuthStackParamList = {
@@ -38,17 +50,25 @@ export type AuthStackParamList = {
   Signup: undefined;
 };
 
-export type RootStackParamList = {
-  Main: undefined;
-  Modal: undefined;
-};
-
 export type MainTabParamList = {
-  HomeTab: undefined;
-  OrdersTab: undefined;
-  CreateOrderTab: undefined;
-  WorkStatusTab: undefined;
+  HomeTab: NavigatorScreenParams<HomeStackParamList> | undefined;
+  OrdersTab: NavigatorScreenParams<JobsStackParamList> | undefined;
+  CreateOrderTab: NavigatorScreenParams<ContractsStackParamList> | undefined;
+  WorkStatusTab: NavigatorScreenParams<ClosingStackParamList> | undefined;
   RecruitmentTab: undefined;
   ReviewsTab: undefined;
-  ProfileTab: undefined;
+  ProfileTab: NavigatorScreenParams<ProfileStackParamList> | undefined;
+};
+
+export type RootStackParamList = {
+  Main: NavigatorScreenParams<MainTabParamList> | undefined;
+  Modal: undefined;
+  QRScanner: { contractId?: string; type?: 'checkin'; orderId?: string };
+  WorkProof: { orderId?: string; contractId?: string; type?: 'pickup' | 'delivery' | 'other' };
+  HelperOnboarding: undefined;
+  ContractSigning: undefined;
+  Payment: { orderId?: string; contractId?: string; amount?: number; paymentType?: 'deposit' | 'balance'; orderTitle?: string };
+  Contract: { contractId?: string; orderId?: string };
+  CreateContract: { orderId: number };
+  IdentityVerification: { returnScreen?: string; purpose?: 'signup' | 'profile' | 'payment' };
 };

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -25,7 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest } from '@/lib/api';
+import { apiRequest, getAuthHeaders } from '@/lib/api';
 
 interface DocumentData {
   id: number;
@@ -36,6 +36,9 @@ interface DocumentData {
   businessNumber?: string;
   businessName?: string;
   representativeName?: string;
+  businessAddress?: string;
+  businessType?: string;
+  businessCategory?: string;
   licenseNumber?: string;
   licenseType?: string;
   issueDate?: string;
@@ -45,6 +48,9 @@ interface DocumentData {
   vehicleOwnerName?: string;
   contractCompanyName?: string;
   contractDate?: string;
+  signatureName?: string;
+  verificationPhone?: string;
+  contractConsent?: string; // JSON string
   uploadedAt?: string;
   reviewedAt?: string;
   reviewedBy?: string;
@@ -114,6 +120,9 @@ export default function HelperDocumentsPage() {
   
   const [selectedDocument, setSelectedDocument] = useState<DocumentWithUser | null>(null);
   const [showReviewDialog, setShowReviewDialog] = useState(false);
+  const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [detailDocument, setDetailDocument] = useState<DocumentWithUser | null>(null);
+  const [detailImageUrl, setDetailImageUrl] = useState<string | null>(null);
   const [reviewAction, setReviewAction] = useState<'approve' | 'reject'>('approve');
   const [rejectionReason, setRejectionReason] = useState('');
   const [adminNote, setAdminNote] = useState('');
@@ -189,12 +198,147 @@ export default function HelperDocumentsPage() {
     }
   };
 
+  // 전체 승인
+  const approveAllMutation = useMutation({
+    mutationFn: async (documentIds: number[]) => {
+      // 모든 서류를 순차적으로 승인
+      for (const id of documentIds) {
+        await apiRequest(`/helper-documents/${id}/approve`, {
+          method: 'PATCH',
+          body: JSON.stringify({ adminNote: '일괄 승인' }),
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/helper-documents'] });
+      toast({ title: '승인 완료', description: '모든 서류가 승인되었습니다' });
+    },
+    onError: () => {
+      toast({ title: '오류', description: '일부 서류 승인에 실패했습니다', variant: 'destructive' });
+    },
+  });
+
+  const handleApproveAll = (documents: DocumentData[]) => {
+    const reviewingDocs = documents.filter(d => d.status === 'reviewing' || d.status === 'pending');
+    if (reviewingDocs.length === 0) {
+      toast({ title: '알림', description: '승인할 서류가 없습니다' });
+      return;
+    }
+
+    if (confirm(`${reviewingDocs.length}개의 서류를 모두 승인하시겠습니까?`)) {
+      approveAllMutation.mutate(reviewingDocs.map(d => d.id));
+    }
+  };
+
   const openReviewDialog = (doc: DocumentWithUser, action: 'approve' | 'reject') => {
     setSelectedDocument(doc);
     setReviewAction(action);
     setRejectionReason('');
     setAdminNote('');
     setShowReviewDialog(true);
+  };
+
+  // 서류 상세보기 열기
+  const openDetailDialog = async (doc: DocumentWithUser) => {
+    setDetailDocument(doc);
+    setDetailImageUrl(null);
+    setShowDetailDialog(true);
+
+    // 이미지가 있으면 토큰과 함께 가져오기
+    if (doc.document.imageUrl) {
+      try {
+        const headers = getAuthHeaders();
+        const response = await fetch(doc.document.imageUrl, { headers });
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = URL.createObjectURL(blob);
+          setDetailImageUrl(url);
+        }
+      } catch (err) {
+        console.error('Image load error:', err);
+      }
+    }
+  };
+
+  // cleanup blob URL
+  useEffect(() => {
+    return () => {
+      if (detailImageUrl) URL.revokeObjectURL(detailImageUrl);
+    };
+  }, [detailImageUrl]);
+
+  // 서류 타입별 상세 정보 렌더링
+  const renderDocumentDetails = (doc: DocumentData) => {
+    const details: { label: string; value: string | undefined }[] = [];
+
+    switch (doc.documentType) {
+      case 'businessCert':
+        details.push(
+          { label: '사업자번호', value: doc.businessNumber },
+          { label: '상호명', value: doc.businessName },
+          { label: '대표자명', value: doc.representativeName },
+          { label: '사업장주소', value: doc.businessAddress },
+          { label: '업종', value: doc.businessType },
+          { label: '업태', value: doc.businessCategory },
+        );
+        break;
+      case 'driverLicense':
+        details.push(
+          { label: '면허번호', value: doc.licenseNumber },
+          { label: '면허종류', value: doc.licenseType },
+          { label: '발급일', value: doc.issueDate },
+          { label: '만료일', value: doc.expiryDate },
+        );
+        break;
+      case 'cargoLicense':
+        details.push(
+          { label: '자격증번호', value: doc.licenseNumber },
+          { label: '발급일', value: doc.issueDate },
+        );
+        break;
+      case 'vehicleCert':
+        details.push(
+          { label: '차량번호', value: doc.plateNumber },
+          { label: '차량종류', value: doc.vehicleType },
+          { label: '소유자명', value: doc.vehicleOwnerName },
+        );
+        break;
+      case 'transportContract':
+        details.push(
+          { label: '계약회사명', value: doc.contractCompanyName },
+          { label: '계약일', value: doc.contractDate },
+          { label: '서명자명', value: doc.signatureName },
+          { label: '확인전화번호', value: doc.verificationPhone },
+        );
+
+        // 동의 사항 파싱
+        if (doc.contractConsent) {
+          try {
+            const consent = JSON.parse(doc.contractConsent);
+            let agreedAtStr = '-';
+            if (consent.agreedAt) {
+              try {
+                agreedAtStr = new Date(consent.agreedAt).toLocaleString('ko-KR');
+              } catch {
+                agreedAtStr = String(consent.agreedAt);
+              }
+            }
+            details.push(
+              { label: '위수탁 계약 동의', value: consent.agreeConsignment ? '✓ 동의함' : '✗ 미동의' },
+              { label: '안전교육 이수 동의', value: consent.agreeSafety ? '✓ 동의함' : '✗ 미동의' },
+              { label: '개인정보 수집 동의', value: consent.agreePrivacy ? '✓ 동의함' : '✗ 미동의' },
+              { label: '동의 일시', value: agreedAtStr },
+            );
+          } catch (e) {
+            console.error('Failed to parse contract consent:', e);
+            // 파싱 실패해도 기본 정보는 표시
+          }
+        }
+        break;
+    }
+
+    return details.filter(d => d.value);
   };
 
   // 필터링된 문서
@@ -212,6 +356,21 @@ export default function HelperDocumentsPage() {
     }
     return true;
   });
+
+  // 헬퍼별로 그룹핑
+  const groupedByHelper = filteredDocuments.reduce((acc, item) => {
+    const userId = item.user.id;
+    if (!acc[userId]) {
+      acc[userId] = {
+        user: item.user,
+        documents: []
+      };
+    }
+    acc[userId].documents.push(item.document);
+    return acc;
+  }, {} as Record<string, { user: UserInfo; documents: DocumentData[] }>);
+
+  const helpers = Object.values(groupedByHelper);
 
   // 통계
   const stats = {
@@ -321,110 +480,319 @@ export default function HelperDocumentsPage() {
         </div>
       </Card>
 
-      {/* 서류 목록 */}
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="border-b bg-muted/50">
-              <tr>
-                <th className="p-3 text-left font-medium">헬퍼</th>
-                <th className="p-3 text-left font-medium">서류 종류</th>
-                <th className="p-3 text-left font-medium">상태</th>
-                <th className="p-3 text-left font-medium">제출일시</th>
-                <th className="p-3 text-left font-medium">검토일시</th>
-                <th className="p-3 text-center font-medium">작업</th>
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                    로딩중...
-                  </td>
+      {/* 헬퍼별 서류 목록 - 테이블 형식 */}
+      <Card className="overflow-hidden">
+        {isLoading ? (
+          <div className="p-8 text-center text-muted-foreground">로딩중...</div>
+        ) : helpers.length === 0 ? (
+          <div className="p-8 text-center text-muted-foreground">서류가 없습니다</div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-muted/50 border-b">
+                  <th className="px-4 py-3 text-left text-sm font-semibold">이름</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold">이메일</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold">사업자<br/>등록증</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold">운전<br/>면허증</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold">화물운송<br/>자격증</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold">차량<br/>등록증</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold">용달<br/>계약서</th>
+                  <th className="px-4 py-3 text-center text-sm font-semibold">액션</th>
                 </tr>
-              ) : filteredDocuments.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-muted-foreground">
-                    서류가 없습니다
-                  </td>
-                </tr>
-              ) : (
-                filteredDocuments.map((item) => {
-                  const StatusIcon = STATUS_CONFIG[item.document.status].icon;
+              </thead>
+              <tbody>
+                {helpers.map(({ user, documents: helperDocs }) => {
+                  const allDocTypes = ['businessCert', 'driverLicense', 'cargoLicense', 'vehicleCert', 'transportContract'] as const;
+                  const reviewingCount = helperDocs.filter(d => d.status === 'reviewing' || d.status === 'pending').length;
+
                   return (
-                    <tr key={item.document.id} className="border-b hover:bg-muted/50">
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">{item.user.name}</p>
-                            <p className="text-xs text-muted-foreground">{item.user.email}</p>
-                          </div>
-                        </div>
+                    <tr key={user.id} className="border-b hover:bg-muted/20 transition-colors">
+                      {/* 이름 */}
+                      <td className="px-4 py-3">
+                        <div className="font-medium">{user.name}</div>
+                        {user.phoneNumber && (
+                          <div className="text-xs text-muted-foreground">{user.phoneNumber}</div>
+                        )}
                       </td>
-                      <td className="p-3">
-                        <Badge variant="outline">
-                          {DOCUMENT_TYPE_LABELS[item.document.documentType]}
-                        </Badge>
+
+                      {/* 이메일 */}
+                      <td className="px-4 py-3">
+                        <div className="text-sm">{user.email}</div>
                       </td>
-                      <td className="p-3">
-                        <div className="flex items-center gap-2">
-                          <StatusIcon className={`h-4 w-4 text-${STATUS_CONFIG[item.document.status].color}-500`} />
-                          <span>{STATUS_CONFIG[item.document.status].label}</span>
-                        </div>
-                      </td>
-                      <td className="p-3 text-sm">
-                        {item.document.uploadedAt
-                          ? format(new Date(item.document.uploadedAt), 'yyyy-MM-dd HH:mm', { locale: ko })
-                          : '-'}
-                      </td>
-                      <td className="p-3 text-sm">
-                        {item.document.reviewedAt
-                          ? format(new Date(item.document.reviewedAt), 'yyyy-MM-dd HH:mm', { locale: ko })
-                          : '-'}
-                      </td>
-                      <td className="p-3">
+
+                      {/* 서류 아이콘들 */}
+                      {allDocTypes.map(docType => {
+                        const doc = helperDocs.find(d => d.documentType === docType);
+                        const status = doc?.status || 'not_submitted';
+
+                        return (
+                          <td key={docType} className="px-4 py-3 text-center">
+                            {doc && status !== 'not_submitted' ? (
+                              <button
+                                onClick={() => openDetailDialog({ document: doc, user })}
+                                className="inline-flex items-center justify-center p-2 rounded-lg hover:bg-muted transition-colors"
+                                title={`${DOCUMENT_TYPE_LABELS[docType]} - ${STATUS_CONFIG[status].label}`}
+                              >
+                                {status === 'approved' ? (
+                                  <CheckCircle className="h-6 w-6 text-green-600" />
+                                ) : status === 'rejected' ? (
+                                  <XCircle className="h-6 w-6 text-red-600" />
+                                ) : status === 'reviewing' ? (
+                                  <Eye className="h-6 w-6 text-blue-600" />
+                                ) : (
+                                  <Clock className="h-6 w-6 text-yellow-600" />
+                                )}
+                              </button>
+                            ) : (
+                              <div className="inline-flex items-center justify-center p-2">
+                                <AlertCircle className="h-6 w-6 text-gray-300" />
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+
+                      {/* 액션 버튼 */}
+                      <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-2">
-                          {item.document.imageUrl && (
+                          {reviewingCount > 0 && (
                             <Button
-                              variant="outline"
                               size="sm"
-                              onClick={() => window.open(item.document.imageUrl, '_blank')}
+                              onClick={() => handleApproveAll(helperDocs)}
+                              disabled={approveAllMutation.isPending}
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              title="전체 승인"
                             >
-                              <Eye className="h-4 w-4 mr-1" />
-                              보기
+                              <CheckCircle className="h-4 w-4" />
                             </Button>
                           )}
-                          {(item.document.status === 'reviewing' || item.document.status === 'pending') && (
-                            <>
-                              <Button
-                                variant="default"
-                                size="sm"
-                                onClick={() => openReviewDialog(item, 'approve')}
-                              >
-                                <CheckCircle className="h-4 w-4 mr-1" />
-                                승인
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => openReviewDialog(item, 'reject')}
-                              >
-                                <XCircle className="h-4 w-4 mr-1" />
-                                반려
-                              </Button>
-                            </>
-                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => window.open(`/admin/helpers/${user.id}`, '_blank')}
+                            title="헬퍼 상세"
+                          >
+                            <User className="h-4 w-4" />
+                          </Button>
                         </div>
                       </td>
                     </tr>
                   );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
+
+      {/* 서류 상세보기 다이얼로그 */}
+      <Dialog open={showDetailDialog} onOpenChange={(open) => {
+        setShowDetailDialog(open);
+        if (!open && detailImageUrl) {
+          URL.revokeObjectURL(detailImageUrl);
+          setDetailImageUrl(null);
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              서류 상세 정보
+            </DialogTitle>
+          </DialogHeader>
+
+          {detailDocument && (
+            <div className="space-y-4">
+              {/* 헬퍼 정보 */}
+              <div className="grid grid-cols-2 gap-4 p-3 bg-muted/50 rounded-lg">
+                <div>
+                  <p className="text-xs text-muted-foreground">헬퍼명</p>
+                  <p className="font-medium">{detailDocument.user.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">이메일</p>
+                  <p className="font-medium text-sm">{detailDocument.user.email}</p>
+                </div>
+                {detailDocument.user.phoneNumber && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">전화번호</p>
+                    <p className="font-medium">{detailDocument.user.phoneNumber}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-xs text-muted-foreground">서류 종류</p>
+                  <Badge variant="outline">
+                    {DOCUMENT_TYPE_LABELS[detailDocument.document.documentType]}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* 상태 */}
+              <div className="flex items-center gap-2">
+                {(() => {
+                  const StatusIcon = STATUS_CONFIG[detailDocument.document.status].icon;
+                  return (
+                    <>
+                      <StatusIcon className={`h-5 w-5 text-${STATUS_CONFIG[detailDocument.document.status].color}-500`} />
+                      <span className="font-medium">{STATUS_CONFIG[detailDocument.document.status].label}</span>
+                    </>
+                  );
+                })()}
+                {detailDocument.document.uploadedAt && (
+                  <span className="text-sm text-muted-foreground ml-auto">
+                    제출: {format(new Date(detailDocument.document.uploadedAt), 'yyyy-MM-dd HH:mm', { locale: ko })}
+                  </span>
+                )}
+              </div>
+
+              {/* 반려 사유 */}
+              {detailDocument.document.status === 'rejected' && detailDocument.document.rejectionReason && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm font-medium text-red-800">반려 사유</p>
+                  <p className="text-sm text-red-700">{detailDocument.document.rejectionReason}</p>
+                </div>
+              )}
+
+              {/* 서류 타입별 상세 정보 */}
+              {renderDocumentDetails(detailDocument.document).length > 0 && (
+                <div>
+                  <p className="text-sm font-medium mb-2">입력 정보</p>
+                  <div className="grid grid-cols-2 gap-3 p-3 border rounded-lg">
+                    {renderDocumentDetails(detailDocument.document).map((detail, idx) => (
+                      <div key={idx}>
+                        <p className="text-xs text-muted-foreground">{detail.label}</p>
+                        <p className="text-sm font-medium">{detail.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 화물위탁계약서 전문 */}
+              {detailDocument.document.documentType === 'transportContract' && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm font-medium mb-3 text-blue-900">화물자동차 운송사업 위수탁 계약서</p>
+                  <div className="space-y-3 text-xs text-gray-700 max-h-[400px] overflow-y-auto">
+                    <p className="font-medium">
+                      본 계약은 「화물자동차 운수사업법」 제29조 및 같은 법 시행규칙 제28조에 따라,
+                      화물자동차 운송사업의 위수탁에 관한 사항을 정하기 위하여 체결합니다.
+                    </p>
+
+                    <div className="mt-3">
+                      <p className="font-semibold mb-1">제1조 (목적)</p>
+                      <p>본 계약은 위탁자와 수탁자 간의 화물자동차 운송사업의 위탁 및 수탁에 관한 사항을 명확히 하여,
+                      상호 신뢰를 바탕으로 한 거래질서를 확립하고자 함을 목적으로 합니다.</p>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold mb-1">제2조 (위탁 범위)</p>
+                      <p>① 위탁자는 수탁자에게 다음 각 호의 업무를 위탁하며, 수탁자는 이를 성실히 수행합니다.</p>
+                      <p className="ml-3">1. 화물의 집하, 운송 및 배송</p>
+                      <p className="ml-3">2. 화물의 적재 및 하역</p>
+                      <p className="ml-3">3. 기타 운송에 부수되는 업무</p>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold mb-1">제3조 (수탁자의 의무)</p>
+                      <p>① 수탁자는 관계법령을 준수하며 화물을 안전하게 운송할 의무가 있습니다.</p>
+                      <p>② 수탁자는 운송 중 발생한 사고에 대하여 책임을 집니다.</p>
+                      <p>③ 수탁자는 위탁자의 영업비밀을 보호하여야 합니다.</p>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold mb-1">제4조 (위탁자의 의무)</p>
+                      <p>① 위탁자는 수탁자에게 운송에 필요한 정보를 제공하여야 합니다.</p>
+                      <p>② 위탁자는 계약에 따른 운송료를 지급할 의무가 있습니다.</p>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold mb-1">제5조 (운송료 및 지급)</p>
+                      <p>운송료는 앱 내에서 합의된 금액으로 하며, 작업 완료 후 정산 절차에 따라 지급됩니다.</p>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold mb-1">제6조 (계약 기간)</p>
+                      <p>본 계약의 유효기간은 계약 체결일로부터 1년으로 하며, 별도의 해지 의사표시가 없는 한 자동으로 연장됩니다.</p>
+                    </div>
+
+                    <div>
+                      <p className="font-semibold mb-1">제7조 (손해배상)</p>
+                      <p>양 당사자는 본 계약의 이행과 관련하여 상대방에게 손해를 입힌 경우 이를 배상하여야 합니다.</p>
+                    </div>
+
+                    <div className="mt-4 p-3 bg-white rounded border border-blue-300">
+                      <p className="font-semibold text-blue-900 mb-2">헬퍼 동의 사항</p>
+                      <p className="text-xs">
+                        ✓ 위 계약 내용을 모두 확인하였으며 이에 동의합니다.<br/>
+                        ✓ 안전 교육을 이수하였으며 관련 규정을 준수하겠습니다.<br/>
+                        ✓ 개인정보 수집 및 이용에 동의합니다.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 이미지 */}
+              {detailDocument.document.imageUrl && (
+                <div>
+                  <p className="text-sm font-medium mb-2">제출 이미지</p>
+                  <div className="border rounded-lg overflow-hidden bg-gray-50">
+                    {detailImageUrl ? (
+                      <img
+                        src={detailImageUrl}
+                        alt="제출 서류"
+                        className="w-full max-h-[500px] object-contain"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-48 text-muted-foreground">
+                        이미지 로딩중...
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 관리자 메모 */}
+              {detailDocument.document.adminNote && (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm font-medium text-blue-800">관리자 메모</p>
+                  <p className="text-sm text-blue-700">{detailDocument.document.adminNote}</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            {detailDocument && (detailDocument.document.status === 'reviewing' || detailDocument.document.status === 'pending') && (
+              <>
+                <Button
+                  variant="default"
+                  onClick={() => {
+                    setShowDetailDialog(false);
+                    openReviewDialog(detailDocument, 'approve');
+                  }}
+                >
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  승인
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    setShowDetailDialog(false);
+                    openReviewDialog(detailDocument, 'reject');
+                  }}
+                >
+                  <XCircle className="h-4 w-4 mr-1" />
+                  반려
+                </Button>
+              </>
+            )}
+            <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
+              닫기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* 검토 다이얼로그 */}
       <Dialog open={showReviewDialog} onOpenChange={setShowReviewDialog}>
@@ -434,14 +802,14 @@ export default function HelperDocumentsPage() {
               {reviewAction === 'approve' ? '서류 승인' : '서류 반려'}
             </DialogTitle>
           </DialogHeader>
-          
+
           {selectedDocument && (
             <div className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground">헬퍼</p>
                 <p className="font-medium">{selectedDocument.user.name}</p>
               </div>
-              
+
               <div>
                 <p className="text-sm text-muted-foreground">서류 종류</p>
                 <p className="font-medium">{DOCUMENT_TYPE_LABELS[selectedDocument.document.documentType]}</p>

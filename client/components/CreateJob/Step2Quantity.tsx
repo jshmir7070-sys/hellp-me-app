@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { View, TextInput, Pressable, StyleSheet, ScrollView, Platform } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { Icon } from "@/components/Icon";
 import { Colors, Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
+import { useFormValidation } from "@/hooks/useFormValidation";
 import { Step2Props } from "./types";
 import { quantityOptions, generatePriceOptions } from "@/constants/regionData";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -31,6 +32,33 @@ export default function Step2Quantity({
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState<'start' | 'end'>('start');
   const [tempDate, setTempDate] = useState<Date>(new Date());
+
+  // Refs for validation
+  const scrollViewRef = useRef<ScrollView>(null);
+  const courierQuantityRef = useRef<View>(null);
+  const courierPriceRef = useRef<View>(null);
+  const otherBoxCountRef = useRef<TextInput>(null);
+  const otherPriceRef = useRef<TextInput>(null);
+  const coldFreightRef = useRef<TextInput>(null);
+  const startDateRef = useRef<View>(null);
+  const endDateRef = useRef<View>(null);
+
+  const { validate, registerField } = useFormValidation();
+
+  // Register fields
+  useEffect(() => {
+    if (activeTab === "택배사") {
+      registerField('courierQuantity', courierQuantityRef, scrollViewRef);
+      registerField('courierPrice', courierPriceRef, scrollViewRef);
+    } else if (activeTab === "기타택배") {
+      registerField('otherBoxCount', otherBoxCountRef, scrollViewRef);
+      registerField('otherPrice', otherPriceRef, scrollViewRef);
+    } else if (activeTab === "냉탑전용") {
+      registerField('coldFreight', coldFreightRef, scrollViewRef);
+    }
+    registerField('startDate', startDateRef, scrollViewRef);
+    registerField('endDate', endDateRef, scrollViewRef);
+  }, [activeTab]);
 
   const formatDateToString = (date: Date): string => {
     const year = date.getFullYear();
@@ -64,19 +92,32 @@ export default function Step2Quantity({
 
       if (activeTab === "택배사") {
         if (datePickerMode === 'start') {
-          setCourierForm({ ...courierForm, requestDate: dateStr });
+          // 시작일 변경 시 종료일이 시작일보다 이전이면 종료일도 같이 변경
+          const updates: any = { requestDate: dateStr };
+          if (courierForm.requestDateEnd && dateStr > courierForm.requestDateEnd) {
+            updates.requestDateEnd = dateStr;
+          }
+          setCourierForm({ ...courierForm, ...updates });
         } else {
           setCourierForm({ ...courierForm, requestDateEnd: dateStr });
         }
       } else if (activeTab === "기타택배") {
         if (datePickerMode === 'start') {
-          setOtherCourierForm({ ...otherCourierForm, requestDate: dateStr });
+          const updates: any = { requestDate: dateStr };
+          if (otherCourierForm.requestDateEnd && dateStr > otherCourierForm.requestDateEnd) {
+            updates.requestDateEnd = dateStr;
+          }
+          setOtherCourierForm({ ...otherCourierForm, ...updates });
         } else {
           setOtherCourierForm({ ...otherCourierForm, requestDateEnd: dateStr });
         }
       } else {
         if (datePickerMode === 'start') {
-          setColdTruckForm({ ...coldTruckForm, requestDate: dateStr });
+          const updates: any = { requestDate: dateStr };
+          if (coldTruckForm.requestDateEnd && dateStr > coldTruckForm.requestDateEnd) {
+            updates.requestDateEnd = dateStr;
+          }
+          setColdTruckForm({ ...coldTruckForm, ...updates });
         } else {
           setColdTruckForm({ ...coldTruckForm, requestDateEnd: dateStr });
         }
@@ -113,7 +154,96 @@ export default function Step2Quantity({
   const isValid = isQuantityValid && isDateValid;
 
   const handleNext = () => {
-    if (isValid) onNext();
+    let validationRules: any[] = [];
+
+    if (activeTab === "택배사") {
+      validationRules = [
+        {
+          fieldName: 'courierQuantity',
+          displayName: '평균수량',
+          value: courierForm.avgQuantity,
+          required: true,
+        },
+        {
+          fieldName: 'courierPrice',
+          displayName: '단가',
+          value: courierForm.unitPrice,
+          required: true,
+        },
+        {
+          fieldName: 'startDate',
+          displayName: '시작일',
+          value: courierForm.requestDate,
+          required: true,
+        },
+        {
+          fieldName: 'endDate',
+          displayName: '종료일',
+          value: courierForm.requestDateEnd,
+          required: true,
+        },
+      ];
+    } else if (activeTab === "기타택배") {
+      validationRules = [
+        {
+          fieldName: 'otherBoxCount',
+          displayName: '박스 수량',
+          value: otherCourierForm.boxCount,
+          required: true,
+          customValidator: (v: any) => !isNaN(Number(v)) && Number(v) > 0,
+          errorMessage: '박스 수량은 0보다 큰 숫자여야 합니다.',
+        },
+        {
+          fieldName: 'otherPrice',
+          displayName: '단가',
+          value: otherCourierForm.unitPrice,
+          required: true,
+          customValidator: (v: any) => !isNaN(Number(v)) && Number(v) > 0,
+          errorMessage: '단가는 0보다 큰 숫자여야 합니다.',
+        },
+        {
+          fieldName: 'startDate',
+          displayName: '시작일',
+          value: otherCourierForm.requestDate,
+          required: true,
+        },
+        {
+          fieldName: 'endDate',
+          displayName: '종료일',
+          value: otherCourierForm.requestDateEnd,
+          required: true,
+        },
+      ];
+    } else if (activeTab === "냉탑전용") {
+      validationRules = [
+        {
+          fieldName: 'coldFreight',
+          displayName: '운임',
+          value: coldTruckForm.freight,
+          required: true,
+          customValidator: (v: any) => !isNaN(Number(v)) && Number(v) > 0,
+          errorMessage: '운임은 0보다 큰 숫자여야 합니다.',
+        },
+        {
+          fieldName: 'startDate',
+          displayName: '시작일',
+          value: coldTruckForm.requestDate,
+          required: true,
+        },
+        {
+          fieldName: 'endDate',
+          displayName: '종료일',
+          value: coldTruckForm.requestDateEnd,
+          required: true,
+        },
+      ];
+    }
+
+    const isValidForm = validate(validationRules);
+
+    if (isValidForm) {
+      onNext();
+    }
   };
 
   const renderCourierPriceInfo = () => {
@@ -144,8 +274,9 @@ export default function Step2Quantity({
     return null;
   };
 
-  const renderDateButton = (label: string, value: string, mode: 'start' | 'end') => (
+  const renderDateButton = (label: string, value: string, mode: 'start' | 'end', ref: React.RefObject<View>) => (
     <Pressable
+      ref={ref}
       style={[
         styles.dateButton,
         {
@@ -168,7 +299,7 @@ export default function Step2Quantity({
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView ref={scrollViewRef} style={{ flex: 1 }} contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
             2단계: 수량·단가 & 요청일
@@ -188,6 +319,7 @@ export default function Step2Quantity({
                   평균수량 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
                 </ThemedText>
                 <Pressable
+                  ref={courierQuantityRef}
                   style={[
                     styles.selectButton,
                     {
@@ -214,6 +346,7 @@ export default function Step2Quantity({
                   단가 (VAT별도) <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
                 </ThemedText>
                 <Pressable
+                  ref={courierPriceRef}
                   style={[
                     styles.selectButton,
                     {
@@ -262,6 +395,7 @@ export default function Step2Quantity({
                 박스 수량 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
               </ThemedText>
               <TextInput
+                ref={otherBoxCountRef}
                 style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
                 placeholder="박스 수량 입력"
                 placeholderTextColor={Colors.light.tabIconDefault}
@@ -276,6 +410,7 @@ export default function Step2Quantity({
                 단가 (VAT별도) <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
               </ThemedText>
               <TextInput
+                ref={otherPriceRef}
                 style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
                 placeholder="단가 입력"
                 placeholderTextColor={Colors.light.tabIconDefault}
@@ -305,6 +440,7 @@ export default function Step2Quantity({
                 운임 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
               </ThemedText>
               <TextInput
+                ref={coldFreightRef}
                 style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}
                 placeholder="운임 입력"
                 placeholderTextColor={Colors.light.tabIconDefault}
@@ -345,13 +481,13 @@ export default function Step2Quantity({
             <ThemedText style={[styles.label, { color: theme.text }]}>
               시작일 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
-            {renderDateButton("시작일 선택", getCurrentStartDate(), 'start')}
+            {renderDateButton("시작일 선택", getCurrentStartDate(), 'start', startDateRef)}
           </View>
           <View style={styles.halfSection}>
             <ThemedText style={[styles.label, { color: theme.text }]}>
               종료일 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
-            {renderDateButton("종료일 선택", getCurrentEndDate(), 'end')}
+            {renderDateButton("종료일 선택", getCurrentEndDate(), 'end', endDateRef)}
           </View>
         </View>
 
@@ -365,29 +501,7 @@ export default function Step2Quantity({
         )}
       </ScrollView>
 
-      {showDatePicker && Platform.OS !== 'web' && (
-        <DateTimePicker
-          value={tempDate}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          onChange={handleDateChange}
-          minimumDate={new Date()}
-        />
-      )}
-
-      {Platform.OS === 'web' && (
-        <WebCalendar
-          visible={showDatePicker}
-          selectedDate={tempDate}
-          title={datePickerMode === 'start' ? '시작일 선택' : '종료일 선택'}
-          onSelect={(date) => {
-            handleDateChange(null, date);
-          }}
-          onClose={() => setShowDatePicker(false)}
-        />
-      )}
-
-      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot, paddingBottom: bottomPadding || 0 }]}>
+      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot }]}>
         <Pressable
           style={[styles.button, styles.buttonSecondary, { borderColor: BrandColors.requester }]}
           onPress={onBack}
@@ -406,6 +520,38 @@ export default function Step2Quantity({
           <ThemedText style={[styles.buttonText, { color: '#FFFFFF' }]}>다음</ThemedText>
         </Pressable>
       </View>
+
+      {/* 달력 컴포넌트 - footer 뒤에 배치하여 레이아웃 영향 방지 */}
+      {showDatePicker && Platform.OS !== 'web' && (
+        <DateTimePicker
+          value={tempDate}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={handleDateChange}
+          minimumDate={
+            datePickerMode === 'end' && getCurrentStartDate()
+              ? parseStringToDate(getCurrentStartDate())
+              : new Date()
+          }
+        />
+      )}
+
+      {Platform.OS === 'web' && (
+        <WebCalendar
+          visible={showDatePicker}
+          selectedDate={tempDate}
+          title={datePickerMode === 'start' ? '시작일 선택' : '종료일 선택'}
+          minimumDate={
+            datePickerMode === 'end' && getCurrentStartDate()
+              ? parseStringToDate(getCurrentStartDate())
+              : undefined
+          }
+          onSelect={(date) => {
+            handleDateChange(null, date);
+          }}
+          onClose={() => setShowDatePicker(false)}
+        />
+      )}
     </View>
   );
 }
@@ -416,7 +562,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.lg,
-    paddingBottom: 100,
+    paddingBottom: Spacing.lg,
   },
   section: {
     marginBottom: Spacing.xl,
@@ -512,10 +658,6 @@ const styles = StyleSheet.create({
     marginVertical: Spacing.lg,
   },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     padding: Spacing.lg,
     flexDirection: 'row',
     gap: Spacing.md,

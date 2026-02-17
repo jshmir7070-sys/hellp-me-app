@@ -1,6 +1,6 @@
 import type { Express, Request } from "express";
 import type { Server } from "http";
-import { randomUUID, randomBytes } from "crypto";
+import { randomUUID, randomBytes, createHmac } from "crypto";
 import { storage, db } from "./storage";
 import { api } from "@shared/routes";
 import { insertCarrierRateItemSchema, insertAdminBankAccountSchema, insertCustomerServiceInquirySchema, updateCustomerServiceInquirySchema, userLocationLogs, userLocationLatest, teamIncentives, incentiveDetails, requesterRefundAccounts, insertRequesterRefundAccountSchema, SettlementStatement, authAuditLogs, insertDestinationPricingSchema, insertColdChainSettingSchema, destinationRegions, timeSlots, regionPricingRules, vatSettings, minimumGuaranteeRules, minimumGuaranteeApplications, settlementAuditLogs, settlementPayoutAttempts, orderForceStatusLogs, manualDispatchLogs, proofUploadFailures, orders, settlementStatements, helperBankAccounts, carrierMinRates, pricingTables, pricingTableRows, identityVerifications, documentReviewTasks, orderStatusEvents, smsTemplates, smsLogs, webhookLogs, integrationHealth, systemEvents, refunds, supportTicketEscalations, closingReports, contracts, incidentReports, incidentEvidence, incidentActions, auditLogs, orderStartTokens, integrationEvents, users, orderApplications, closingFieldSettings, carrierPricingPolicies, urgentFeePolicies, platformFeePolicies, extraCostCatalog, orderPolicySnapshots, settlementRecords, customerServiceInquiries, refundPolicies, insertRefundPolicySchema, customerInquiries, inquiryComments, ticketEscalations, pushNotificationLogs, deductions, signupConsents, termsVersions, termsReConsents } from "@shared/schema";
@@ -35,6 +35,7 @@ import {
   isOneOfStatus,
 } from "./constants/order-status";
 import { checkIdempotency, storeIdempotencyResponse, getIdempotencyKeyFromRequest } from "./utils/idempotency";
+import { withTransaction } from "./utils/transactions";
 import { validateBody, authSchemas, orderSchemas, settlementSchemas, disputeSchemas, pushSchemas, adminSchemas, clientErrorSchema } from "./utils/validation";
 import { authRateLimiter, signupRateLimiter, passwordResetRateLimiter, uploadRateLimiter, pushRateLimiter, strictRateLimiter } from "./utils/rate-limiter";
 import { DEFAULT_COURIERS } from "./constants/defaultCouriers";
@@ -92,6 +93,20 @@ async function logAuthEvent(
 
 
 // ============================================
+// 계약금 비율 조회 (관리자 설정값 사용)
+// ============================================
+async function getDepositRate(): Promise<number> {
+  try {
+    const settings = await storage.getAllSystemSettings();
+    const depositSetting = settings.find(s => s.settingKey === 'deposit_rate');
+    const rate = depositSetting ? parseInt(depositSetting.settingValue) : 10;
+    return (isNaN(rate) || rate <= 0) ? 10 : rate;
+  } catch {
+    return 10; // 기본값 10%
+  }
+}
+
+// ============================================
 // 계약금 정보 조회 (SSOT - Single Source of Truth)
 // ============================================
 interface DepositInfo {
@@ -132,8 +147,9 @@ async function getOrderDepositInfo(orderId: number): Promise<DepositInfo> {
   console.log('[DepositInfo] pricePerUnit:', pricePerUnit, 'quantity:', quantity);
   const supplyAmount = pricePerUnit * quantity;
   const totalAmountWithVat = Math.round(supplyAmount * 1.1);
-  const depositAmount = Math.round(totalAmountWithVat * 0.2);
-  console.log('[DepositInfo] Calculated deposit:', depositAmount);
+  const rate = await getDepositRate();
+  const depositAmount = Math.round(totalAmountWithVat * (rate / 100));
+  console.log('[DepositInfo] Calculated deposit:', depositAmount, 'rate:', rate + '%');
   
   // order.paymentStatus가 deposit_confirmed이면 결제완료로 처리
   const isPaid = order.paymentStatus === 'deposit_confirmed' || order.paymentStatus === 'paid';
@@ -2880,10 +2896,8 @@ export async function registerRoutes(
       
       if (webhookSecret) {
         // PortOne V2 서명 검증 방식
-        const crypto = require("crypto");
         const rawBody = JSON.stringify(req.body);
-        const expectedSignature = crypto
-          .createHmac("sha256", webhookSecret)
+        const expectedSignature = createHmac("sha256", webhookSecret)
           .update(rawBody)
           .digest("hex");
         
@@ -2906,8 +2920,22 @@ export async function registerRoutes(
       }
 
       const { paymentId, status, paidAmount, paidAt } = req.body;
-      
+
       console.log("[PortOne Webhook] Received:", { paymentId, status, paidAmount });
+
+      // 웹훅 로그 저장
+      const [webhookLog] = await db.insert(webhookLogs).values({
+        source: "portone",
+        eventType: `payment.${status?.toLowerCase() || "unknown"}`,
+        webhookId: paymentId,
+        payload: JSON.stringify(req.body),
+        status: "received",
+        relatedEntityType: "payment",
+        relatedEntityId: paymentId,
+        idempotencyKey: paymentId,
+        ipAddress: (req.headers["x-forwarded-for"] as string) || req.socket.remoteAddress || null,
+        userAgent: req.headers["user-agent"] || null,
+      }).returning();
 
       if (status === "PAID" || status === "VIRTUAL_ACCOUNT_ISSUED") {
         // paymentId로 가상계좌 조회
@@ -2982,9 +3010,25 @@ export async function registerRoutes(
         }
       }
 
+      // 웹훅 로그 처리 완료
+      if (webhookLog) {
+        await db.update(webhookLogs)
+          .set({ status: "processed", processedAt: new Date() })
+          .where(eq(webhookLogs.id, webhookLog.id));
+      }
+
       res.json({ success: true });
     } catch (err) {
       console.error("Webhook processing error:", err);
+      // 웹훅 로그 실패 기록
+      try {
+        const { paymentId: failedPaymentId } = req.body || {};
+        if (failedPaymentId) {
+          await db.update(webhookLogs)
+            .set({ status: "failed", errorMessage: (err as Error).message })
+            .where(eq(webhookLogs.webhookId, failedPaymentId));
+        }
+      } catch (_) {}
       res.status(500).json({ message: "웹훅 처리 오류" });
     }
   });
@@ -4652,7 +4696,7 @@ export async function registerRoutes(
   // workproof는 관리자, 업로드한 헬퍼만 접근 가능 (DB에서 소유권 검증)
   // 마감 이미지 서빙 (closing reports)
   // closing 이미지는 디스크에 저장되므로 fs로 직접 서빙 (PII 아님, 공개 서빙)
-  app.get("/uploads/closing/:filename", async (req, res) => {
+  app.get("/uploads/closing/:filename", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const filename = req.params.filename;
       if (!filename || filename.includes("..") || filename.includes("/")) {
@@ -5232,24 +5276,28 @@ export async function registerRoutes(
 
       // 지원 시 상태 변경 없음 (open 유지) - 지원자 수는 candidates 테이블로 관리
 
-      // 요청자에게 알림 + 푸시 전송
-      if (order.requesterId) {
-        const currentCount = activeApplications.length + 1;
-        await storage.createNotification({
-          userId: order.requesterId,
-          type: "helper_applied",
-          title: "새로운 지원자",
-          message: `${user.name || "헬퍼"}님이 오더에 지원했습니다. (${currentCount}/3)`,
-          relatedId: orderId,
-        });
-        
-        // 푸시 알림 발송
-        sendPushToUser(order.requesterId, {
-          title: "새로운 지원자",
-          body: `${user.name || "헬퍼"}님이 ${order.companyName || ''} 오더에 지원했습니다. (${currentCount}/3)`,
-          url: `/orders/${orderId}/applicants`,
-          tag: `application-${orderId}`,
-        });
+      // 요청자에게 알림 + 푸시 전송 (알림 실패해도 지원 처리에 영향 없도록 try-catch)
+      try {
+        if (order.requesterId) {
+          const currentCount = activeApplications.length + 1;
+          await storage.createNotification({
+            userId: order.requesterId,
+            type: "helper_applied",
+            title: "새로운 지원자",
+            message: `${user.name || "헬퍼"}님이 오더에 지원했습니다. (${currentCount}/3)`,
+            relatedId: orderId,
+          });
+
+          // 푸시 알림 발송
+          sendPushToUser(order.requesterId, {
+            title: "새로운 지원자",
+            body: `${user.name || "헬퍼"}님이 ${order.companyName || ''} 오더에 지원했습니다. (${currentCount}/3)`,
+            url: `/orders/${orderId}/applicants`,
+            tag: `application-${orderId}`,
+          });
+        }
+      } catch (notificationErr) {
+        console.error(`[Notification Error] Failed to send apply notification for order ${orderId}:`, notificationErr);
       }
 
       res.status(201).json(application);
@@ -5401,6 +5449,18 @@ export async function registerRoutes(
         });
       }
 
+      // 중복 마감보고서 제출 방지
+      const [existingClosing] = await db.select({ id: closingReports.id })
+        .from(closingReports)
+        .where(and(
+          eq(closingReports.orderId, orderId),
+          eq(closingReports.helperId, user.id)
+        ))
+        .limit(1);
+      if (existingClosing) {
+        return res.status(409).json({ code: "DUPLICATE", message: "이미 마감보고서가 제출되었습니다" });
+      }
+
       const contracts = await storage.getOrderContracts(orderId);
       const contract = contracts.find(c => c.helperId === user.id);
 
@@ -5409,14 +5469,13 @@ export async function registerRoutes(
       const parsedReturnedCount = parseInt(returnedCount) || 0;
       const parsedEtcCount = parseInt(etcCount) || 0;
       
-      // 기타 단가: 주문에 연결된 택배사 설정에서 가져오기
-      let etcPricePerUnitValue = 0;
-      if (parsedEtcCount > 0) {
-        const orderCourierSettings = await storage.getAllCourierSettings();
-        const orderCourier = orderCourierSettings.find(c => c.courierName === order.companyName);
-        etcPricePerUnitValue = orderCourier?.etcPricePerBox || 0;
-      }
-      
+      // 택배사 설정 1번만 조회 (기타 단가 + 수수료율 공용)
+      const courierSetting = await storage.getCourierSettingByName(order.companyName || "")
+        || (order.courierCompany ? await storage.getCourierSettingByName(order.courierCompany) : undefined);
+
+      // 기타 단가: 택배사 설정에서 가져오기
+      const etcPricePerUnitValue = (parsedEtcCount > 0 && courierSetting?.etcPricePerBox) ? courierSetting.etcPricePerBox : 0;
+
       // 통합 계산 함수 사용
       const closingData = {
         deliveredCount: parsedDeliveredCount,
@@ -5428,10 +5487,6 @@ export async function registerRoutes(
       };
       const settlement = calculateSettlement(closingData);
       const calculatedAmount = settlement.totalAmount;
-
-      // 플랫폼 수수료율 가져오기 (운임설정에서 운송사명으로 조회)
-      const allCourierSettings = await storage.getAllCourierSettings();
-      const courierSetting = allCourierSettings.find(c => c.courierName === order.companyName || c.courierName === order.courierCompany);
       // 운임설정에 없으면 수수료 0 (설정된 수수료만 적용)
       const snapshotFeeRate = courierSetting?.commissionRate ? courierSetting.commissionRate * 100 : 0; // bps로 변환 (% * 100)
       const snapshotPlatformFee = Math.floor(settlement.supplyAmount * snapshotFeeRate / 10000);
@@ -5446,62 +5501,75 @@ export async function registerRoutes(
         capturedAt: new Date().toISOString(),
       };
 
-      const closingReport = await db.insert(closingReports).values({
-        orderId,
-        helperId: user.id,
-        contractId: contract?.id || null,
-        deliveredCount: parsedDeliveredCount,
-        etcCount: parsedEtcCount,
-        etcPricePerUnit: etcPricePerUnitValue,
-        returnedCount: parsedReturnedCount,
-        extraCostsJson: extraCosts ? JSON.stringify(extraCosts) : null,
-        memo: memo || text?.trim() || null,
-        status: "submitted",
-        calculatedAmount,
-        // 정산 스냅샷 필드 (SSOT)
-        supplyAmount: settlement.supplyAmount,
-        vatAmount: settlement.vatAmount,
-        totalAmount: settlement.totalAmount,
-        platformFeeRate: snapshotFeeRate,
-        platformFee: snapshotPlatformFee,
-        netAmount: snapshotNetAmount,
-        pricingSnapshotJson: JSON.stringify(pricingSnapshot),
-        deliveryHistoryImagesJson: JSON.stringify(deliveryHistoryImages),
-        etcImagesJson: etcImages ? JSON.stringify(etcImages) : null,
-        dynamicFieldsJson: dynamicFields ? JSON.stringify(dynamicFields) : null,
-      }).returning();
+      // === 트랜잭션: 마감보고서 + 상태변경 + 계약업데이트 원자성 보장 ===
+      const closingReport = await withTransaction(async (tx) => {
+        const report = await tx.insert(closingReports).values({
+          orderId,
+          helperId: user.id,
+          contractId: contract?.id || null,
+          deliveredCount: parsedDeliveredCount,
+          etcCount: parsedEtcCount,
+          etcPricePerUnit: etcPricePerUnitValue,
+          returnedCount: parsedReturnedCount,
+          extraCostsJson: extraCosts ? JSON.stringify(extraCosts) : null,
+          memo: memo || text?.trim() || null,
+          status: "submitted",
+          calculatedAmount,
+          supplyAmount: settlement.supplyAmount,
+          vatAmount: settlement.vatAmount,
+          totalAmount: settlement.totalAmount,
+          platformFeeRate: snapshotFeeRate,
+          platformFee: snapshotPlatformFee,
+          netAmount: snapshotNetAmount,
+          pricingSnapshotJson: JSON.stringify(pricingSnapshot),
+          deliveryHistoryImagesJson: JSON.stringify(deliveryHistoryImages),
+          etcImagesJson: etcImages ? JSON.stringify(etcImages) : null,
+          dynamicFieldsJson: dynamicFields ? JSON.stringify(dynamicFields) : null,
+        }).returning();
 
-      await storage.updateOrder(orderId, { status: "closing_submitted" });
+        await tx.update(orders)
+          .set({ status: "closing_submitted", updatedAt: new Date() })
+          .where(eq(orders.id, orderId));
 
-      // T-07: 계약이 있으면 최종금액/잔금 업데이트 (closing-report와 동일한 로직)
-      if (contract) {
-        const downPaymentAmount = contract.depositAmount || contract.downPaymentAmount || 0;
-        const balanceAmount = Math.max(0, calculatedAmount - downPaymentAmount);
-        
-        await storage.updateContract(contract.id, {
-          finalAmount: calculatedAmount,
-          balanceAmount,
-          calculatedBalanceAmount: balanceAmount,
-          closingReportId: closingReport[0].id,
-        });
-      }
+        // T-07: 계약이 있으면 최종금액/잔금 업데이트
+        if (contract) {
+          const downPaymentAmount = contract.depositAmount || contract.downPaymentAmount || 0;
+          const txBalanceAmount = Math.max(0, calculatedAmount - downPaymentAmount);
 
-      if (order.requesterId) {
-        await storage.createNotification({
-          userId: order.requesterId,
-          type: "matching_success",
-          title: "마감 제출",
-          message: `${user.name || "헬퍼"}님이 마감을 제출했습니다. 확인해주세요.`,
-          relatedId: orderId,
-        });
-        
-        // 푸시 알림 발송
-        sendPushToUser(order.requesterId, {
-          title: "마감 제출",
-          body: `${user.name || "헬퍼"}님이 마감을 제출했습니다. 확인해주세요.`,
-          url: `/closing/${orderId}`,
-          tag: `closing-submitted-${orderId}`,
-        });
+          await tx.update(contracts)
+            .set({
+              finalAmount: calculatedAmount,
+              balanceAmount: txBalanceAmount,
+              calculatedBalanceAmount: txBalanceAmount,
+              closingReportId: report[0].id,
+            })
+            .where(eq(contracts.id, contract.id));
+        }
+
+        return report;
+      });
+
+      // 알림 발송 (알림 실패해도 마감 처리에 영향 없도록 try-catch)
+      try {
+        if (order.requesterId) {
+          await storage.createNotification({
+            userId: order.requesterId,
+            type: "matching_success",
+            title: "마감 제출",
+            message: `${user.name || "헬퍼"}님이 마감을 제출했습니다. 확인해주세요.`,
+            relatedId: orderId,
+          });
+
+          // 푸시 알림 발송
+          sendPushToUser(order.requesterId, {
+            title: "마감 제출",
+            body: `${user.name || "헬퍼"}님이 마감을 제출했습니다. 확인해주세요.`,
+            url: `/closing/${orderId}`,
+            tag: `closing-submitted-${orderId}`,
+          });
+        }
+      } catch (notificationErr) {
+        console.error(`[Notification Error] Failed to send closing notification for order ${orderId}:`, notificationErr);
       }
 
       // 예상 정산금 계산 (snapshotCommissionRate 사용)
@@ -5919,14 +5987,19 @@ export async function registerRoutes(
         .where(inArray(users.role, ["admin", "superadmin"]))
         .limit(10);
 
-      for (const admin of admins) {
-        await storage.createNotification({
-          userId: admin.id,
-          type: "system" as any,
-          title: "입금 완료 알림",
-          message: `요청자(${user.name || user.email})가 오더 ${order.orderNumber || orderId}에 대해 입금 완료를 알렸습니다. ${message || ""}`,
-          relatedId: orderId,
-        });
+      // 관리자 알림 (알림 실패해도 입금 알림 처리에 영향 없도록 try-catch)
+      try {
+        for (const admin of admins) {
+          await storage.createNotification({
+            userId: admin.id,
+            type: "system" as any,
+            title: "입금 완료 알림",
+            message: `요청자(${user.name || user.email})가 오더 ${order.orderNumber || orderId}에 대해 입금 완료를 알렸습니다. ${message || ""}`,
+            relatedId: orderId,
+          });
+        }
+      } catch (notificationErr) {
+        console.error(`[Notification Error] Failed to send balance-notify notifications for order ${orderId}:`, notificationErr);
       }
 
       console.log(`[Balance Notify] Requester ${user.id} notified payment for order ${orderId}`);
@@ -6022,28 +6095,35 @@ export async function registerRoutes(
         });
       }
 
-      // 오더 상태 변경: closing_submitted → final_amount_confirmed
-      await storage.updateOrder(orderId, { status: ORDER_STATUS.FINAL_AMOUNT_CONFIRMED });
+      // === 트랜잭션: 마감 확인 (오더 상태 + 이벤트) 원자성 보장 ===
+      await withTransaction(async (tx) => {
+        await tx.update(orders)
+          .set({ status: ORDER_STATUS.FINAL_AMOUNT_CONFIRMED, updatedAt: new Date() })
+          .where(eq(orders.id, orderId));
 
-      // 오더 상태 이벤트 기록
-      await storage.createOrderStatusEvent({
-        orderId,
-        previousStatus: ORDER_STATUS.CLOSING_SUBMITTED,
-        newStatus: ORDER_STATUS.FINAL_AMOUNT_CONFIRMED,
-        reason: "요청자 마감 확인",
-        triggerType: "closing_confirmed",
-        triggeredBy: user.id,
+        await tx.insert(orderStatusEvents).values({
+          orderId,
+          previousStatus: ORDER_STATUS.CLOSING_SUBMITTED,
+          newStatus: ORDER_STATUS.FINAL_AMOUNT_CONFIRMED,
+          reason: "요청자 마감 확인",
+          triggerType: "closing_confirmed",
+          triggeredBy: user.id,
+        });
       });
 
-      // 헬퍼에게 알림
-      if (order.matchedHelperId) {
-        await storage.createNotification({
-          userId: order.matchedHelperId,
-          type: "matching_success",
-          title: "마감 확인 완료",
-          message: `${order.companyName} 오더의 마감이 확인되었습니다. 잔금 입금 후 정산이 진행됩니다.`,
-          relatedId: orderId,
-        });
+      // 헬퍼에게 알림 (알림 실패해도 마감 확인 처리에 영향 없도록 try-catch)
+      try {
+        if (order.matchedHelperId) {
+          await storage.createNotification({
+            userId: order.matchedHelperId,
+            type: "matching_success",
+            title: "마감 확인 완료",
+            message: `${order.companyName} 오더의 마감이 확인되었습니다. 잔금 입금 후 정산이 진행됩니다.`,
+            relatedId: orderId,
+          });
+        }
+      } catch (notificationErr) {
+        console.error(`[Notification Error] Failed to send closing-confirm notification for order ${orderId}:`, notificationErr);
       }
 
       res.json({
@@ -6090,39 +6170,50 @@ export async function registerRoutes(
         });
       }
 
-      // 오더 상태 변경: → balance_paid
-      await storage.updateOrder(orderId, { status: ORDER_STATUS.BALANCE_PAID });
+      // === 트랜잭션: 잔금 확인 (오더 + 계약 + 이벤트) 원자성 보장 ===
+      await withTransaction(async (tx) => {
+        // 오더 상태 변경: → balance_paid
+        await tx.update(orders)
+          .set({ status: ORDER_STATUS.BALANCE_PAID, updatedAt: new Date() })
+          .where(eq(orders.id, orderId));
 
-      // 계약 잔금 상태 업데이트
-      const contracts = await storage.getOrderContracts(orderId);
-      const contract = contracts[0];
-      if (contract) {
-        await storage.updateContract(contract.id, {
-          balancePaid: true,
-          balancePaidAt: new Date(),
-          balancePaymentStatus: "PAID",
+        // 계약 잔금 상태 업데이트
+        const orderContracts = await tx.select().from(contracts).where(eq(contracts.orderId, orderId));
+        const contract = orderContracts[0];
+        if (contract) {
+          await tx.update(contracts)
+            .set({
+              balancePaid: true,
+              balancePaidAt: new Date(),
+              balancePaymentStatus: "PAID",
+            })
+            .where(eq(contracts.id, contract.id));
+        }
+
+        // 오더 상태 이벤트 기록
+        await tx.insert(orderStatusEvents).values({
+          orderId,
+          previousStatus: order.status ?? "final_amount_confirmed",
+          newStatus: "balance_paid",
+          reason: user.isHqStaff ? "관리자 잔금 확인" : "요청자 잔금 확인",
+          triggerType: "balance_confirmed",
+          triggeredBy: user.id,
         });
-      }
-
-      // 오더 상태 이벤트 기록
-      await storage.createOrderStatusEvent({
-        orderId,
-        previousStatus: order.status ?? "final_amount_confirmed",
-        newStatus: "balance_paid",
-        reason: user.isHqStaff ? "관리자 잔금 확인" : "요청자 잔금 확인",
-        triggerType: "balance_confirmed",
-        triggeredBy: user.id,
       });
 
-      // 헬퍼에게 알림
-      if (order.matchedHelperId) {
-        await storage.createNotification({
-          userId: order.matchedHelperId,
-          type: "matching_success",
-          title: "잔금 입금 확인",
-          message: `${order.companyName} 오더의 잔금이 확인되었습니다. 곧 정산이 진행됩니다.`,
-          relatedId: orderId,
-        });
+      // 헬퍼에게 알림 (알림 실패해도 잔금 확인 처리에 영향 없도록 try-catch)
+      try {
+        if (order.matchedHelperId) {
+          await storage.createNotification({
+            userId: order.matchedHelperId,
+            type: "matching_success",
+            title: "잔금 입금 확인",
+            message: `${order.companyName} 오더의 잔금이 확인되었습니다. 곧 정산이 진행됩니다.`,
+            relatedId: orderId,
+          });
+        }
+      } catch (notificationErr) {
+        console.error(`[Notification Error] Failed to send balance-confirm notification for order ${orderId}:`, notificationErr);
       }
 
       res.json({
@@ -6211,22 +6302,26 @@ export async function registerRoutes(
         }
       }
 
-      // 헬퍼에게 알림 + 푸시 (matchedHelperId만 사용 - 표준)
-      if (order.matchedHelperId) {
-        await storage.createNotification({
-          userId: order.matchedHelperId,
-          type: "order_update" as any,
-          title: "화물사고 접수",
-          message: `${user.name || "요청자"}님이 화물사고를 접수했습니다. 확인해주세요.`,
-          relatedId: orderId,
-        });
-        
-        sendPushToUser(order.matchedHelperId, {
-          title: "화물사고 접수",
-          body: `${order.companyName} 오더에 화물사고가 접수되었습니다.`,
-          url: `/orders/${orderId}/incident`,
-          tag: `incident-${incident.id}`,
-        });
+      // 헬퍼에게 알림 + 푸시 (알림 실패해도 사고 접수에 영향 없도록 try-catch)
+      try {
+        if (order.matchedHelperId) {
+          await storage.createNotification({
+            userId: order.matchedHelperId,
+            type: "order_update" as any,
+            title: "화물사고 접수",
+            message: `${user.name || "요청자"}님이 화물사고를 접수했습니다. 확인해주세요.`,
+            relatedId: orderId,
+          });
+
+          sendPushToUser(order.matchedHelperId, {
+            title: "화물사고 접수",
+            body: `${order.companyName} 오더에 화물사고가 접수되었습니다.`,
+            url: `/orders/${orderId}/incident`,
+            tag: `incident-${incident.id}`,
+          });
+        }
+      } catch (notificationErr) {
+        console.error(`[Notification Error] Failed to send incident notification for order ${orderId}:`, notificationErr);
       }
 
       res.status(201).json({
@@ -6515,8 +6610,9 @@ export async function registerRoutes(
       const subtotal = unitPrice * quantity;
       const vatAmount = Math.round(subtotal * 0.1);
       const totalAmount = subtotal + vatAmount;
-      const depositAmt = Math.round(totalAmount * 0.2);
-      
+      const depRate = await getDepositRate();
+      const depositAmt = Math.round(totalAmount * (depRate / 100));
+
       // 가상계좌 만료일 (3일 후)
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + 3);
@@ -6594,7 +6690,8 @@ export async function registerRoutes(
       const supplyAmount = boxCount * unitPrice;
       const totalWithVat = Math.round(supplyAmount * 1.1); // 부가세 10% 포함
       const depositRequired = supplyAmount > 0;
-      const depositAmount = Math.floor(totalWithVat * 0.2); // 부가세 포함 금액의 20%
+      const depRate = await getDepositRate();
+      const depositAmount = Math.floor(totalWithVat * (depRate / 100)); // 부가세 포함 금액의 계약금
 
       const order = await storage.createOrder({
         requesterId: user.id,
@@ -7157,39 +7254,44 @@ export async function registerRoutes(
         status: "pending",
       });
       
-      // WebSocket으로 관리자에게 실시간 알림
-      broadcastToAllAdmins("dispute", "created", dispute.id, {
-        disputeId: dispute.id,
-        orderId,
-        disputeType: incidentType,
-        submitterRole: "requester",
-        submitterName: user.name || user.email,
-      });
+      // 알림 발송 (알림 실패해도 이의제기 접수에 영향 없도록 try-catch)
+      try {
+        // WebSocket으로 관리자에게 실시간 알림
+        broadcastToAllAdmins("dispute", "created", dispute.id, {
+          disputeId: dispute.id,
+          orderId,
+          disputeType: incidentType,
+          submitterRole: "requester",
+          submitterName: user.name || user.email,
+        });
 
-      // 이의제기 유형 라벨
-      const disputeTypeLabel = incidentType === "settlement_error" ? "정산 금액 오류" :
-        incidentType === "invoice_error" ? "세금계산서 오류" :
-        incidentType === "contract_dispute" ? "계약 조건 분쟁" :
-        incidentType === "service_complaint" ? "서비스 불만" :
-        incidentType === "amount_error" ? "금액 오류" : "기타";
+        // 이의제기 유형 라벨
+        const disputeTypeLabel = incidentType === "settlement_error" ? "정산 금액 오류" :
+          incidentType === "invoice_error" ? "세금계산서 오류" :
+          incidentType === "contract_dispute" ? "계약 조건 분쟁" :
+          incidentType === "service_complaint" ? "서비스 불만" :
+          incidentType === "amount_error" ? "금액 오류" : "기타";
 
-      // 헬퍼에게 이의제기 접수 알림 전송
-      const disputeMessage = `의뢰인이 이의제기를 접수했습니다.\n유형: ${disputeTypeLabel}\n내용: ${description.substring(0, 100)}${description.length > 100 ? "..." : ""}`;
+        // 헬퍼에게 이의제기 접수 알림 전송
+        const disputeMessage = `의뢰인이 이의제기를 접수했습니다.\n유형: ${disputeTypeLabel}\n내용: ${description.substring(0, 100)}${description.length > 100 ? "..." : ""}`;
 
-      await storage.createNotification({
-        userId: order.matchedHelperId,
-        type: "dispute_submitted",
-        title: "이의제기 접수 알림",
-        message: disputeMessage,
-        data: JSON.stringify({ disputeId: dispute.id, orderId, disputeType: incidentType }),
-        isRead: false,
-      });
+        await storage.createNotification({
+          userId: order.matchedHelperId,
+          type: "dispute_submitted",
+          title: "이의제기 접수 알림",
+          message: disputeMessage,
+          data: JSON.stringify({ disputeId: dispute.id, orderId, disputeType: incidentType }),
+          isRead: false,
+        });
 
-      await sendPushToUser(order.matchedHelperId, {
-        title: "이의제기 접수 알림",
-        body: `의뢰인이 이의제기를 접수했습니다. 유형: ${disputeTypeLabel}`,
-        data: { type: "dispute_submitted", disputeId: String(dispute.id), orderId: String(orderId) },
-      });
+        await sendPushToUser(order.matchedHelperId, {
+          title: "이의제기 접수 알림",
+          body: `의뢰인이 이의제기를 접수했습니다. 유형: ${disputeTypeLabel}`,
+          data: { type: "dispute_submitted", disputeId: String(dispute.id), orderId: String(orderId) },
+        });
+      } catch (notificationErr) {
+        console.error(`[Notification Error] Failed to send dispute notifications for order ${orderId}:`, notificationErr);
+      }
       
       // Store idempotency response
       if (idempotencyKey) {
@@ -7780,13 +7882,14 @@ export async function registerRoutes(
       const userId = req.user!.id;
       
       const { orderId, helperId, totalAmount } = req.body;
-      const depositAmount = Math.floor(totalAmount * 0.2);
+      const depRate = await getDepositRate();
+      const depositAmount = Math.floor(totalAmount * (depRate / 100));
       const balanceAmount = totalAmount - depositAmount;
-      
+
       const contract = await storage.createContract({
         orderId,
         requesterId: userId,
-        helperId: null,
+        helperId: helperId || null,
         trackingNumber: null,
         totalAmount,
         depositAmount,
@@ -8474,7 +8577,8 @@ export async function registerRoutes(
       const supplyAmount = pricePerUnit * avgQty;
       const vatAmount = Math.round(supplyAmount * 0.1);
       const totalAmount = supplyAmount + vatAmount;
-      const depositAmount = Math.floor(totalAmount * 0.2);
+      const depRate = await getDepositRate();
+      const depositAmount = Math.floor(totalAmount * (depRate / 100));
       const balanceAmount = totalAmount - depositAmount;
 
       res.json({
@@ -8523,8 +8627,9 @@ export async function registerRoutes(
       const vatAmount = Math.round(baseSupplyAmount * 0.1);
       const grossAmount = baseSupplyAmount + vatAmount;
       
-      // 계약금 20%
-      const depositAmount = Math.round(grossAmount * 0.2);
+      // 계약금 (관리자 설정 비율)
+      const depRate = await getDepositRate();
+      const depositAmount = Math.round(grossAmount * (depRate / 100));
       const balanceAmount = grossAmount - depositAmount;
 
       // 가격 스냅샷 저장 (스키마 컬럼명과 일치)
@@ -10725,106 +10830,133 @@ export async function registerRoutes(
       // 헬퍼의 실효 수수료율 스냅샷 저장 (매칭 시점 값 보존)
       const effectiveRate = await storage.getEffectiveCommissionRate(helperId);
       
-      // 헬퍼 상태를 selected로 변경 (매칭중) + 수수료 스냅샷 저장
-      await storage.updateOrderApplication(application.id, { 
-        status: "selected",
-        selectedAt: new Date(),
-        snapshotCommissionRate: effectiveRate.rate,
-        snapshotPlatformRate: effectiveRate.platformRate,
-        snapshotTeamLeaderRate: effectiveRate.teamLeaderRate,
-        snapshotTeamLeaderId: effectiveRate.teamLeaderId,
-        snapshotSource: effectiveRate.source,
+      // 서버에서 금액 재계산 (금액 조작 방지) — 통합 정산 모듈 사용
+      const boxCount = parseInt((order.averageQuantity || '0').replace(/[^0-9]/g, '')) || 0;
+      const depRate = await getDepositRate();
+      const settlementCalc = calculateSettlement({
+        deliveredCount: boxCount,
+        returnedCount: 0,
+        etcCount: 0,
+        unitPrice: order.pricePerUnit || 0,
+        etcPricePerUnit: 0,
+        extraCosts: [],
+      }, depRate);
+
+      const totalAmount = settlementCalc.supplyAmount;
+      const depositAmount = settlementCalc.depositAmount;
+      const balanceAmount = settlementCalc.balanceAmount;
+      const newHelperCount = (order.currentHelpers || 0) + 1;
+
+      // === 트랜잭션: 핵심 DB 작업 원자성 보장 ===
+      const txResult = await withTransaction(async (tx) => {
+        // 1. 헬퍼 상태를 selected로 변경 + 수수료 스냅샷
+        await tx.update(orderApplications)
+          .set({
+            status: "selected",
+            selectedAt: new Date(),
+            snapshotCommissionRate: effectiveRate.rate,
+            snapshotPlatformRate: effectiveRate.platformRate,
+            snapshotTeamLeaderRate: effectiveRate.teamLeaderRate,
+            snapshotTeamLeaderId: effectiveRate.teamLeaderId,
+            snapshotSource: effectiveRate.source,
+          })
+          .where(eq(orderApplications.id, application.id));
+
+        // 2. 다른 지원자들 자동 REJECTED 처리
+        const allApplications = await tx.select().from(orderApplications)
+          .where(eq(orderApplications.orderId, orderId));
+        const rejectedHelperIds: string[] = [];
+        for (const app of allApplications) {
+          if (app.id !== application.id && app.status === "applied") {
+            await tx.update(orderApplications)
+              .set({
+                status: "rejected",
+                rejectedAt: new Date(),
+                rejectionReason: "다른 헬퍼가 선택되었습니다",
+              })
+              .where(eq(orderApplications.id, app.id));
+            rejectedHelperIds.push(app.helperId);
+          }
+        }
+
+        // 3. 같은 입차일의 다른 오더 지원 자동 취소
+        if (order.scheduledDate) {
+          const otherApplications = await storage.getHelperAppliedApplicationsByDate(
+            helperId, order.scheduledDate, orderId
+          );
+          if (otherApplications.length > 0) {
+            const applicationIds = otherApplications.map(a => a.applicationId);
+            await tx.update(orderApplications)
+              .set({ status: "auto_cancelled" })
+              .where(inArray(orderApplications.id, applicationIds));
+            console.log(`[Select Helper] Auto-cancelled ${applicationIds.length} applications for helper ${helperId} on same date`);
+          }
+        }
+
+        // 4. 레이스 컨디션 방지: 조건부 업데이트
+        const updateResult = await tx.update(orders)
+          .set({
+            currentHelpers: newHelperCount,
+            status: "scheduled",
+            matchedHelperId: helperId,
+            requesterPhone: requester?.phoneNumber || null,
+            helperPhoneShared: true,
+            updatedAt: new Date(),
+          })
+          .where(and(
+            eq(orders.id, orderId),
+            or(
+              isNull(orders.matchedHelperId),
+              eq(orders.matchedHelperId, helperId) // 멱등성: 같은 헬퍼 재선택 허용
+            )
+          ))
+          .returning();
+
+        if (updateResult.length === 0) {
+          throw new Error("ALREADY_MATCHED");
+        }
+
+        // 5. 계약 생성
+        const [contract] = await tx.insert(contracts).values({
+          orderId,
+          requesterId: userId,
+          helperId,
+          trackingNumber: null,
+          totalAmount,
+          depositAmount,
+          balanceAmount,
+          depositPaid: false,
+          balancePaid: false,
+          status: "pending",
+        }).returning();
+
+        return { contract, rejectedHelperIds };
       });
-      
-      // A안: 선택된 헬퍼 외 다른 지원자들 자동 REJECTED 처리
-      const allApplications = await storage.getOrderApplications(orderId);
-      for (const app of allApplications) {
-        if (app.id !== application.id && app.status === "applied") {
-          await storage.updateOrderApplication(app.id, { 
-            status: "rejected",
-            rejectedAt: new Date(),
-            rejectionReason: "다른 헬퍼가 선택되었습니다",
-          });
-          // 탈락 알림
+
+      // 트랜잭션 실패: 다른 헬퍼가 이미 선택됨
+      if (!txResult) {
+        return res.status(409).json({
+          code: "ALREADY_MATCHED",
+          message: "다른 요청에서 이미 헬퍼가 선택되었습니다. 새로고침해주세요."
+        });
+      }
+
+      const { contract, rejectedHelperIds } = txResult;
+
+      // 트랜잭션 밖: 탈락 알림 (비핵심, 실패해도 데이터 무결성 유지)
+      for (const rejectedHelperId of rejectedHelperIds) {
+        try {
           await storage.createNotification({
+            userId: rejectedHelperId,
             type: "application_rejected",
             title: "지원 결과 안내",
             message: `${order.companyName} 오더에 다른 헬퍼가 배정되었습니다.`,
             relatedId: orderId,
           });
+        } catch (notifErr) {
+          console.error(`[Notification Error] Failed to send rejection notification:`, notifErr);
         }
       }
-
-      // 같은 입차일의 다른 오더 지원 자동 취소 (중복 배정 방지)
-      if (order.scheduledDate) {
-        const otherApplications = await storage.getHelperAppliedApplicationsByDate(
-          helperId, order.scheduledDate, orderId
-        );
-        if (otherApplications.length > 0) {
-          const applicationIds = otherApplications.map(a => a.applicationId);
-          await storage.cancelApplicationsByIds(applicationIds);
-          console.log(`[Select Helper] Auto-cancelled ${applicationIds.length} applications for helper ${helperId} on same date`);
-        }
-      }
-      
-      const newHelperCount = (order.currentHelpers || 0) + 1;
-      
-      // 레이스 컨디션 방지: 조건부 업데이트 (matchedHelperId가 null인 경우만)
-      const updateResult = await db.update(orders)
-        .set({
-          currentHelpers: newHelperCount,
-          status: "scheduled",
-          requesterPhone: requester?.phoneNumber || null,
-          helperPhoneShared: true,
-          updatedAt: new Date(),
-        })
-        .where(and(
-          eq(orders.id, orderId),
-          or(
-            isNull(orders.matchedHelperId),
-            eq(orders.matchedHelperId, helperId) // 멱등성: 같은 헬퍼 재선택 허용
-          )
-        ))
-        .returning();
-      
-      // 업데이트 실패 = 다른 헬퍼가 이미 선택됨
-      if (updateResult.length === 0) {
-        return res.status(409).json({ 
-          code: "ALREADY_MATCHED",
-          message: "다른 요청에서 이미 헬퍼가 선택되었습니다. 새로고침해주세요." 
-        });
-      }
-      
-      // 서버에서 금액 재계산 (금액 조작 방지)
-      // averageQuantity에서 숫자만 추출
-      const boxCount = parseInt((order.averageQuantity || '0').replace(/[^0-9]/g, '')) || 0;
-      const pricePerUnit = order.pricePerUnit || 0;
-      
-      // 공급가 계산: 박스수 × 단가
-      const supplyAmount = boxCount * pricePerUnit;
-      
-      // VAT 포함 금액
-      const totalWithVat = Math.round(supplyAmount * 1.1);
-      
-      // 계약금 20%, 잔금 80%
-      const depositAmount = Math.floor(totalWithVat * 0.2);
-      const balanceAmount = totalWithVat - depositAmount;
-      
-      // 계산된 공급가를 totalAmount로 사용 (계약 저장용)
-      const totalAmount = supplyAmount;
-      
-      const contract = await storage.createContract({
-        orderId,
-        requesterId: userId,
-        helperId: null,
-        trackingNumber: null,
-        totalAmount,
-        depositAmount,
-        balanceAmount,
-        depositPaid: false,
-        balancePaid: false,
-        status: "pending",
-      });
       
       const orderCardPayload = JSON.stringify({
         orderId,
@@ -10838,39 +10970,45 @@ export async function registerRoutes(
         deliveryGuideUrl: order.deliveryGuideUrl,
       });
       
-      // 헬퍼에게 선택됨 알림 (매칭중)
-      await storage.createNotification({
-        type: "helper_selected",
-        title: "오더 매칭중",
-        message: `${order.companyName} 오더에 선택되었습니다. 매칭완료를 기다려주세요.`,
-        relatedId: orderId,
-        payload: orderCardPayload,
-      });
-      
-      // WebSocket 알림
-      notificationWS.sendToUser(helperId, {
-        type: "helper_selected",
-        title: "오더 매칭중",
-        message: `${order.companyName} 오더에 선택되었습니다.`,
-        relatedId: orderId,
-        payload: orderCardPayload,
-      });
-      
-      // 푸시 알림
-      sendPushToUser(helperId, {
-        title: "오더 매칭중",
-        body: `${order.companyName} 오더에 선택되었습니다. 매칭완료를 기다려주세요.`,
-        url: "/helper-dashboard",
-        tag: `selected-${orderId}`,
-      });
-      
-      // 관리자에게 브로드캐스트
-      broadcastToAllAdmins("order_status", "helper_selected", orderId, {
-        orderId,
-        helperName: helper?.name,
-        companyName: order.companyName,
-        currentHelpers: newHelperCount,
-      });
+      // 알림 발송 (알림 실패해도 헬퍼 선택 처리에 영향 없도록 try-catch)
+      try {
+        // 헬퍼에게 선택됨 알림 (매칭중)
+        await storage.createNotification({
+          userId: helperId,
+          type: "helper_selected",
+          title: "오더 매칭중",
+          message: `${order.companyName} 오더에 선택되었습니다. 매칭완료를 기다려주세요.`,
+          relatedId: orderId,
+          payload: orderCardPayload,
+        });
+
+        // WebSocket 알림
+        notificationWS.sendToUser(helperId, {
+          type: "helper_selected",
+          title: "오더 매칭중",
+          message: `${order.companyName} 오더에 선택되었습니다.`,
+          relatedId: orderId,
+          payload: orderCardPayload,
+        });
+
+        // 푸시 알림
+        sendPushToUser(helperId, {
+          title: "오더 매칭중",
+          body: `${order.companyName} 오더에 선택되었습니다. 매칭완료를 기다려주세요.`,
+          url: "/helper-dashboard",
+          tag: `selected-${orderId}`,
+        });
+
+        // 관리자에게 브로드캐스트
+        broadcastToAllAdmins("order_status", "helper_selected", orderId, {
+          orderId,
+          helperName: helper?.name,
+          companyName: order.companyName,
+          currentHelpers: newHelperCount,
+        });
+      } catch (notificationErr) {
+        console.error(`[Notification Error] Failed to send select-helper notifications for order ${orderId}:`, notificationErr);
+      }
       
       const response = { contract, message: "헬퍼가 선택되었습니다. 매칭완료 버튼을 눌러주세요." };
       
@@ -10880,7 +11018,13 @@ export async function registerRoutes(
       }
       
       res.json(response);
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.message === "ALREADY_MATCHED") {
+        return res.status(409).json({
+          code: "ALREADY_MATCHED",
+          message: "다른 요청에서 이미 헬퍼가 선택되었습니다. 새로고침해주세요."
+        });
+      }
       console.error("[select-helper] Error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
@@ -10911,18 +11055,29 @@ export async function registerRoutes(
       if (!order) {
         return res.status(404).json({ message: "Order not found" });
       }
-      
+
+      // 오더 상태 검증: 이미 완료/취소/진행중인 오더는 매칭 확정 불가
+      const invalidStatuses = ["in_progress", "closing_submitted", "final_amount_confirmed",
+        "balance_paid", "settlement_paid", "closed", "cancelled", "settled"];
+      const normalizedStatus = normalizeOrderStatus(order.status);
+      if (invalidStatuses.includes(normalizedStatus)) {
+        return res.status(400).json({
+          code: "INVALID_STATUS",
+          message: `현재 상태(${order.status})에서는 매칭 확정을 할 수 없습니다.`
+        });
+      }
+
       // 의뢰인 권한 확인
       const { balancePaymentDate } = req.body;
-      
+
       if (!balancePaymentDate) {
         return res.status(400).json({ message: "잔금 결제 예정일을 선택해주세요" });
       }
-      
+
       if (order.requesterId !== userId) {
         return res.status(403).json({ message: "권한이 없습니다" });
       }
-      
+
       // 선택된 헬퍼 조회
       const applications = await storage.getOrderApplications(orderId);
       const selectedApplications = applications.filter(a => a.status === "selected");
@@ -10978,38 +11133,48 @@ export async function registerRoutes(
               processedAt: new Date(),
             });
             
-            // 자동취소 알림
-            await storage.createNotification({
-              type: "application_auto_cancelled",
-              title: "신청 자동취소",
-              message: `${otherOrder.companyName} 오더 신청이 자동취소되었습니다. (동일 날짜 중복 매칭 불가)`,
-              relatedId: otherApp.orderId,
-            });
+            // 자동취소 알림 (알림 실패해도 취소 처리에 영향 없도록)
+            try {
+              await storage.createNotification({
+                userId: app.helperId,
+                type: "application_auto_cancelled",
+                title: "신청 자동취소",
+                message: `${otherOrder.companyName} 오더 신청이 자동취소되었습니다. (동일 날짜 중복 매칭 불가)`,
+                relatedId: otherApp.orderId,
+              });
+            } catch (notifErr) {
+              console.error(`[Notification Error] Failed to send auto-cancel notification:`, notifErr);
+            }
           }
         }
         
-        // 헬퍼에게 매칭완료 알림
-        await storage.createNotification({
-          type: "matching_completed",
-          title: "매칭 완료",
-          message: `${order.companyName} 오더 매칭이 완료되었습니다. 담당자 연락처: ${requester?.phoneNumber || "미등록"}`,
-          relatedId: orderId,
-          phoneNumber: requester?.phoneNumber || null,
-        });
-        
-        // WebSocket 알림
-        notificationWS.sendToUser(app.helperId, {
-          type: "matching_completed",
-          title: "매칭 완료",
-        });
-        
-        // 푸시 알림
-        sendPushToUser(app.helperId, {
-          title: "매칭 완료",
-          body: `${order.companyName} 오더 매칭이 완료되었습니다. 담당자: ${requester?.phoneNumber || "미등록"}`,
-          url: "/helper-home",
-          tag: `matching-complete-${orderId}`,
-        });
+        // 헬퍼에게 매칭완료 알림 (알림 실패해도 매칭 처리에 영향 없도록)
+        try {
+          await storage.createNotification({
+            userId: app.helperId,
+            type: "matching_completed",
+            title: "매칭 완료",
+            message: `${order.companyName} 오더 매칭이 완료되었습니다. 담당자 연락처: ${requester?.phoneNumber || "미등록"}`,
+            relatedId: orderId,
+            phoneNumber: requester?.phoneNumber || null,
+          });
+
+          // WebSocket 알림
+          notificationWS.sendToUser(app.helperId, {
+            type: "matching_completed",
+            title: "매칭 완료",
+          });
+
+          // 푸시 알림
+          sendPushToUser(app.helperId, {
+            title: "매칭 완료",
+            body: `${order.companyName} 오더 매칭이 완료되었습니다. 담당자: ${requester?.phoneNumber || "미등록"}`,
+            url: "/helper-home",
+            tag: `matching-complete-${orderId}`,
+          });
+        } catch (notifErr) {
+          console.error(`[Notification Error] Failed to send matching-completed notification for helper ${app.helperId}:`, notifErr);
+        }
       }
       
       // 나머지 applied 상태 신청은 rejected로 변경
@@ -11019,19 +11184,26 @@ export async function registerRoutes(
           status: "rejected",
           processedAt: new Date(),
         });
-        
-        // 거절 알림
-        await storage.createNotification({
-          type: "application_rejected",
-          title: "오더 신청 결과",
-          message: `${order.companyName} 오더에 다른 헬퍼가 선택되었습니다.`,
-          relatedId: orderId,
-        });
+
+        // 거절 알림 (알림 실패해도 reject 처리에 영향 없도록)
+        try {
+          await storage.createNotification({
+            userId: app.helperId,
+            type: "application_rejected",
+            title: "오더 신청 결과",
+            message: `${order.companyName} 오더에 다른 헬퍼가 선택되었습니다.`,
+            relatedId: orderId,
+          });
+        } catch (notifErr) {
+          console.error(`[Notification Error] Failed to send rejection notification:`, notifErr);
+        }
       }
       
       // 오더 상태를 scheduled로 변경
+      const matchedHelperId = selectedApplications.length > 0 ? selectedApplications[0].helperId : null;
       await storage.updateOrder(orderId, {
         status: "scheduled",
+        matchedHelperId: matchedHelperId,
         matchedAt: new Date(),
         helperPhoneShared: true,
         requesterPhone: requester?.phoneNumber || null,
@@ -11040,23 +11212,26 @@ export async function registerRoutes(
       // 선택된 헬퍼 정보 가져오기
       const matchedHelper = selectedApplications.length > 0 ? await storage.getUser(selectedApplications[0].helperId) : null;
       
-      // 의뢰인에게 알림 (헬퍼 연락처 포함)
-      await storage.createNotification({
-        userId: userId,
-        type: "matching_completed",
-        title: "매칭 완료",
-        message: `${order.companyName} 오더 매칭이 완료되었습니다. 헬퍼 연락처: ${matchedHelper?.phoneNumber || "미등록"}`,
-        phoneNumber: matchedHelper?.phoneNumber || null,
-        relatedId: orderId,
-      });
+      // 의뢰인/관리자 알림 (알림 실패해도 매칭 처리에 영향 없도록 try-catch)
+      try {
+        await storage.createNotification({
+          userId: userId,
+          type: "matching_completed",
+          title: "매칭 완료",
+          message: `${order.companyName} 오더 매칭이 완료되었습니다. 헬퍼 연락처: ${matchedHelper?.phoneNumber || "미등록"}`,
+          phoneNumber: matchedHelper?.phoneNumber || null,
+          relatedId: orderId,
+        });
 
-      
-      // 관리자에게 브로드캐스트
-      broadcastToAllAdmins("order_status", "matching_completed", orderId, {
-        orderId,
-        companyName: order.companyName,
-        selectedHelpers: selectedApplications.length,
-      });
+        // 관리자에게 브로드캐스트
+        broadcastToAllAdmins("order_status", "matching_completed", orderId, {
+          orderId,
+          companyName: order.companyName,
+          selectedHelpers: selectedApplications.length,
+        });
+      } catch (notificationErr) {
+        console.error(`[Notification Error] Failed to send confirm-matching notifications for order ${orderId}:`, notificationErr);
+      }
       
       // 멱등성 응답 저장
       const responseBody = { success: true, message: "매칭이 완료되었습니다" };
@@ -11105,28 +11280,34 @@ export async function registerRoutes(
       const avgQty = parseInt(order.averageQuantity || "1") || 1;
       const supplyAmount = pricePerUnit * avgQty;
       const totalWithVat = Math.round(supplyAmount * 1.1);
-      const depositAmount = Math.floor(totalWithVat * 0.2);
-      
-      await storage.createNotification({
-        userId: userId,
-        type: "contract_confirmed",
-        title: "계약 확정 완료",
-        message: `${order.companyName} 오더 계약이 확정되었습니다. 예약금 ${depositAmount.toLocaleString()}원 입금 후 헬퍼 매칭이 진행됩니다.`,
-        relatedId: orderId,
-      });
-      
-      // 관리자에게 알림
-      broadcastToAllAdmins("order", "contract_confirmed", orderId, {
-        orderId,
-        companyName: order.companyName,
-        requesterId: userId,
-        helperId: null,
-        trackingNumber: null,
-        depositAmount,
-      });
-      
-      res.json({ 
-        success: true, 
+      const depRate = await getDepositRate();
+      const depositAmount = Math.floor(totalWithVat * (depRate / 100));
+
+      // 알림 발송 (알림 실패해도 계약 확정 처리에 영향 없도록 try-catch)
+      try {
+        await storage.createNotification({
+          userId: userId,
+          type: "contract_confirmed",
+          title: "계약 확정 완료",
+          message: `${order.companyName} 오더 계약이 확정되었습니다. 예약금 ${depositAmount.toLocaleString()}원 입금 후 헬퍼 매칭이 진행됩니다.`,
+          relatedId: orderId,
+        });
+
+        // 관리자에게 알림
+        broadcastToAllAdmins("order", "contract_confirmed", orderId, {
+          orderId,
+          companyName: order.companyName,
+          requesterId: userId,
+          helperId: null,
+          trackingNumber: null,
+          depositAmount,
+        });
+      } catch (notificationErr) {
+        console.error(`[Notification Error] Failed to send contract-confirmed notifications for order ${orderId}:`, notificationErr);
+      }
+
+      res.json({
+        success: true,
         message: "계약이 확정되었습니다. 예약금 입금 안내를 확인해주세요.",
         depositAmount,
       });
@@ -11148,15 +11329,22 @@ export async function registerRoutes(
       if (!order) {
         return res.status(404).json({ message: "Order not found" });
       }
-      
-      // Get the contract for this order and helper
-      const contracts = await storage.getAllContracts();
-      const contract = contracts.find(c => c.orderId === orderId && c.helperId === userId);
-      
+
+      // 오더 상태 검증: 업무중(in_progress) 상태에서만 마감 제출 가능
+      const orderStatusForClose = normalizeOrderStatus(order.status);
+      if (!isOneOfStatus(orderStatusForClose, CAN_SUBMIT_CLOSING_STATUSES)) {
+        return res.status(400).json({
+          message: `현재 상태(${order.status})에서는 마감을 제출할 수 없습니다. 업무중 상태에서만 가능합니다.`
+        });
+      }
+
+      // Get the contract for this order and helper (효율적 조회)
+      const contract = await storage.getContractByOrderAndHelper(orderId, userId);
+
       if (!contract) {
         return res.status(404).json({ message: "계약을 찾을 수 없습니다" });
       }
-      
+
       // 헬퍼 신청 상태 업데이트 (in_progress → closing_submitted)
       const application = await storage.getOrderApplication(orderId, userId);
       if (application) {
@@ -11256,114 +11444,120 @@ export async function registerRoutes(
         console.log(`[Auto Checkout] Updated check_in_records for helper ${userId}. Order: ${orderId}`);
       }
       
-      // Get helper and requester info
-      const helper = await storage.getUser(userId);
-      const requester = contract.requesterId ? await storage.getUser(contract.requesterId) : null;
-      
-      // Prepare completion message
-      const completionMessage = `${order.companyName} 마감 완료\n배송: ${deliveryCount}건, 반품: ${returnCount || 0}건${pickupCount ? `, 수거: ${pickupCount}건` : ""}${otherCount ? `, 기타: ${otherCount}건` : ""}\n정산금액: ${settlementAmount.toLocaleString()}원 (VAT포함)`;
-      
-      // Send push notification to Helper
-      await storage.createNotification({
-        userId: userId,
-        type: "order_completed",
-        title: "업무 마감 완료",
-        message: completionMessage,
-        relatedId: orderId,
-      });
-      
-      const helperWsDelivered = notificationWS.sendToUser(userId, {
-        type: "order_completed",
-        title: "업무 마감 완료",
-        message: completionMessage,
-        relatedId: orderId,
-        payload: { deliveryCount, returnCount, pickupCount, otherCount, settlementAmount },
-      });
-      
-      // Log for admin (helper)
-      await storage.createNotificationLog({
-        userId: userId,
-        type: "order_completed",
-        title: "업무 마감 완료",
-        message: completionMessage,
-        relatedId: orderId,
-        deliveryChannel: helperWsDelivered ? "websocket" : "polling",
-      });
-      
-      // Send push notification to Requester
-      if (requester) {
-        const requesterMessage = `${helper?.name || "헬퍼"}님이 ${order.companyName} 업무를 마감했습니다.\n배송: ${deliveryCount}건, 반품: ${returnCount || 0}건${pickupCount ? `, 수거: ${pickupCount}건` : ""}${otherCount ? `, 기타: ${otherCount}건` : ""}\n정산금액: ${settlementAmount.toLocaleString()}원 (VAT포함)`;
-        
+      // 알림 발송 (알림 실패해도 마감 처리에 영향 없도록 try-catch)
+      try {
+        // Get helper and requester info
+        const helper = await storage.getUser(userId);
+        const requester = contract.requesterId ? await storage.getUser(contract.requesterId) : null;
+
+        // Prepare completion message
+        const completionMessage = `${order.companyName} 마감 완료\n배송: ${deliveryCount}건, 반품: ${returnCount || 0}건${pickupCount ? `, 수거: ${pickupCount}건` : ""}${otherCount ? `, 기타: ${otherCount}건` : ""}\n정산금액: ${settlementAmount.toLocaleString()}원 (VAT포함)`;
+
+        // Send push notification to Helper
         await storage.createNotification({
-          userId: requester.id,
+          userId: userId,
           type: "order_completed",
-          title: "업무 마감 알림",
-          message: requesterMessage,
+          title: "업무 마감 완료",
+          message: completionMessage,
           relatedId: orderId,
         });
-        
-        const requesterWsDelivered = notificationWS.sendToUser(requester.id, {
+
+        const helperWsDelivered = notificationWS.sendToUser(userId, {
           type: "order_completed",
-          title: "업무 마감 알림",
-          message: requesterMessage,
+          title: "업무 마감 완료",
+          message: completionMessage,
           relatedId: orderId,
-          payload: { deliveryCount, returnCount, pickupCount, otherCount, settlementAmount, helperName: helper?.name },
+          payload: { deliveryCount, returnCount, pickupCount, otherCount, settlementAmount },
         });
-        
-        // Log for admin (requester)
+
+        // Log for admin (helper)
         await storage.createNotificationLog({
-          userId: requester.id,
+          userId: userId,
           type: "order_completed",
-          title: "업무 마감 알림",
-          message: requesterMessage,
+          title: "업무 마감 완료",
+          message: completionMessage,
           relatedId: orderId,
-          deliveryChannel: requesterWsDelivered ? "websocket" : "polling",
+          deliveryChannel: helperWsDelivered ? "websocket" : "polling",
         });
-        
-        // Send web push to requester (async, non-blocking)
-        sendPushToUser(requester.id, {
-          title: "업무 마감 알림",
-          body: `${helper?.name || "헬퍼"}님이 ${order.companyName} 업무를 마감했습니다. 정산금액: ${settlementAmount.toLocaleString()}원`,
-          url: "/requester-dashboard",
+
+        // Send push notification to Requester
+        if (requester) {
+          const requesterMessage = `${helper?.name || "헬퍼"}님이 ${order.companyName} 업무를 마감했습니다.\n배송: ${deliveryCount}건, 반품: ${returnCount || 0}건${pickupCount ? `, 수거: ${pickupCount}건` : ""}${otherCount ? `, 기타: ${otherCount}건` : ""}\n정산금액: ${settlementAmount.toLocaleString()}원 (VAT포함)`;
+
+          await storage.createNotification({
+            userId: requester.id,
+            type: "order_completed",
+            title: "업무 마감 알림",
+            message: requesterMessage,
+            relatedId: orderId,
+          });
+
+          const requesterWsDelivered = notificationWS.sendToUser(requester.id, {
+            type: "order_completed",
+            title: "업무 마감 알림",
+            message: requesterMessage,
+            relatedId: orderId,
+            payload: { deliveryCount, returnCount, pickupCount, otherCount, settlementAmount, helperName: helper?.name },
+          });
+
+          // Log for admin (requester)
+          await storage.createNotificationLog({
+            userId: requester.id,
+            type: "order_completed",
+            title: "업무 마감 알림",
+            message: requesterMessage,
+            relatedId: orderId,
+            deliveryChannel: requesterWsDelivered ? "websocket" : "polling",
+          });
+
+          // Send web push to requester (async, non-blocking)
+          sendPushToUser(requester.id, {
+            title: "업무 마감 알림",
+            body: `${helper?.name || "헬퍼"}님이 ${order.companyName} 업무를 마감했습니다. 정산금액: ${settlementAmount.toLocaleString()}원`,
+            url: "/requester-dashboard",
+            tag: `complete-${orderId}`,
+          });
+        }
+
+        // Send web push to helper (async, non-blocking)
+        sendPushToUser(userId, {
+          title: "업무 마감 완료",
+          body: `${order.companyName} 마감 완료. 정산금액: ${settlementAmount.toLocaleString()}원 (VAT포함)`,
+          url: "/helper-dashboard",
           tag: `complete-${orderId}`,
         });
-      }
-      
-      // Send web push to helper (async, non-blocking)
-      sendPushToUser(userId, {
-        title: "업무 마감 완료",
-        body: `${order.companyName} 마감 완료. 정산금액: ${settlementAmount.toLocaleString()}원 (VAT포함)`,
-        url: "/helper-dashboard",
-        tag: `complete-${orderId}`,
-      });
-      
-      console.log(`[Order Complete] Order ${orderId} completed by Helper ${userId}. Settlement: ${settlementAmount}원`);
-      
-      // Send order status update for real-time UI refresh
-      notificationWS.sendOrderStatusUpdate(userId, {
-        orderId,
-        status: "completed",
-        currentHelpers: order.currentHelpers || 1,
-      });
-      
-      if (requester) {
-        notificationWS.sendOrderStatusUpdate(requester.id, {
+
+        console.log(`[Order Complete] Order ${orderId} completed by Helper ${userId}. Settlement: ${settlementAmount}원`);
+
+        // Send order status update for real-time UI refresh
+        notificationWS.sendOrderStatusUpdate(userId, {
           orderId,
           status: "completed",
           currentHelpers: order.currentHelpers || 1,
         });
+
+        if (requester) {
+          notificationWS.sendOrderStatusUpdate(requester.id, {
+            orderId,
+            status: "completed",
+            currentHelpers: order.currentHelpers || 1,
+          });
+        }
+
+        // Notify all other helpers on this order
+        notifyOrderHelpers(orderId, "order_completed", "completed");
+
+        // Broadcast to all admins for real-time admin console updates
+        broadcastToAllAdmins("order", "completed", orderId, {
+          orderId,
+          helperId: userId,
+          status: "completed",
+          settlementAmount
+        });
+      } catch (notificationErr) {
+        console.error(`[Notification Error] Failed to send notifications for order ${orderId}:`, notificationErr);
+        // 알림 실패해도 마감 처리는 정상 진행
       }
-      
-      // Notify all other helpers on this order
-      notifyOrderHelpers(orderId, "order_completed", "completed");
-      
-      // Broadcast to all admins for real-time admin console updates
-      broadcastToAllAdmins("order", "completed", orderId, { 
-        orderId, 
-        helperId: userId, 
-        status: "completed",
-        settlementAmount 
-      });
       
       // Create settlement statement (기사정산) automatically with transaction
       // 새로운 계산 방식:
@@ -11985,14 +12179,24 @@ export async function registerRoutes(
         mustChangePassword: true,
       });
 
-      // TODO: Integrate SMS module (Aligo/Solapi/Naver SENS) to send tempPassword
-      // SMS should be sent to targetUser.phoneNumber
-      // Never return the password in API response for security
-      
+      // SMS 임시 비밀번호 발송
+      let smsSent = false;
+      if (targetUser.phoneNumber) {
+        try {
+          const smsResult = await smsService.sendCustomMessage(
+            targetUser.phoneNumber,
+            `[헬프미 관리자] 계정이 승인되었습니다.\n임시 비밀번호: ${tempPassword}\n로그인 후 반드시 비밀번호를 변경해주세요.`
+          );
+          smsSent = smsResult.success;
+        } catch (smsErr) {
+          console.error("[SMS Error] Failed to send temp password:", smsErr);
+        }
+      }
+
       res.json({
         success: true,
         message: "관리자 계정이 승인되었습니다. 임시 비밀번호가 등록된 휴대폰으로 SMS 발송됩니다.",
-        smsSent: !!targetUser.phoneNumber, // Indicates if SMS could be sent
+        smsSent,
       });
     } catch (err) {
       console.error("Approve admin staff error:", err);
@@ -12648,6 +12852,219 @@ export async function registerRoutes(
   });
 
 
+  // 계약서 출력 (HTML - 프린트용)
+  app.get("/api/orders/:id/contract/pdf", async (req, res) => {
+    try {
+      const orderId = Number(req.params.id);
+      const order = await storage.getOrder(orderId);
+      if (!order) {
+        return res.status(404).send("<h1>오더를 찾을 수 없습니다</h1>");
+      }
+
+      // 의뢰인 정보
+      const requester = order.requesterId ? await storage.getUser(order.requesterId) : null;
+      const requesterName = requester?.name || "미확인";
+      const requesterPhone = requester?.phoneNumber || order.requesterPhone || "-";
+
+      // 계약금 계산
+      const depRate = await getDepositRate();
+      const pricePerUnit = Number(order.pricePerUnit) || 0;
+      const quantity = parseInt(String(order.averageQuantity || "0").replace(/[^0-9]/g, "")) || 0;
+      const supplyAmount = pricePerUnit * quantity;
+      const totalWithVat = Math.round(supplyAmount * 1.1);
+      const depositAmount = Math.round(totalWithVat * (depRate / 100));
+
+      // 잔금 입금 예정일
+      const balancePaymentDueDate = (order as any).balancePaymentDueDate || "-";
+
+      // 계약일 (오더 생성일)
+      const createdAt = order.createdAt ? new Date(order.createdAt) : new Date();
+      const contractDate = `${createdAt.getFullYear()}년 ${createdAt.getMonth() + 1}월 ${createdAt.getDate()}일`;
+
+      // 서명 정보 (의뢰인 서비스 동의서에서 가져옴)
+      let signatureName = requesterName;
+      let signedAt = contractDate;
+      let phoneVerified = false;
+      let verifiedPhone = requesterPhone;
+      try {
+        const agreements = await storage.getAllRequesterServiceAgreements();
+        const agreement = agreements.find(a => a.userId === order.requesterId);
+        if (agreement) {
+          phoneVerified = !!(agreement as any).phoneVerified;
+          if ((agreement as any).phoneNumber) verifiedPhone = (agreement as any).phoneNumber;
+          if (agreement.agreedAt) {
+            const d = new Date(agreement.agreedAt);
+            signedAt = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+          }
+        }
+      } catch (e) {
+        console.error("Failed to get service agreement:", e);
+      }
+
+      const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>운송주선 계약서 - ORD-${orderId}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; font-size: 13px; line-height: 1.8; color: #333; padding: 40px; max-width: 800px; margin: 0 auto; }
+    @media print { body { padding: 20px; } .no-print { display: none !important; } }
+    .print-btn { position: fixed; top: 20px; right: 20px; padding: 10px 24px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; z-index: 100; }
+    .print-btn:hover { background: #1d4ed8; }
+    h1 { text-align: center; font-size: 22px; margin-bottom: 8px; border-bottom: 3px double #333; padding-bottom: 12px; }
+    .subtitle { text-align: center; color: #666; font-size: 12px; margin-bottom: 30px; }
+    .intro { margin-bottom: 24px; text-indent: 1em; }
+    .section-title { font-size: 14px; font-weight: bold; margin: 20px 0 8px; padding: 4px 0; border-bottom: 1px solid #ddd; }
+    .section-content { margin-bottom: 16px; padding-left: 1em; }
+    .section-content p { margin-bottom: 4px; }
+    .info-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+    .info-table th, .info-table td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
+    .info-table th { background: #f5f5f5; width: 140px; font-weight: 600; }
+    .consent-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 16px; margin: 12px 0; }
+    .consent-item { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
+    .consent-check { color: #10b981; font-weight: bold; }
+    .signature-area { margin-top: 30px; border: 1px solid #ddd; border-radius: 6px; padding: 20px; }
+    .signature-row { display: flex; justify-content: space-between; margin-top: 16px; }
+    .signature-box { text-align: center; width: 45%; }
+    .signature-line { border-bottom: 1px solid #333; margin-top: 40px; padding-bottom: 4px; }
+    .footer-info { margin-top: 30px; padding-top: 16px; border-top: 1px solid #ddd; font-size: 11px; color: #888; text-align: center; }
+    .highlight { color: #dc2626; font-weight: 600; }
+    .amount { font-size: 16px; font-weight: bold; color: #2563eb; }
+  </style>
+</head>
+<body>
+  <button class="print-btn no-print" onclick="window.print()">인쇄하기</button>
+
+  <h1>운송주선 계약서</h1>
+  <p class="subtitle">오더번호: ORD-${orderId} | 계약일: ${contractDate}</p>
+
+  <p class="intro">
+    본 계약은 「화물자동차 운수사업법」 및 관련 법령에 따라 아래 당사자 간에 운송주선에 관한 사항을 정하기 위하여 체결합니다.
+    본 플랫폼은 운송 주선 중개 서비스를 제공하며, "갑"과 운송인(헬퍼) 간의 운송 계약은 개인 간 거래로서 플랫폼은 거래의 당사자가 아님을 확인합니다.
+  </p>
+
+  <div class="section-title">제1조 (계약 당사자)</div>
+  <table class="info-table">
+    <tr><th>갑 (의뢰인)</th><td>${requesterName}</td></tr>
+    <tr><th>연락처</th><td>${requesterPhone}</td></tr>
+    <tr><th>을 (플랫폼)</th><td>헬프미 운송주선 플랫폼</td></tr>
+  </table>
+
+  <div class="section-title">제2조 (계약 목적)</div>
+  <div class="section-content">
+    <p>"을"은 "갑"의 요청에 따라 적합한 운송인(헬퍼)을 주선하며, "갑"은 이에 대한 운송 비용을 지급합니다.</p>
+  </div>
+
+  <div class="section-title">제3조 (운송 내용)</div>
+  <table class="info-table">
+    <tr><th>운송사/업체</th><td>${order.companyName || "-"}</td></tr>
+    <tr><th>평균 수량</th><td>${order.averageQuantity || "-"}</td></tr>
+    <tr><th>단가</th><td>${pricePerUnit.toLocaleString()}원</td></tr>
+    <tr><th>배송지역</th><td>${order.deliveryArea || "-"}</td></tr>
+    <tr><th>캠프/터미널</th><td>${order.campAddress || "-"}</td></tr>
+    <tr><th>차량 타입</th><td>${order.vehicleType || "-"}</td></tr>
+    <tr><th>운송 시작일</th><td>${order.scheduledDate || "-"}</td></tr>
+    <tr><th>운송 종료일</th><td>${(order as any).scheduledDateEnd || "-"}</td></tr>
+    <tr><th>긴급 오더</th><td>${order.isUrgent ? "예" : "아니오"}</td></tr>
+    <tr><th>배송가이드</th><td>${order.deliveryGuide || "등록된 배송가이드가 없습니다."}</td></tr>
+  </table>
+
+  <div class="section-title">제4조 (운임 산정 및 정산)</div>
+  <div class="section-content">
+    <p>1. 운임은 등록된 단가 기준으로 산정하며, 최종 운임은 마감 자료(실제 배송 수량)에 따라 확정됩니다.</p>
+    <p>2. "갑"은 오더 등록 시 예상 운임의 <span class="highlight">${depRate}%</span>를 계약금으로 선납합니다.</p>
+    <p>3. 잔여금(최종 운임 - 계약금)은 마감 자료 확정 후 청구되며, 청구일로부터 7일 이내에 지급하여야 합니다.</p>
+  </div>
+  <table class="info-table">
+    <tr><th>예상 공급가</th><td>${supplyAmount.toLocaleString()}원</td></tr>
+    <tr><th>부가세 포함</th><td>${totalWithVat.toLocaleString()}원</td></tr>
+    <tr><th>계약금 (${depRate}%)</th><td class="amount">${depositAmount.toLocaleString()}원</td></tr>
+  </table>
+
+  <div class="section-title">제5조 (신용거래 조건)</div>
+  <div class="section-content">
+    <p>1. 잔여금 정산은 신용거래이며, 미지급 시 아래 단계별 조치가 적용됩니다.</p>
+    <p>2. 지급기한 초과 시: <span class="highlight">연 12%</span> 지연이자 발생</p>
+    <p>3. 14일 경과 시: 서비스 이용 제한 (오더 등록 제한)</p>
+    <p>4. 30일 경과 시: 법적 조치 (소송비용·변호사 비용 "갑" 부담)</p>
+  </div>
+
+  <div class="section-title">제6조~제11조 (의무, 해지, 손해배상, 개인정보, 면책)</div>
+  <div class="section-content">
+    <p>상세 내용은 플랫폼 이용약관 및 개인정보처리방침을 따릅니다.</p>
+  </div>
+
+  <div class="section-title">제12조 (잔금 입금 예정일)</div>
+  <div class="section-content">
+    <p>1. "갑"은 운송 완료 후 마감 자료 확정에 따른 잔여금을 아래 지정한 입금 예정일까지 지급하여야 합니다.</p>
+    <p>2. 입금 예정일을 초과할 경우, 제5조의 신용거래 조항이 즉시 적용됩니다.</p>
+  </div>
+  <table class="info-table">
+    <tr><th>잔금 입금 예정일</th><td class="highlight" style="font-size:15px;">${balancePaymentDueDate}</td></tr>
+  </table>
+
+  <div class="section-title">제13조 (특약사항 및 동의)</div>
+  <div class="consent-box">
+    <div class="consent-item">
+      <span class="consent-check">✓</span>
+      <span>제1호: 잔여금은 마감 자료(실제 배송 수량) 기준으로 확정되며, 청구일로부터 7일 이내 지급할 것에 동의합니다.</span>
+    </div>
+    <div class="consent-item">
+      <span class="consent-check">✓</span>
+      <span>제2호: 잔여금 정산은 신용거래이며, 미지급 시 연 12% 지연이자, 서비스 이용 제한 및 법적 조치(소송비용·변호사 비용 부담 포함)가 발생할 수 있음에 동의합니다.</span>
+    </div>
+    <div class="consent-item">
+      <span class="consent-check">✓</span>
+      <span>제3호: 본 거래는 개인 간 거래로서 플랫폼은 통신판매중개자의 지위에 있음을 이해하며, 매칭 완료 후(운송인 연락처 전달 후) 취소 시 계약금이 환불되지 않음에 동의합니다.</span>
+    </div>
+    <div class="consent-item">
+      <span class="consent-check">✓</span>
+      <span>제4호: 상기 지정한 잔금 입금 예정일(${balancePaymentDueDate})까지 잔여금을 지급할 것을 확약하며, 미이행 시 제5조의 신용거래 조항이 적용됨에 동의합니다.</span>
+    </div>
+  </div>
+
+  <div class="section-title">제14조 (분쟁 해결)</div>
+  <div class="section-content">
+    <p>1. 본 계약과 관련한 분쟁은 당사자 간 협의하여 해결하며, 협의가 이루어지지 않을 경우 "을"의 본점 소재지를 관할하는 법원을 전속관할 법원으로 합니다.</p>
+    <p>2. "갑"과 운송인(헬퍼) 간의 분쟁에 대하여 "을"은 중재를 지원할 수 있으나, 법적 분쟁의 당사자가 되지 않습니다.</p>
+  </div>
+
+  <div class="signature-area">
+    <div class="section-title" style="border:none; margin-top:0;">서명 및 인증 정보</div>
+    <table class="info-table">
+      <tr><th>서명자</th><td>${signatureName} (서명 완료)</td></tr>
+      <tr><th>본인인증</th><td>${phoneVerified ? "인증 완료" : "미인증"} (${verifiedPhone})</td></tr>
+      <tr><th>계약 체결일</th><td>${signedAt}</td></tr>
+    </table>
+    <div class="signature-row">
+      <div class="signature-box">
+        <p><strong>갑 (의뢰인)</strong></p>
+        <div class="signature-line">${requesterName} (서명)</div>
+      </div>
+      <div class="signature-box">
+        <p><strong>을 (플랫폼)</strong></p>
+        <div class="signature-line">헬프미 운송주선 플랫폼</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-info">
+    <p>본 계약서는 전자적으로 체결되었으며, 「전자문서 및 전자거래 기본법」에 따라 법적 효력을 가집니다.</p>
+    <p>출력일: ${new Date().getFullYear()}년 ${new Date().getMonth() + 1}월 ${new Date().getDate()}일 | 헬프미 운송주선 플랫폼</p>
+  </div>
+</body>
+</html>`;
+
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(html);
+    } catch (err) {
+      console.error("Error generating contract:", err);
+      res.status(500).send("<h1>계약서 생성 중 오류가 발생했습니다</h1>");
+    }
+  });
+
   // Get all contracts (admin)
   app.get("/api/admin/contracts", adminAuth, requirePermission("contracts.view"), async (req, res) => {
     try {
@@ -12793,20 +13210,25 @@ export async function registerRoutes(
       if (!contract) {
         return res.status(404).json({ message: "계약을 찾을 수 없습니다" });
       }
-      
+
+      // 중복 입금 확인 방지
+      if (contract.depositPaid) {
+        return res.status(409).json({ message: "이미 계약금이 입금 확인되었습니다" });
+      }
+
       const updated = await storage.updateContract(id, {
         depositPaid: true,
-          depositPaidAt: new Date(),
-          downPaymentStatus: "paid",
+        depositPaidAt: new Date(),
+        downPaymentStatus: "paid",
         status: "deposit_paid",
       });
-      
+
       // 오더 상태 업데이트: awaiting_deposit → scheduled (계약금 결제 완료)
       const order = await storage.getOrder(contract.orderId);
       if (order && order.status === "awaiting_deposit") {
         await storage.updateOrder(contract.orderId, { status: "scheduled" });
       }
-      
+
       // Payment 기록 생성
       await storage.createPayment({
         contractId: id,
@@ -12837,12 +13259,17 @@ export async function registerRoutes(
     try {
       const id = Number(req.params.id);
       const { transactionRef, notes } = req.body;
-      
+
       const contract = await storage.getContract(id);
       if (!contract) {
         return res.status(404).json({ message: "계약을 찾을 수 없습니다" });
       }
-      
+
+      // 중복 잔금 확인 방지
+      if (contract.balancePaid) {
+        return res.status(409).json({ message: "이미 잔금이 입금 확인되었습니다" });
+      }
+
       const updated = await storage.updateContract(id, {
         balancePaid: true,
         balancePaidAt: new Date(),
@@ -12990,7 +13417,19 @@ export async function registerRoutes(
       const updated = await storage.updateContract(id, {
         status: "cancelled",
       });
-      
+
+      // 오더 상태 및 matchedHelperId 초기화 (헬퍼 재배정 가능하도록)
+      if (contract.orderId) {
+        const order = await storage.getOrder(contract.orderId);
+        if (order && order.matchedHelperId === contract.helperId) {
+          await storage.updateOrder(contract.orderId, {
+            matchedHelperId: null,
+            status: "open",
+            currentHelpers: Math.max(0, (order.currentHelpers || 1) - 1),
+          });
+        }
+      }
+
       // 감사 로그 기록
       await logAdminAction({
         req,
@@ -13012,6 +13451,7 @@ export async function registerRoutes(
       // 알림
       if (contract.helperId) {
         await storage.createNotification({
+          userId: contract.helperId || contract.requesterId,
           type: "announcement",
           title: "계약 취소",
           message: `계약이 취소되었습니다. 사유: ${reason || "관리자에 의한 취소"}`,
@@ -13227,6 +13667,7 @@ export async function registerRoutes(
       // 기사에게 알림
       if (settlement.helperId) {
         await storage.createNotification({
+          userId: settlement.helperId,
           type: "announcement",
           title: "정산 취소",
           message: `정산이 취소되었습니다. 사유: ${reason}`,
@@ -13306,6 +13747,99 @@ export async function registerRoutes(
     }
   });
 
+  // PATCH /api/admin/helper-bank-accounts/:id/verify - 계좌 승인
+  app.patch("/api/admin/helper-bank-accounts/:id/verify", adminAuth, requirePermission("helpers.edit"), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+
+      const [account] = await db.select()
+        .from(helperBankAccounts)
+        .where(eq(helperBankAccounts.id, id));
+
+      if (!account) {
+        return res.status(404).json({ message: "계좌 정보를 찾을 수 없습니다" });
+      }
+
+      const [updated] = await db.update(helperBankAccounts)
+        .set({
+          verificationStatus: 'verified',
+        })
+        .where(eq(helperBankAccounts.id, id))
+        .returning();
+
+      // 헬퍼에게 계좌 승인 알림
+      try {
+        await storage.createNotification({
+          userId: account.helperId,
+          type: "bank_account_verified",
+          title: "계좌 승인 완료",
+          message: "등록하신 계좌가 승인되었습니다. 정산 시 해당 계좌로 입금됩니다.",
+        });
+        sendPushToUser(account.helperId, {
+          title: "계좌 승인 완료",
+          body: "등록하신 계좌가 승인되었습니다.",
+          url: "/profile",
+        });
+      } catch (notifErr) {
+        console.error("[Notification Error] Bank account verify:", notifErr);
+      }
+
+      res.json({ success: true, account: updated });
+    } catch (err) {
+      console.error("Bank account verify error:", err);
+      res.status(500).json({ message: "계좌 승인에 실패했습니다" });
+    }
+  });
+
+  // PATCH /api/admin/helper-bank-accounts/:id/reject - 계좌 반려
+  app.patch("/api/admin/helper-bank-accounts/:id/reject", adminAuth, requirePermission("helpers.edit"), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { reason } = req.body;
+
+      if (!reason || !reason.trim()) {
+        return res.status(400).json({ message: "반려 사유를 입력해주세요" });
+      }
+
+      const [account] = await db.select()
+        .from(helperBankAccounts)
+        .where(eq(helperBankAccounts.id, id));
+
+      if (!account) {
+        return res.status(404).json({ message: "계좌 정보를 찾을 수 없습니다" });
+      }
+
+      const [updated] = await db.update(helperBankAccounts)
+        .set({
+          verificationStatus: 'rejected',
+        })
+        .where(eq(helperBankAccounts.id, id))
+        .returning();
+
+      // 헬퍼에게 계좌 반려 알림
+      try {
+        await storage.createNotification({
+          userId: account.helperId,
+          type: "bank_account_rejected",
+          title: "계좌 반려",
+          message: `등록하신 계좌가 반려되었습니다. 사유: ${reason}`,
+        });
+        sendPushToUser(account.helperId, {
+          title: "계좌 반려",
+          body: `등록하신 계좌가 반려되었습니다. 사유: ${reason}`,
+          url: "/profile",
+        });
+      } catch (notifErr) {
+        console.error("[Notification Error] Bank account reject:", notifErr);
+      }
+
+      res.json({ success: true, account: updated });
+    } catch (err) {
+      console.error("Bank account reject error:", err);
+      res.status(500).json({ message: "계좌 반려에 실패했습니다" });
+    }
+  });
+
   app.get("/api/admin/helper-licenses", adminAuth, requirePermission("helpers.view"), async (req, res) => {
     try {
       const licenses = await storage.getAllHelperLicenses();
@@ -13357,6 +13891,7 @@ export async function registerRoutes(
       });
 
       await storage.createNotification({
+        userId: helperId,
         type: "system" as any,
         title: "헬퍼 인증 완료",
         message: "관리자 확인을 통해 헬퍼 인증이 완료되었습니다. 이제 업무를 시작할 수 있습니다.",
@@ -14203,8 +14738,6 @@ export async function registerRoutes(
         userId: adminUser?.id,
         action: "DISPUTE_REVIEW_STARTED",
         orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
         incidentId: id,
         targetType: "incident",
         targetId: String(id),
@@ -14212,25 +14745,6 @@ export async function registerRoutes(
         oldValue: JSON.stringify({ status: incident.status }),
         newValue: JSON.stringify({ status: "reviewing" }),
       });
-      
-      // 차감 금액이 있으면 deductions 테이블에 추가
-      if (deductionAmount && deductionAmount > 0 && incident.helperId) {
-        await db.insert(deductions).values({
-          orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
-          incidentId: id,
-          requesterId: incident.requesterId,
-          targetType: "helper",
-          targetId: incident.helperId,
-          amount: deductionAmount,
-          reason: deductionReason || adminMemo.trim(),
-          category: incident.incidentType || "dispute",
-          status: "pending",
-          createdBy: adminUser?.id,
-          memo: adminMemo.trim(),
-        });
-      }
 
       res.json({ success: true, incident: updated });
     } catch (err) {
@@ -14285,26 +14799,22 @@ export async function registerRoutes(
         userId: adminUser?.id,
         action: "DISPUTE_RESOLVED",
         orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
         incidentId: id,
         targetType: "incident",
         targetId: String(id),
         reason: adminMemo.trim(),
         oldValue: JSON.stringify({ status: incident.status }),
-        newValue: JSON.stringify({ 
-          status: "resolved", 
+        newValue: JSON.stringify({
+          status: "resolved",
           deductionAmount: deductionAmount || 0,
           deductionReason,
         }),
       });
-      
+
       // 차감 금액이 있으면 deductions 테이블에 추가
       if (deductionAmount && deductionAmount > 0 && incident.helperId) {
         await db.insert(deductions).values({
           orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
           incidentId: id,
           requesterId: incident.requesterId,
           targetType: "helper",
@@ -14368,8 +14878,6 @@ export async function registerRoutes(
         userId: adminUser?.id,
         action: "DISPUTE_REJECTED",
         orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
         incidentId: id,
         targetType: "incident",
         targetId: String(id),
@@ -14377,25 +14885,6 @@ export async function registerRoutes(
         oldValue: JSON.stringify({ status: incident.status }),
         newValue: JSON.stringify({ status: "rejected" }),
       });
-      
-      // 차감 금액이 있으면 deductions 테이블에 추가
-      if (deductionAmount && deductionAmount > 0 && incident.helperId) {
-        await db.insert(deductions).values({
-          orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
-          incidentId: id,
-          requesterId: incident.requesterId,
-          targetType: "helper",
-          targetId: incident.helperId,
-          amount: deductionAmount,
-          reason: deductionReason || adminMemo.trim(),
-          category: incident.incidentType || "dispute",
-          status: "pending",
-          createdBy: adminUser?.id,
-          memo: adminMemo.trim(),
-        });
-      }
 
       res.json({ success: true, incident: updated });
     } catch (err) {
@@ -14441,8 +14930,6 @@ export async function registerRoutes(
       const [refund] = await db.insert(refunds).values({
         paymentId: payment.id,
         orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
         amount,
         reason: reason.trim(),
         reasonCategory: "dispute",
@@ -14468,8 +14955,6 @@ export async function registerRoutes(
         userId: adminUser?.id,
         action: "REFUND_CONFIRMED",
         orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
         incidentId: id,
         targetType: "refund",
         targetId: String(refund.id),
@@ -14520,8 +15005,6 @@ export async function registerRoutes(
         userId: adminUser?.id,
         action: "DISPUTE_RESOLVED_NO_REFUND",
         orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
         incidentId: id,
         targetType: "incident",
         targetId: String(id),
@@ -14573,6 +15056,7 @@ export async function registerRoutes(
         // Send notification to helper
         if (helper) {
           await storage.createNotification({
+            userId: dispute.helperId,
             type: "dispute_reply",
             title: "이의제기 답변",
             message: `이의제기에 대한 답변이 등록되었습니다: ${reply.trim().substring(0, 50)}...`,
@@ -14580,7 +15064,7 @@ export async function registerRoutes(
           });
           
           // Send push notification
-          await sendPushNotification(dispute.helperId, {
+          await sendPushToUser(dispute.helperId, {
             title: "이의제기 답변",
             body: `이의제기에 대한 답변이 등록되었습니다.`,
             data: { type: "dispute_reply", disputeId: String(id) },
@@ -14637,7 +15121,7 @@ export async function registerRoutes(
           });
           
           // Send push notification
-          await sendPushNotification(incident.requesterId, {
+          await sendPushToUser(incident.requesterId, {
             title: "분쟁 답변",
             body: `분쟁에 대한 답변이 등록되었습니다.`,
             data: { type: "dispute_reply", incidentId: String(id) },
@@ -14660,20 +15144,16 @@ export async function registerRoutes(
         userId: adminUser?.id,
         action: "DISPUTE_REPLY_ADDED",
         orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
         incidentId: id,
         targetType: "incident",
         targetId: String(id),
         newValue: JSON.stringify({ reply: reply.trim() }),
       });
-      
+
       // 차감 금액이 있으면 deductions 테이블에 추가
       if (deductionAmount && deductionAmount > 0 && incident.helperId) {
         await db.insert(deductions).values({
           orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
           incidentId: id,
           requesterId: incident.requesterId,
           targetType: "helper",
@@ -14723,16 +15203,32 @@ export async function registerRoutes(
         userId: adminUser?.id,
         action: "EVIDENCE_REQUESTED",
         orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
         incidentId: id,
         targetType: "incident",
         targetId: String(id),
         reason: `추가 증빙 요청 (${dueHours}시간 내)`,
       });
       
-      // TODO: Send notification to reporter
-      
+      // 신고자에게 추가 증빙 요청 알림
+      try {
+        if (incident.requesterId) {
+          await storage.createNotification({
+            userId: incident.requesterId,
+            type: "evidence_requested",
+            title: "추가 증빙 요청",
+            message: `분쟁 건에 대해 추가 증빙이 요청되었습니다. ${dueHours}시간 내에 제출해주세요.`,
+            relatedId: incident.orderId,
+          });
+          sendPushToUser(incident.requesterId, {
+            title: "추가 증빙 요청",
+            body: `분쟁 건에 대해 추가 증빙이 요청되었습니다. ${dueHours}시간 내에 제출해주세요.`,
+            url: `/dispute/${id}`,
+          });
+        }
+      } catch (notifErr) {
+        console.error("[Notification Error] Evidence request:", notifErr);
+      }
+
       res.json({ success: true, incident: updated, evidenceDueAt: dueAt });
     } catch (err) {
       console.error("Request evidence error:", err);
@@ -15294,13 +15790,22 @@ export async function registerRoutes(
       if (!settlement) {
         return res.status(404).json({ message: "정산을 찾을 수 없습니다" });
       }
-      
+
+      // 이미 확정/지급/취소된 정산은 재확인 불가
+      const completedStatuses = ["confirmed", "paid", "cancelled"];
+      if (completedStatuses.includes(settlement.status || "")) {
+        return res.status(409).json({
+          code: "ALREADY_PROCESSED",
+          message: `이미 ${settlement.status === "confirmed" ? "확정" : settlement.status === "paid" ? "지급" : "취소"}된 정산입니다.`,
+        });
+      }
+
       // Get order
       const order = await storage.getOrder(settlement.orderId!);
       if (!order) {
         return res.status(404).json({ message: "오더를 찾을 수 없습니다" });
       }
-      
+
       // Check closing report has delivery history images (MANDATORY)
       const [closingReport] = await db.select()
         .from(closingReports)
@@ -16315,6 +16820,7 @@ export async function registerRoutes(
       // 기사에게 알림
       if (settlement.helperId) {
         await storage.createNotification({
+          userId: settlement.helperId,
           type: "settlement_completed",
           title: "정산 확정",
           message: `정산이 확정되었습니다. 지급 예정 금액: ${(settlement.netAmount || 0).toLocaleString()}원`,
@@ -16387,6 +16893,7 @@ export async function registerRoutes(
       // 기사에게 알림
       if (settlement.helperId) {
         await storage.createNotification({
+          userId: settlement.helperId,
           type: "settlement_completed",
           title: "정산금 지급 완료",
           message: `${(settlement.netAmount || 0).toLocaleString()}원이 지급 완료되었습니다.`,
@@ -16449,6 +16956,7 @@ export async function registerRoutes(
       // 기사에게 알림
       if (settlement.helperId) {
         await storage.createNotification({
+          userId: settlement.helperId,
           type: "dispute_submitted",
           title: "정산 보류",
           message: `정산이 보류 처리되었습니다. 사유: ${reason || "확인 필요"}`,
@@ -17137,7 +17645,7 @@ export async function registerRoutes(
         reporterId,
         incidentType: category || "complaint",
         description,
-        status: "awaiting_deposit",
+        status: "submitted",
       });
       
       res.json(incident);
@@ -17197,9 +17705,10 @@ export async function registerRoutes(
       const helper = dispute.helperId ? await storage.getUser(dispute.helperId) : null;
       const order = dispute.orderId ? await storage.getOrder(dispute.orderId) : null;
       const requester = order?.requesterId ? await storage.getUser(order.requesterId) : null;
-      
+      const submitter = dispute.submitterRole === "requester" ? requester : helper;
+
       res.json({
-        profileImage: user.profileImageUrl || null,
+        profileImage: submitter?.profileImageUrl || null,
         id: dispute.id,
         orderId: dispute.orderId,
         helperId: dispute.helperId,
@@ -17441,19 +17950,25 @@ export async function registerRoutes(
     try {
       const id = Number(req.params.id);
       const { status, resolution, adminReply } = req.body;
-      const decoded = (req as any).user;
-      
+      const adminUser = (req as any).adminUser;
+
+      // 유효한 상태값 검증
+      const validDisputeStatuses = ["submitted", "reviewing", "resolved", "rejected"];
+      if (!validDisputeStatuses.includes(status)) {
+        return res.status(400).json({ message: `유효하지 않은 상태입니다: ${status}` });
+      }
+
       const dispute = await storage.getDispute(id);
       if (!dispute) {
         return res.status(404).json({ message: "이의제기를 찾을 수 없습니다" });
       }
-      
+
       const updateData: any = { status };
       if (resolution) updateData.resolution = resolution;
-      if (adminReply) { updateData.adminReply = adminReply; updateData.adminReplyAt = new Date(); updateData.adminReplyBy = decoded?.userId || null; }
+      if (adminReply) { updateData.adminReply = adminReply; updateData.adminReplyAt = new Date(); updateData.adminReplyBy = adminUser?.id || null; }
       if (status === "resolved" || status === "rejected") {
         updateData.resolvedAt = new Date();
-        updateData.resolvedBy = decoded?.userId || null;
+        updateData.resolvedBy = adminUser?.id || null;
       }
       
       const updated = await storage.updateDispute(id, updateData);
@@ -17464,6 +17979,7 @@ export async function registerRoutes(
                            status === "rejected" ? "반려됨" : 
                            status === "reviewing" ? "검토중" : status;
         await storage.createNotification({
+          userId: dispute.helperId || dispute.submitterId,
           type: "announcement",
           title: "이의제기 상태 변경",
           message: `${dispute.workDate} 작업건 이의제기가 "${statusLabel}"으로 변경되었습니다.${resolution ? ` 결과: ${resolution}` : ""}`,
@@ -23468,6 +23984,7 @@ export async function registerRoutes(
       
       // 헬퍼에게 알림 (의뢰인 연락처 포함)
       await storage.createNotification({
+        userId: helperId,
         type: "matching_success",
         title: "오더 배정 완료",
         message: `${order.companyName || "배송"} 오더에 배정되었습니다.\n의뢰인: ${requester?.name || "의뢰인"}\n연락처: ${requesterPhone}`,
@@ -23551,7 +24068,7 @@ export async function registerRoutes(
         return res.status(404).json({ message: "기사를 찾을 수 없습니다" });
       }
 
-      const [credential, vehicles, business, bankAccount, license, termsAgreement, helperContracts, helperJobContracts] = await Promise.all([
+      const [credential, vehicles, business, bankAccount, license, termsAgreement, helperContracts, helperJobContracts, helperDocs] = await Promise.all([
         storage.getHelperCredential(helperId),
         storage.getHelperVehicle(helperId),
         storage.getHelperBusiness(helperId),
@@ -23560,6 +24077,7 @@ export async function registerRoutes(
         storage.getHelperTermsAgreement(helperId),
         storage.getHelperContracts(helperId),
         storage.getHelperJobContracts(helperId),
+        db.select().from(helperDocuments).where(eq(helperDocuments.userId, helperId)),
       ]);
 
       // 계약 정보 가공
@@ -23634,6 +24152,52 @@ export async function registerRoutes(
         }
       }
 
+      // helper_documents에서 이미지 URL 추출 (서류 제출 시 이미지가 여기에 저장됨)
+      const docsByType: Record<string, any> = {};
+      (helperDocs || []).forEach((doc: any) => {
+        docsByType[doc.documentType] = doc;
+      });
+
+      // business 이미지를 documents에서 보완
+      const businessWithImage = business ? {
+        ...business,
+        businessImageUrl: business.businessImageUrl || docsByType['businessCert']?.imageUrl || null,
+      } : docsByType['businessCert'] ? {
+        businessNumber: docsByType['businessCert'].businessNumber,
+        businessName: docsByType['businessCert'].businessName,
+        representativeName: docsByType['businessCert'].representativeName,
+        address: docsByType['businessCert'].businessAddress,
+        businessType: docsByType['businessCert'].businessType,
+        businessCategory: docsByType['businessCert'].businessCategory,
+        businessImageUrl: docsByType['businessCert'].imageUrl,
+      } : null;
+
+      // license 이미지를 documents에서 보완
+      const licenseWithImages = license ? {
+        ...license,
+        driverLicenseImageUrl: license.driverLicenseImageUrl || docsByType['driverLicense']?.imageUrl || null,
+        cargoLicenseImageUrl: license.cargoLicenseImageUrl || docsByType['cargoLicense']?.imageUrl || null,
+      } : {
+        driverLicenseImageUrl: docsByType['driverLicense']?.imageUrl || null,
+        cargoLicenseImageUrl: docsByType['cargoLicense']?.imageUrl || null,
+      };
+
+      // vehicles를 배열로 변환 (getHelperVehicle은 단일 객체 반환)
+      const vehiclesArray = vehicles ? [vehicles] : [];
+      // vehicleCert 문서에서 차량 이미지 보완
+      if (vehiclesArray.length > 0 && !vehiclesArray[0].vehicleImageUrl && docsByType['vehicleCert']?.imageUrl) {
+        vehiclesArray[0] = { ...vehiclesArray[0], vehicleImageUrl: docsByType['vehicleCert'].imageUrl };
+      } else if (vehiclesArray.length === 0 && docsByType['vehicleCert']?.imageUrl) {
+        vehiclesArray.push({
+          plateNumber: docsByType['vehicleCert'].plateNumber,
+          vehicleType: docsByType['vehicleCert'].vehicleType,
+          vehicleImageUrl: docsByType['vehicleCert'].imageUrl,
+        } as any);
+      }
+
+      // bankAccount를 helper_bank_accounts에서 가져왔으므로 그대로 사용
+      // 통장 이미지가 없으면 bankbookImageUrl도 null
+
       res.json({
         user: {
           id: user.id,
@@ -23651,10 +24215,10 @@ export async function registerRoutes(
           createdAt: user.createdAt,
         },
         credential,
-        vehicles: vehicles || [],
-        business,
+        vehicles: vehiclesArray,
+        business: businessWithImage,
         bankAccount,
-        license,
+        license: licenseWithImages,
         termsAgreement: termsAgreement ? {
           agreedAt: termsAgreement.agreedAt,
           signatureImageUrl: termsAgreement.signatureData,
@@ -24059,6 +24623,7 @@ export async function registerRoutes(
       
       // 기사에게 알림 (요청자 연락처 포함)
       await storage.createNotification({
+        userId: helperId,
         type: "matching_success",
         title: "대행배차 배정",
         message: `새로운 대행배차가 배정되었습니다.\n픽업: ${request.pickupAddress}\n의뢰인 연락처: ${requesterPhone}`,
@@ -25785,6 +26350,7 @@ export async function registerRoutes(
       
       // 알림 저장 및 푸시 알림 전송
       await storage.createNotification({
+        userId: helperId,
         type: "onboarding_approved",
         title: "가입 승인 완료",
         message: "축하합니다! 헬퍼 가입이 승인되었습니다. 이제 오더를 확인하고 업무를 시작할 수 있습니다.",
@@ -25847,6 +26413,7 @@ export async function registerRoutes(
       
       // 알림 저장 및 푸시 알림 전송
       await storage.createNotification({
+        userId: helperId,
         type: "onboarding_rejected",
         title: "가입 심사 반려",
         message: `가입 심사가 반려되었습니다. 사유: ${reason.trim()}`,
@@ -27611,10 +28178,36 @@ export async function registerRoutes(
       
       for (const order of expiredOrders) {
         // Soft delete by setting hiddenAt and status to closed
-        await storage.updateOrder(order.id, { 
+        await storage.updateOrder(order.id, {
           status: "closed",
           hiddenAt: now
         });
+
+        // 관련 지원서 일괄 취소
+        try {
+          const apps = await storage.getOrderApplications(order.id);
+          const activeApps = apps.filter(a => a.status === "applied" || a.status === "selected");
+          for (const app of activeApps) {
+            await storage.updateOrderApplication(app.id, {
+              status: "auto_cancelled",
+              rejectionReason: "오더 자동 만료",
+            });
+          }
+
+          // 요청자에게 자동 만료 알림
+          if (order.requesterId) {
+            await storage.createNotification({
+              userId: order.requesterId,
+              type: "order_expired",
+              title: "오더 자동 만료",
+              message: `${order.companyName || ''} 오더가 입차 예정일 경과로 자동 마감되었습니다.`,
+              relatedId: order.id,
+            });
+          }
+        } catch (cleanupErr) {
+          console.error(`[AUTO_DELETE] Cleanup error for order ${order.id}:`, cleanupErr);
+        }
+
         console.log(`[AUTO_DELETE] Expired order ${order.id} (scheduledDate: ${order.scheduledDate}) deleted at ${now.toISOString()}`);
       }
       
@@ -27673,11 +28266,70 @@ export async function registerRoutes(
       
       for (const order of expiredUnassignedOrders) {
         // 오더 취소 처리
-        await storage.updateOrder(order.id, { 
+        await storage.updateOrder(order.id, {
           status: "cancelled",
           updatedAt: now
         });
-        
+
+        // 관련 데이터 정리
+        try {
+          // 1. 지원서 일괄 취소
+          const apps = await storage.getOrderApplications(order.id);
+          const activeApps = apps.filter(a => a.status === "applied" || a.status === "selected");
+          for (const app of activeApps) {
+            await storage.updateOrderApplication(app.id, {
+              status: "auto_cancelled",
+              rejectionReason: "미배정 오더 자동취소",
+            });
+            // 지원 헬퍼에게 알림
+            try {
+              await storage.createNotification({
+                userId: app.helperId,
+                type: "application_auto_cancelled",
+                title: "신청 자동취소",
+                message: `${order.companyName || ''} 오더가 자동취소되어 신청도 취소되었습니다.`,
+                relatedId: order.id,
+              });
+            } catch (_) {}
+          }
+
+          // 2. 계약금 입금된 경우 환불 레코드 생성
+          if (order.status === "awaiting_deposit" || order.paymentStatus === "deposit_confirmed") {
+            const orderContracts = await storage.getOrderContracts(order.id);
+            const contract = orderContracts[0];
+            if (contract && contract.depositPaid) {
+              await db.insert(refunds).values({
+                orderId: order.id,
+                contractId: contract.id,
+                requesterId: order.requesterId || "",
+                amount: contract.depositAmount || 0,
+                reason: "미배정 오더 자동취소로 인한 계약금 환불",
+                status: "pending",
+                refundType: "full",
+              });
+              console.log(`[UNASSIGNED_CANCEL] Refund record created for order ${order.id}`);
+            }
+          }
+
+          // 3. 요청자에게 알림
+          if (order.requesterId) {
+            await storage.createNotification({
+              userId: order.requesterId,
+              type: "order_cancelled",
+              title: "오더 자동취소",
+              message: `${order.companyName || ''} 오더가 헬퍼 미배정으로 자동취소되었습니다.`,
+              relatedId: order.id,
+            });
+            sendPushToUser(order.requesterId, {
+              title: "오더 자동취소",
+              body: `${order.companyName || ''} 오더가 헬퍼 미배정으로 자동취소되었습니다.`,
+              url: "/orders",
+            });
+          }
+        } catch (cleanupErr) {
+          console.error(`[UNASSIGNED_CANCEL] Cleanup error for order ${order.id}:`, cleanupErr);
+        }
+
         console.log(`[UNASSIGNED_CANCEL] Order ${order.id} cancelled (scheduledDate: ${order.scheduledDate}) - No helper assigned`);
       }
       
@@ -28359,6 +29011,7 @@ export async function registerRoutes(
           // 헬퍼에게 알림
           if (settlement.helperId) {
             await storage.createNotification({
+              userId: settlement.helperId,
               type: "settlement" as any,
               title: "정산금 입금 완료",
               message: `정산금 ${Number(payout.amount).toLocaleString()}원이 입금되었습니다.`,
@@ -29291,7 +29944,8 @@ export async function registerRoutes(
       const baseSupplyAmount = Number(order.pricePerUnit || 0) * qty + costPlusTotal - costMinusTotal;
       const vatAmount = Math.round(baseSupplyAmount * 0.1);
       const grossAmount = baseSupplyAmount + vatAmount;
-      const depositAmount = Math.round(grossAmount * 0.2);
+      const depRate = await getDepositRate();
+      const depositAmount = Math.round(grossAmount * (depRate / 100));
       const balanceAmount = grossAmount - depositAmount;
 
       const snapshot = await storage.createPricingSnapshot({
@@ -30989,7 +31643,13 @@ export async function registerRoutes(
     try {
       const incidentId = parseInt(req.params.id);
       const { status, deductionAmount, deductionReason, adminReply } = req.body;
-      
+
+      // 유효한 사고 상태 값 검증
+      const validIncidentStatuses = ["submitted", "investigating", "reviewing", "resolved", "closed", "rejected"];
+      if (status && !validIncidentStatuses.includes(status)) {
+        return res.status(400).json({ message: `유효하지 않은 상태입니다: ${status}` });
+      }
+
       const updateData: any = {};
       if (status) updateData.status = status;
       if (deductionAmount !== undefined) updateData.deductionAmount = deductionAmount;
@@ -31162,9 +31822,14 @@ export async function registerRoutes(
         return res.status(404).json({ message: "사고를 찾을 수 없습니다" });
       }
 
+      // 이미 차감 확정된 사고는 재처리 불가
+      if (incident.helperDeductionApplied) {
+        return res.status(409).json({ message: "이미 차감이 확정된 사고입니다" });
+      }
+
       const adminUser = req.user;
       const now = new Date();
-      
+
       // 1. 헬퍼 정산 공제 처리
       let helperDeductionApplied = false;
       if ((deductionMethod === 'helper_deduct' || deductionMethod === 'both') && incident.helperId) {
@@ -31172,7 +31837,6 @@ export async function registerRoutes(
         await db.insert(deductions).values({
           orderId: incident.orderId,
           incidentId: incidentId,
-          reasonCategory: "incident",
           targetType: 'helper',
           amount: deductionAmount,
           reason: deductionReason || `화물사고 차감 (사고번호: ${incidentId})`,
@@ -31323,8 +31987,7 @@ export async function registerRoutes(
           if (incident.orderId) {
             await db.insert(deductions).values({
               orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
+              incidentId: incidentId,
               amount: deductionAmount,
               reason: reason || `화물사고 차감 (관리자 강제처리, 사고번호: ${incidentId})`,
               deductionType: 'damage',
@@ -31349,8 +32012,8 @@ export async function registerRoutes(
           if (incident.orderId) {
             await db.insert(refunds).values({
               orderId: incident.orderId,
-          incidentId: incidentId,
-          reasonCategory: "incident",
+              incidentId: incidentId,
+              reasonCategory: "incident",
               requesterId: incident.requesterId,
               amount: deductionAmount,
               reason: reason || `화물사고 환불 (관리자 강제처리, 사고번호: ${incidentId})`,
@@ -32202,18 +32865,18 @@ export async function registerRoutes(
       
       // Try to send via notification service
       try {
-        await notificationWS.sendNotification(recipientUserId, title, body, data);
-        
+        await notificationWS.sendToUser(recipientUserId, { type: 'notification', title, body, data });
+
         await db.update(pushNotificationLogs)
           .set({ status: 'sent', sentAt: new Date() })
           .where(eq(pushNotificationLogs.id, pushLog.id));
-        
+
         res.json({ success: true });
       } catch (sendErr: any) {
         await db.update(pushNotificationLogs)
           .set({ status: 'failed', errorMessage: sendErr.message })
           .where(eq(pushNotificationLogs.id, pushLog.id));
-        
+
         res.json({ success: false, error: sendErr.message });
       }
     } catch (err) {
@@ -32230,8 +32893,8 @@ export async function registerRoutes(
       const results = [];
       for (const userId of userIds) {
         try {
-          await notificationWS.sendNotification(userId, title, body, data);
-          
+          await notificationWS.sendToUser(userId, { type: 'notification', title, body, data });
+
           await db.insert(pushNotificationLogs).values({
             recipientUserId: userId,
             title,
@@ -32495,11 +33158,30 @@ export async function registerRoutes(
   app.get("/api/helpers/documents/status", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
-      
+
       const documents = await db.select()
         .from(helperDocuments)
         .where(eq(helperDocuments.userId, userId));
-      
+
+      // 자동 보정: 모든 필수 서류가 승인되었는데 onboardingStatus가 approved가 아닌 경우 갱신
+      const user = req.user!;
+      if (user.onboardingStatus !== "approved") {
+        const requiredTypes = ["businessCert", "driverLicense", "cargoLicense", "vehicleCert", "transportContract"];
+        const allApproved = requiredTypes.every(type =>
+          documents.some(d => d.documentType === type && d.status === "approved")
+        );
+        if (allApproved) {
+          await db.update(users)
+            .set({
+              onboardingStatus: "approved",
+              helperVerified: true,
+              helperVerifiedAt: new Date(),
+            })
+            .where(eq(users.id, userId));
+          console.log(`[Onboarding Auto-fix] Helper ${userId} all documents already approved → onboardingStatus=approved`);
+        }
+      }
+
       res.json(documents);
     } catch (err) {
       console.error("Documents status fetch error:", err);
@@ -32538,41 +33220,66 @@ export async function registerRoutes(
       filename: (_req: any, file: any, cb: any) => cb(null, `doc_${Date.now()}_${file.originalname}`),
     }),
     limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req: any, file: any, cb: any) => {
+      const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'application/pdf', 'application/octet-stream'];
+      const allowedExtensions = /\.(jpeg|jpg|png|webp|pdf)$/i;
+      if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.test(file.originalname)) {
+        cb(null, true);
+      } else {
+        cb(new Error("이미지 또는 PDF 파일만 업로드 가능합니다"));
+      }
+    },
   });
-  app.post("/api/helpers/documents/:type", requireAuth, uploadHelperDocument.single('file'), async (req: AuthenticatedRequest, res) => {
+  // 화물위탁계약서는 JSON body로 제출하므로 multer 스킵
+  const conditionalUpload = (req: any, res: any, next: any) => {
+    if (req.params.type === 'transportContract') {
+      return next();
+    }
+    uploadHelperDocument.single('file')(req, res, next);
+  };
+  app.post("/api/helpers/documents/:type", requireAuth, conditionalUpload, async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const documentType = req.params.type;
       
-      if (!req.file) {
-        return res.status(400).json({ message: "파일을 업로드해주세요" });
-      }
+      // 화물위탁계약서는 파일 없이 JSON 데이터로 제출
+      let imageUrl: string | null = null;
+      if (documentType === 'transportContract') {
+        // 파일 업로드 불필요 - 계약서 생성 방식
+      } else {
+        if (!req.file) {
+          return res.status(400).json({ message: "파일을 업로드해주세요" });
+        }
 
-      // 파일 검증
-      if (!isValidImageBuffer(req.file.buffer)) {
-        return res.status(400).json({ message: "유효하지 않은 이미지 파일입니다" });
-      }
+        // 파일 검증 (diskStorage는 buffer가 없으므로 파일에서 읽기)
+        const fileBuffer = fs.readFileSync(req.file.path);
+        if (!isValidImageBuffer(fileBuffer)) {
+          fs.unlinkSync(req.file.path);
+          return res.status(400).json({ message: "유효하지 않은 이미지 파일입니다" });
+        }
 
-      if (req.file.size > MAX_FILE_SIZE) {
-        return res.status(400).json({ message: "파일 크기가 너무 큽니다 (최대 10MB)" });
-      }
+        if (req.file.size > MAX_FILE_SIZE) {
+          fs.unlinkSync(req.file.path);
+          return res.status(400).json({ message: "파일 크기가 너무 큽니다 (최대 10MB)" });
+        }
 
-      // 파일 저장
-      const filename = `helper-doc-${userId}-${documentType}-${Date.now()}${path.extname(req.file.originalname)}`;
-      const uploadDir = path.join(process.cwd(), "uploads", "documents");
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
+        // 파일을 documents 폴더로 이동
+        const filename = `helper-doc-${userId}-${documentType}-${Date.now()}${path.extname(req.file.originalname)}`;
+        const uploadDir = path.join(process.cwd(), "uploads", "documents");
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const filepath = path.join(uploadDir, sanitizeFilename(filename));
+        fs.renameSync(req.file.path, filepath);
+
+        imageUrl = `/uploads/documents/${filename}`;
       }
-      const filepath = path.join(uploadDir, sanitizeFilename(filename));
-      fs.writeFileSync(filepath, req.file.buffer);
-      
-      const imageUrl = `/uploads/documents/${filename}`;
 
       // 서류 타입별 데이터 구성
       const documentData: any = {
         userId,
         documentType,
-        imageUrl,
+        ...(imageUrl && { imageUrl }),
         status: 'reviewing',
         uploadedAt: new Date(),
         updatedAt: new Date(),
@@ -32583,6 +33290,9 @@ export async function registerRoutes(
         documentData.businessNumber = req.body.businessNumber;
         documentData.businessName = req.body.businessName;
         documentData.representativeName = req.body.representativeName;
+        documentData.businessAddress = req.body.businessAddress;
+        documentData.businessType = req.body.businessType;
+        documentData.businessCategory = req.body.businessCategory;
       } else if (documentType === 'driverLicense') {
         documentData.licenseNumber = req.body.licenseNumber;
         documentData.licenseType = req.body.licenseType;
@@ -32598,6 +33308,9 @@ export async function registerRoutes(
       } else if (documentType === 'transportContract') {
         documentData.contractCompanyName = req.body.contractCompanyName;
         documentData.contractDate = req.body.contractDate;
+        documentData.signatureName = req.body.signatureName;
+        documentData.verificationPhone = req.body.verificationPhone;
+        documentData.contractConsent = req.body.contractConsent;
       }
 
       // 기존 서류가 있는지 확인
@@ -32722,8 +33435,48 @@ export async function registerRoutes(
         return res.status(404).json({ message: "서류를 찾을 수 없습니다" });
       }
       
-      // TODO: 알림 발송 (헬퍼에게 승인 알림)
-      
+      // 전체 서류 승인 여부 확인 → onboardingStatus 갱신
+      try {
+        const allDocs = await db.select()
+          .from(helperDocuments)
+          .where(eq(helperDocuments.userId, document.userId));
+
+        const requiredTypes = ["businessCert", "driverLicense", "cargoLicense", "vehicleCert", "transportContract"];
+        const allApproved = requiredTypes.every(type =>
+          allDocs.some(d => d.documentType === type && d.status === "approved")
+        );
+
+        if (allApproved) {
+          await db.update(users)
+            .set({
+              onboardingStatus: "approved",
+              helperVerified: true,
+              helperVerifiedAt: new Date(),
+            })
+            .where(eq(users.id, document.userId));
+          console.log(`[Onboarding] Helper ${document.userId} all documents approved → onboardingStatus=approved, helperVerified=true`);
+        }
+      } catch (onboardErr) {
+        console.error("[Onboarding Status Error]:", onboardErr);
+      }
+
+      // 헬퍼에게 서류 승인 알림
+      try {
+        await storage.createNotification({
+          userId: document.userId,
+          type: "document_approved",
+          title: "서류 승인 완료",
+          message: `제출하신 서류(${document.documentType})가 승인되었습니다.`,
+        });
+        sendPushToUser(document.userId, {
+          title: "서류 승인 완료",
+          body: `제출하신 서류가 승인되었습니다.`,
+          url: "/profile/documents",
+        });
+      } catch (notifErr) {
+        console.error("[Notification Error] Document approve:", notifErr);
+      }
+
       res.json({ success: true, document });
     } catch (err) {
       console.error("Document approve error:", err);
@@ -32758,8 +33511,23 @@ export async function registerRoutes(
         return res.status(404).json({ message: "서류를 찾을 수 없습니다" });
       }
       
-      // TODO: 알림 발송 (헬퍼에게 반려 알림)
-      
+      // 헬퍼에게 서류 반려 알림
+      try {
+        await storage.createNotification({
+          userId: document.userId,
+          type: "document_rejected",
+          title: "서류 반려",
+          message: `제출하신 서류(${document.documentType})가 반려되었습니다. 사유: ${rejectionReason}`,
+        });
+        sendPushToUser(document.userId, {
+          title: "서류 반려",
+          body: `제출하신 서류가 반려되었습니다. 사유: ${rejectionReason}`,
+          url: "/profile/documents",
+        });
+      } catch (notifErr) {
+        console.error("[Notification Error] Document reject:", notifErr);
+      }
+
       res.json({ success: true, document });
     } catch (err) {
       console.error("Document reject error:", err);

@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import { View, TextInput, Pressable, StyleSheet, ScrollView } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { Icon } from "@/components/Icon";
 import { Colors, Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
+import { useFormValidation } from "@/hooks/useFormValidation";
 import { Step1Props } from "./types";
 
 export default function Step1BasicInfo({
@@ -22,13 +23,63 @@ export default function Step1BasicInfo({
   isDark,
   bottomPadding,
 }: Step1Props) {
-  
+
+  // Refs for auto-scroll and focus
+  const scrollViewRef = useRef<ScrollView>(null);
+  const courierCompanyRef = useRef<View>(null);
+  const otherCompanyRef = useRef<TextInput>(null);
+  const coldTruckCompanyRef = useRef<View>(null);
+
+  const { validate, registerField } = useFormValidation();
+
+  // Register fields based on active tab
+  useEffect(() => {
+    if (activeTab === "택배사") {
+      registerField('courierCompany', courierCompanyRef, scrollViewRef);
+    } else if (activeTab === "기타택배") {
+      registerField('otherCompany', otherCompanyRef, scrollViewRef);
+    } else if (activeTab === "냉탑전용") {
+      registerField('coldTruckCompany', coldTruckCompanyRef, scrollViewRef);
+    }
+  }, [activeTab]);
+
   const handleNext = () => {
-    if (activeTab === "택배사" && courierForm.company) {
-      onNext();
-    } else if (activeTab === "기타택배" && otherCourierForm.companyName) {
-      onNext();
-    } else if (activeTab === "냉탑전용" && coldTruckForm.company) {
+    let validationRules: any[] = [];
+
+    if (activeTab === "택배사") {
+      validationRules = [
+        {
+          fieldName: 'courierCompany',
+          displayName: '택배사',
+          value: courierForm.company,
+          required: true,
+        },
+      ];
+    } else if (activeTab === "기타택배") {
+      validationRules = [
+        {
+          fieldName: 'otherCompany',
+          displayName: '업체명',
+          value: otherCourierForm.companyName,
+          required: true,
+          minLength: 2,
+          errorMessage: '업체명은 최소 2자 이상 입력해주세요.',
+        },
+      ];
+    } else if (activeTab === "냉탑전용") {
+      validationRules = [
+        {
+          fieldName: 'coldTruckCompany',
+          displayName: '냉탑 업체',
+          value: coldTruckForm.company,
+          required: true,
+        },
+      ];
+    }
+
+    const isValid = validate(validationRules);
+
+    if (isValid) {
       onNext();
     }
   };
@@ -40,7 +91,7 @@ export default function Step1BasicInfo({
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView ref={scrollViewRef} style={{ flex: 1 }} contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
             1단계: 기본 정보
@@ -58,6 +109,7 @@ export default function Step1BasicInfo({
               택배사 선택 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
             <Pressable
+              ref={courierCompanyRef}
               style={[
                 styles.selectButton,
                 {
@@ -86,6 +138,7 @@ export default function Step1BasicInfo({
               업체명 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
             <TextInput
+              ref={otherCompanyRef}
               style={[
                 styles.input,
                 {
@@ -94,7 +147,7 @@ export default function Step1BasicInfo({
                   borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
                 },
               ]}
-              placeholder="업체명 입력"
+              placeholder="업체명 입력 (최소 2자)"
               placeholderTextColor={Colors.light.tabIconDefault}
               value={otherCourierForm.companyName}
               onChangeText={(value) => setOtherCourierForm({ ...otherCourierForm, companyName: value })}
@@ -108,6 +161,7 @@ export default function Step1BasicInfo({
               냉탑 업체 선택 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
             <Pressable
+              ref={coldTruckCompanyRef}
               style={[
                 styles.selectButton,
                 {
@@ -131,7 +185,7 @@ export default function Step1BasicInfo({
         )}
       </ScrollView>
 
-      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot, paddingBottom: bottomPadding || 0 }]}>
+      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot }]}>
         <Pressable
           style={[
             styles.button,
@@ -154,7 +208,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.lg,
-    paddingBottom: 100,
+    paddingBottom: Spacing.lg,
   },
   section: {
     marginBottom: Spacing.xl,
@@ -190,15 +244,14 @@ const styles = StyleSheet.create({
     ...Typography.body,
   },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     padding: Spacing.lg,
+    flexDirection: 'row',
+    gap: Spacing.md,
     borderTopWidth: 1,
     borderTopColor: Colors.light.backgroundSecondary,
   },
   button: {
+    flex: 1,
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.md,
     alignItems: 'center',

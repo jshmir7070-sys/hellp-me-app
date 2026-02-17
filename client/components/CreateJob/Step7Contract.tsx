@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { View, Pressable, StyleSheet, ScrollView, Alert, Modal, TextInput, Platform } from "react-native";
+import { View, Pressable, StyleSheet, ScrollView, Alert, Modal, TextInput, Platform, KeyboardAvoidingView } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { Icon } from "@/components/Icon";
 import { Colors, Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
@@ -147,7 +147,11 @@ export default function Step7Contract({
       Alert.alert("알림", "본인인증을 완료해주세요.");
       return;
     }
-    onSubmit();
+    onSubmit({
+      balancePaymentDueDate: paymentDueDate,
+      signatureName: signatureData || "",
+      verificationPhone: verificationPhone,
+    });
   };
 
   const allAgreedInContract = agreePayment && agreeCredit && agreePrivate && agreePaymentDate && !!paymentDueDate;
@@ -409,7 +413,7 @@ export default function Step7Contract({
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
             7단계: 계약서 작성 · 서명 · 본인인증
@@ -567,10 +571,13 @@ export default function Step7Contract({
         </View>
       </Modal>
 
-      {/* 서명 모달 */}
-      <Modal visible={showSignature} animationType="slide" transparent>
-        <View style={styles.signatureOverlay}>
-          <View style={[styles.signatureModal, { backgroundColor: theme.backgroundRoot }]}>
+      {/* 서명 모달 - 풀스크린으로 변경하여 부모 KeyboardAvoidingView 영향 제거 */}
+      <Modal visible={showSignature} animationType="slide">
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={[styles.signatureFullScreen, { backgroundColor: theme.backgroundRoot }]}>
             <View style={[styles.signatureHeader, { borderBottomColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}>
               <ThemedText style={[styles.signatureTitle, { color: theme.text }]}>전자 서명</ThemedText>
               <Pressable onPress={() => setShowSignature(false)}>
@@ -614,6 +621,7 @@ export default function Step7Contract({
               </View>
             </View>
 
+            <View style={{ flex: 1 }} />
             <View style={[styles.signatureFooter, { borderTopColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}>
               <Pressable
                 style={[styles.signatureCancel, { borderColor: BrandColors.requester }]}
@@ -630,13 +638,16 @@ export default function Step7Contract({
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* 본인인증 모달 */}
-      <Modal visible={showVerificationModal} animationType="slide" transparent>
-        <View style={styles.signatureOverlay}>
-          <View style={[styles.signatureModal, { backgroundColor: theme.backgroundRoot }]}>
+      {/* 본인인증 모달 - 풀스크린으로 변경하여 부모 KeyboardAvoidingView 영향 제거 */}
+      <Modal visible={showVerificationModal} animationType="slide">
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={[styles.signatureFullScreen, { backgroundColor: theme.backgroundRoot }]}>
             <View style={[styles.signatureHeader, { borderBottomColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}>
               <ThemedText style={[styles.signatureTitle, { color: theme.text }]}>SMS 본인인증</ThemedText>
               <Pressable onPress={() => setShowVerificationModal(false)}>
@@ -721,6 +732,7 @@ export default function Step7Contract({
               )}
             </View>
 
+            <View style={{ flex: 1 }} />
             <View style={[styles.signatureFooter, { borderTopColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]}>
               <Pressable
                 style={[styles.signatureCancel, { borderColor: BrandColors.requester }]}
@@ -737,33 +749,10 @@ export default function Step7Contract({
               </Pressable>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
-      {/* 잔금 입금일 달력 */}
-      {showPaymentDatePicker && Platform.OS !== 'web' && (
-        <DateTimePicker
-          value={paymentDueDate ? parseStringToDate(paymentDueDate) : getDefaultPaymentDueDate()}
-          mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-          minimumDate={new Date()}
-          onChange={handlePaymentDateChange}
-        />
-      )}
-
-      {Platform.OS === 'web' && (
-        <WebCalendar
-          visible={showPaymentDatePicker}
-          selectedDate={paymentDueDate ? parseStringToDate(paymentDueDate) : getDefaultPaymentDueDate()}
-          title="잔금 입금 예정일 선택"
-          onSelect={(date) => {
-            handlePaymentDateChange(null, date);
-          }}
-          onClose={() => setShowPaymentDatePicker(false)}
-        />
-      )}
-
-      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot, paddingBottom: bottomPadding || 0 }]}>
+      <View style={[styles.footer, { backgroundColor: theme.backgroundRoot }]}>
         <Pressable
           style={[styles.button, styles.buttonSecondary, { borderColor: BrandColors.requester }]}
           onPress={onBack}
@@ -785,6 +774,29 @@ export default function Step7Contract({
           </ThemedText>
         </Pressable>
       </View>
+
+      {/* 잔금 입금일 달력 - footer 뒤에 배치하여 레이아웃 영향 방지 */}
+      {showPaymentDatePicker && Platform.OS !== 'web' && (
+        <DateTimePicker
+          value={paymentDueDate ? parseStringToDate(paymentDueDate) : getDefaultPaymentDueDate()}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          minimumDate={new Date()}
+          onChange={handlePaymentDateChange}
+        />
+      )}
+
+      {Platform.OS === 'web' && (
+        <WebCalendar
+          visible={showPaymentDatePicker}
+          selectedDate={paymentDueDate ? parseStringToDate(paymentDueDate) : getDefaultPaymentDueDate()}
+          title="잔금 입금 예정일 선택"
+          onSelect={(date) => {
+            handlePaymentDateChange(null, date);
+          }}
+          onClose={() => setShowPaymentDatePicker(false)}
+        />
+      )}
     </View>
   );
 }
@@ -795,7 +807,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.lg,
-    paddingBottom: 150,
+    paddingBottom: Spacing.lg,
   },
   section: {
     marginBottom: Spacing.xl,
@@ -931,22 +943,16 @@ const styles = StyleSheet.create({
     ...Typography.button,
     fontWeight: 'bold',
   },
-  // 서명 모달
-  signatureOverlay: {
+  // 서명/본인인증 모달 (풀스크린)
+  signatureFullScreen: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: Spacing.lg,
-  },
-  signatureModal: {
-    borderRadius: BorderRadius.lg,
-    overflow: 'hidden',
   },
   signatureHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: Spacing.lg,
+    paddingTop: 60,
     borderBottomWidth: 1,
   },
   signatureTitle: {
@@ -1080,10 +1086,6 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     padding: Spacing.lg,
     flexDirection: 'row',
     gap: Spacing.md,

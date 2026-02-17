@@ -221,7 +221,7 @@ export default function HelperIncidentDetailScreen() {
               피해금액
             </Text>
             <Text style={[styles.infoValue, { color: BrandColors.error }]}>
-              {incident.damageAmount.toLocaleString()}원
+              {(incident.damageAmount || 0).toLocaleString()}원
             </Text>
           </View>
         ) : null}

@@ -88,6 +88,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: '/members', label: '회원통합관리', icon: <Users className="h-5 w-5" />, permission: 'helpers.view' },
       { href: '/helper-documents', label: '헬퍼서류검토', icon: <ClipboardCheck className="h-5 w-5" />, permission: 'helpers.edit' },
+      { href: '/helper-bank-accounts', label: '수수료통장관리', icon: <Wallet className="h-5 w-5" />, permission: 'helpers.edit' },
     ],
   },
   {

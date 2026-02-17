@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { View, FlatList, Pressable, StyleSheet, RefreshControl, ActivityIndicator } from "react-native";
+import { View, FlatList, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -59,6 +59,9 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
       queryClient.invalidateQueries({ queryKey: ['/api/orders/my-applications'] });
       queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
     },
+    onError: (err: any) => {
+      Alert.alert("지원 실패", err?.message || "오더 지원에 실패했습니다.");
+    },
   });
 
   const cancelApplicationMutation = useMutation({
@@ -69,6 +72,9 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/orders/my-applications'] });
       queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
+    },
+    onError: (err: any) => {
+      Alert.alert("취소 실패", err?.message || "지원 취소에 실패했습니다.");
     },
   });
 

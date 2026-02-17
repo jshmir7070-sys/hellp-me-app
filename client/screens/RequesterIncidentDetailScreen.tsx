@@ -266,7 +266,7 @@ export default function RequesterIncidentDetailScreen() {
               <View style={styles.infoContent}>
                 <Text style={[styles.infoLabel, { color: theme.tabIconDefault }]}>피해금액</Text>
                 <Text style={[styles.infoValue, { color: BrandColors.error }]}>
-                  {incident.damageAmount.toLocaleString()}원
+                  {(incident.damageAmount || 0).toLocaleString()}원
                 </Text>
               </View>
             </View>
@@ -410,7 +410,7 @@ export default function RequesterIncidentDetailScreen() {
           </View>
           {incident.deductionAmount ? (
             <Text style={[styles.deductionAmount, { color: BrandColors.error }]}>
-              차감 금액: {incident.deductionAmount.toLocaleString()}원
+              차감 금액: {(incident.deductionAmount || 0).toLocaleString()}원
             </Text>
           ) : null}
         </Card>

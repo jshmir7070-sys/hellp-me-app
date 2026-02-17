@@ -381,20 +381,13 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
           <View style={styles.menuSection}>
             <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>이의제기/사고</ThemedText>
-            
+
             <MenuItem
               icon="warning-outline"
-              label="이의제기 접수"
-              description="정산 오류, 수량 차이 등 접수"
+              label="이의제기"
+              description="접수, 내역 확인 및 답변 관리"
               theme={theme}
-              onPress={() => navigation.navigate('HelperDisputeSubmit')}
-            />
-            <MenuItem
-              icon="list-outline"
-              label="이의제기 내역"
-              description="접수한 이의제기 현황 확인"
-              theme={theme}
-              onPress={() => navigation.navigate('HelperDisputeList')}
+              onPress={() => navigation.navigate('Disputes')}
             />
             <MenuItem
               icon="alert-circle-outline"

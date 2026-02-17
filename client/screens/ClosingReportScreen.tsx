@@ -6,6 +6,7 @@ import { Icon } from "@/components/Icon";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
+import { compressImage } from "@/lib/image-upload";
 
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
@@ -62,13 +63,21 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
   const uploadImage = async (uri: string, imageType: string): Promise<string> => {
     const apiUrl = getApiUrl();
     const formData = new FormData();
-    const filename = uri.split("/").pop() || `image.jpg`;
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : "image/jpeg";
-    
+
+    // 이미지 압축 (1200x1200, quality 0.7 JPEG)
+    let compressedUri = uri;
+    try {
+      compressedUri = await compressImage(uri, { maxWidth: 1200, maxHeight: 1200, quality: 0.7 });
+    } catch (compressErr) {
+      console.warn("Image compression failed, using original:", compressErr);
+    }
+
+    const filename = compressedUri.split("/").pop() || `image.jpg`;
+    const type = "image/jpeg"; // 압축 후 항상 JPEG
+
     // 서버가 기대하는 필드명 'file' 사용
     formData.append("file", {
-      uri,
+      uri: compressedUri,
       name: filename,
       type,
     } as any);
@@ -146,6 +155,7 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       queryClient.invalidateQueries({ queryKey: [`/api/orders/${orderId}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/helper/my-orders"] });
       if (Platform.OS === "web") {
         alert("마감자료가 제출되었습니다!");
       } else {

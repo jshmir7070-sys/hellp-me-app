@@ -41,6 +41,7 @@ app.use((req, res, next) => {
     ...(isProduction ? [] : [
       'http://localhost:5000',
       'http://localhost:5173',
+      'http://localhost:8081',  // Expo dev server
     ]),
   ];
   
@@ -90,16 +91,24 @@ import path from "path";
 import jwt from "jsonwebtoken";
 
 app.use("/uploads", (req, res, next) => {
-  // Authorization 헤더에서 토큰 추출
+  // Authorization 헤더 또는 쿼리 파라미터에서 토큰 추출
   const authHeader = req.headers.authorization;
-  
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const queryToken = req.query.token as string | undefined;
+
+  let token: string | null = null;
+
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else if (queryToken) {
+    token = queryToken;
+  }
+
+  if (!token) {
     return res.status(401).json({ message: "인증이 필요합니다" });
   }
-  
-  const token = authHeader.substring(7);
+
   const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
-  
+
   try {
     jwt.verify(token, JWT_SECRET);
     next();

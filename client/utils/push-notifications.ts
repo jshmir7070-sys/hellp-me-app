@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiUrl } from '@/lib/query-client';
@@ -46,8 +47,21 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
   }
 
   try {
+    // projectId를 여러 소스에서 가져오기 (EAS > env > Constants)
+    const projectId =
+      process.env.EXPO_PUBLIC_PROJECT_ID ||
+      Constants.expoConfig?.extra?.eas?.projectId ||
+      Constants.easConfig?.projectId;
+
+    if (!projectId) {
+      if (__DEV__) {
+        console.log('[Push] projectId 미설정 - 푸시 알림 비활성화 (개발 모드)');
+      }
+      return null;
+    }
+
     const expoPushToken = await Notifications.getExpoPushTokenAsync({
-      projectId: process.env.EXPO_PUBLIC_PROJECT_ID,
+      projectId,
     });
     token = expoPushToken.data;
 
@@ -60,7 +74,9 @@ export async function registerForPushNotificationsAsync(): Promise<string | null
       });
     }
   } catch (error) {
-    console.error('Error getting push token:', error);
+    if (__DEV__) {
+      console.log('[Push] 푸시 토큰 가져오기 실패 (개발 모드에서 정상):', (error as Error).message);
+    }
     return null;
   }
 

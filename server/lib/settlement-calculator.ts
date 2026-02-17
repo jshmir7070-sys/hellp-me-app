@@ -51,19 +51,19 @@ export interface HelperPayoutResult extends SettlementResult {
  * - 계약금 = 총액 × 20%
  * - 잔금 = 총액 - 계약금
  */
-export function calculateSettlement(data: ClosingData): SettlementResult {
+export function calculateSettlement(data: ClosingData, depositRate: number = 20): SettlementResult {
   const deliveredCount = data.deliveredCount || 0;
   const returnedCount = data.returnedCount || 0;
   const etcCount = data.etcCount || 0;
   const unitPrice = data.unitPrice || 0;
-  const etcPricePerUnit = data.etcPricePerUnit || 1800;
-  
+  const etcPricePerUnit = data.etcPricePerUnit != null ? data.etcPricePerUnit : 1800;
+
   // 기타비용 합계
   let extraCostsTotal = 0;
   if (data.extraCosts && Array.isArray(data.extraCosts)) {
     extraCostsTotal = data.extraCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
   }
-  
+
   // 금액 계산
   const totalBillableCount = deliveredCount + returnedCount;
   const deliveryReturnAmount = totalBillableCount * unitPrice;
@@ -71,9 +71,9 @@ export function calculateSettlement(data: ClosingData): SettlementResult {
   const supplyAmount = deliveryReturnAmount + etcAmount + extraCostsTotal;
   const vatAmount = Math.round(supplyAmount * 0.1);
   const totalAmount = supplyAmount + vatAmount;
-  
-  // 계약금/잔금
-  const depositAmount = Math.floor(totalAmount * 0.2);
+
+  // 계약금/잔금 (depositRate는 % 단위)
+  const depositAmount = Math.floor(totalAmount * (depositRate / 100));
   const balanceAmount = totalAmount - depositAmount;
   
   return {
@@ -138,7 +138,7 @@ export function parseClosingReport(closingReport: any, order: any): ClosingData 
     returnedCount: closingReport.returnedCount || 0,
     etcCount: closingReport.etcCount || 0,
     unitPrice: order.pricePerUnit || 0,
-    etcPricePerUnit: closingReport.etcPricePerUnit || 1800,
+    etcPricePerUnit: closingReport.etcPricePerUnit != null ? closingReport.etcPricePerUnit : 1800,
     extraCosts,
   };
 }

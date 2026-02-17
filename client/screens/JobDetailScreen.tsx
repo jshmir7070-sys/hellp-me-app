@@ -3,6 +3,7 @@ import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndic
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "@/components/Icon";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { CompositeScreenProps } from "@react-navigation/native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 
@@ -11,12 +12,15 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
-import { JobsStackParamList } from "@/navigation/types";
+import { JobsStackParamList, RootStackParamList } from "@/navigation/types";
 import { apiRequest } from "@/lib/query-client";
 
 const { width: screenWidth } = Dimensions.get('window');
 
-type JobDetailScreenProps = NativeStackScreenProps<JobsStackParamList, 'JobDetail'>;
+type JobDetailScreenProps = CompositeScreenProps<
+  NativeStackScreenProps<JobsStackParamList, 'JobDetail'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 interface Order {
   id: number;
@@ -184,7 +188,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
             '오더 신청을 위해 서류 제출이 필요합니다.\n프로필 > 서류제출에서 서류를 등록해주세요.',
             [
               { text: '취소', style: 'cancel' },
-              { text: '서류 제출하기', onPress: () => navigation.navigate('HelperOnboarding' as any) },
+              { text: '서류 제출하기', onPress: () => navigation.navigate('HelperOnboarding') },
             ]
           );
         }
@@ -207,7 +211,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
             '서류가 반려되었습니다.\n프로필 > 서류제출에서 서류를 다시 등록해주세요.',
             [
               { text: '취소', style: 'cancel' },
-              { text: '서류 재제출', onPress: () => navigation.navigate('HelperOnboarding' as any) },
+              { text: '서류 재제출', onPress: () => navigation.navigate('HelperOnboarding') },
             ]
           );
         }
@@ -473,7 +477,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
                 styles.qrButton,
                 { backgroundColor: BrandColors.helper, opacity: pressed ? 0.8 : 1 },
               ]}
-              onPress={() => navigation.navigate('QRScanner' as any, { orderId: String(order.id), type: 'start_work' })}
+              onPress={() => navigation.navigate('QRScanner', { orderId: String(order.id), type: 'checkin' })}
             >
               <Icon name="camera-outline" size={20} color="#FFFFFF" />
               <ThemedText style={styles.applyButtonText}>QR 체크인</ThemedText>
@@ -501,7 +505,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
               styles.applyButton,
               { backgroundColor: BrandColors.helper, opacity: pressed ? 0.8 : 1 },
             ]}
-            onPress={() => navigation.navigate('ClosingReport' as any, { orderId: order.id })}
+            onPress={() => navigation.navigate('ClosingReport', { orderId: order.id })}
           >
             <ThemedText style={styles.applyButtonText}>마감 제출</ThemedText>
           </Pressable>

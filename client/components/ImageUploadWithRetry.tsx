@@ -6,7 +6,7 @@ import { Icon } from "@/components/Icon";
 import { ThemedText } from './ThemedText';
 import { Spacing, BorderRadius, BrandColors } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
-import { getApiUrl } from '@/lib/query-client';
+import { getApiUrl, getAuthToken } from '@/lib/query-client';
 
 interface UploadedImage {
   uri: string;
@@ -52,8 +52,15 @@ export function ImageUploadWithRetry({
       const file = new File(imageUri);
       formData.append('file', file);
 
+      const token = await getAuthToken();
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(new URL(uploadEndpoint, getApiUrl()).toString(), {
         method: 'POST',
+        headers,
         body: formData,
       });
 

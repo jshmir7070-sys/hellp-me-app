@@ -58,7 +58,8 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
     enabled: !!orderId,
   });
 
-  const getImageUrl = (imagePath: string) => {
+  const getImageUrl = (imagePath: string | undefined | null) => {
+    if (!imagePath) return '';
     if (imagePath.startsWith('http')) return imagePath;
     return new URL(imagePath, getApiUrl()).toString();
   };
