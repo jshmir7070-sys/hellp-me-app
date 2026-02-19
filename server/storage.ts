@@ -1430,7 +1430,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createCourierTieredPricing(tier: InsertCourierTieredPricing): Promise<CourierTieredPricing> {
-    const [created] = await db.insert(courierTieredPricing).values(tier).returning();
+    const [created] = await db.insert(courierTieredPricing).values(tier as any).returning();
     return created;
   }
 
@@ -2468,7 +2468,7 @@ export class DatabaseStorage implements IStorage {
 
   async getAuditLogs(filters?: { userId?: string; action?: string; targetType?: string; targetId?: string; limit?: number }): Promise<AuditLog[]> {
     let query = db.select().from(auditLogs);
-    const conditions = [];
+    const conditions: any[] = [];
     
     if (filters?.userId) {
       conditions.push(eq(auditLogs.userId, filters.userId));
@@ -2782,7 +2782,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTaxInvoicesByHelper(helperId: string): Promise<TaxInvoice[]> {
-    return await db.select().from(taxInvoices).where(eq(taxInvoices.recipientBusinessNumber, helperId)).orderBy(desc(taxInvoices.createdAt));
+    return await db.select().from(taxInvoices).where(eq(taxInvoices.supplierCorpNum, helperId)).orderBy(desc(taxInvoices.createdAt));
   }
 
   async getTaxInvoicesByPeriod(period: string): Promise<TaxInvoice[]> {
@@ -3098,7 +3098,7 @@ export class DatabaseStorage implements IStorage {
 
   // Documents
   async getAllDocuments(filters?: { userId?: string; status?: string; docType?: string; limit?: number }): Promise<Document[]> {
-    const conditions = [];
+    const conditions: any[] = [];
     
     if (filters?.userId) {
       conditions.push(eq(documents.userId, filters.userId));
@@ -3307,6 +3307,47 @@ export class DatabaseStorage implements IStorage {
     return countMap;
   }
 
+  async getOrderApplicationCounts(orderIds: number[]): Promise<Map<number, number>> {
+    if (orderIds.length === 0) return new Map();
+
+    const results = await db.select({
+      orderId: orderApplications.orderId,
+      count: sql<number>`count(*)`
+    })
+      .from(orderApplications)
+      .where(and(
+        inArray(orderApplications.orderId, orderIds),
+        inArray(orderApplications.status, ["applied", "selected", "scheduled"])
+      ))
+      .groupBy(orderApplications.orderId);
+
+    const countMap = new Map<number, number>();
+    for (const r of results) {
+      countMap.set(r.orderId, Number(r.count));
+    }
+    return countMap;
+  }
+
+  async getHelperApplicationStatuses(helperUserId: string, orderIds: number[]): Promise<Map<number, string>> {
+    if (orderIds.length === 0) return new Map();
+
+    const results = await db.select({
+      orderId: orderApplications.orderId,
+      status: orderApplications.status,
+    })
+      .from(orderApplications)
+      .where(and(
+        inArray(orderApplications.orderId, orderIds),
+        eq(orderApplications.helperId, helperUserId)
+      ));
+
+    const statusMap = new Map<number, string>();
+    for (const r of results) {
+      statusMap.set(r.orderId, r.status as string);
+    }
+    return statusMap;
+  }
+
   async getHelperCandidateStatuses(helperUserId: string, orderIds: number[]): Promise<Map<number, string>> {
     if (orderIds.length === 0) return new Map();
     
@@ -3498,7 +3539,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllPayouts(filters?: { status?: string; helperId?: string; limit?: number }): Promise<Payout[]> {
-    const conditions = [];
+    const conditions: any[] = [];
     if (filters?.status) {
       conditions.push(eq(payouts.status, filters.status));
     }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -7,17 +7,18 @@ import {
   FlatList,
   Pressable,
   Alert,
+  Keyboard,
+  BackHandler,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
-import { useHeaderHeight } from "@react-navigation/elements";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useFocusEffect } from "@react-navigation/native";
+import { useNavigation, useIsFocused } from "@react-navigation/native";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useSystemNotification } from "@/components/notifications/SystemNotificationProvider";
 
 import { useTheme } from "@/hooks/useTheme";
-import { useResponsive } from "@/hooks/useResponsive";
 import { ThemedText } from "@/components/ThemedText";
 import { Icon } from "@/components/Icon";
 import { Colors, Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
@@ -29,15 +30,14 @@ import {
   coldTruckCompanies,
 } from "@/constants/regionData";
 
-import { CategoryTab, CourierFormData, OtherCourierFormData, ColdTruckFormData, ContractSettings, ContractSubmitData } from "./types";
+import { CategoryTab, CourierFormData, OtherCourierFormData, ColdTruckFormData } from "./types";
 import Step1BasicInfo from "./Step1BasicInfo";
 import Step2Quantity from "./Step2Quantity";
+import Step3Schedule from "./Step3Schedule";
 import Step4Vehicle from "./Step4Vehicle";
 import Step5Location from "./Step5Location";
 import Step6AdditionalInfo from "./Step6AdditionalInfo";
 import Step7Confirmation from "./Step7Confirmation";
-import Step7Contract from "./Step7Contract";
-import Step8Payment from "./Step8Payment";
 
 interface CreateJobContainerProps {
   navigation: NativeStackNavigationProp<any>;
@@ -48,17 +48,26 @@ const DRAFT_STORAGE_KEY = "order_draft_v2";
 export default function CreateJobContainer({ navigation }: CreateJobContainerProps) {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
-  const headerHeight = useHeaderHeight();
   const { theme, isDark } = useTheme();
-  const { isDesktop, isTablet } = useResponsive();
-  // 웹 사이드바 모드일 때는 하단 탭바가 없으므로 bottomPadding 불필요
-  // 탭바가 position: absolute이므로 tabBarHeight 전체를 사용해야 콘텐츠가 탭바 아래로 가려지지 않음
-  const showSidebar = (isDesktop || isTablet) && Platform.OS === 'web';
-  const effectiveBottomPadding = showSidebar ? 0 : tabBarHeight;
   const queryClient = useQueryClient();
-  
+  const rootNavigation = useNavigation<any>();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => setKeyboardHeight(e.endCoordinates.height)
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardHeight(0)
+    );
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
+
   const [currentStep, setCurrentStep] = useState(1);
   const [activeTab, setActiveTab] = useState<CategoryTab>("택배사");
+  const [imageUri, setImageUri] = useState<string | null>(null);
   const [showSelectModal, setShowSelectModal] = useState(false);
   const [selectModalType, setSelectModalType] = useState<string>("");
   const [selectModalOptions, setSelectModalOptions] = useState<string[]>([]);
@@ -70,6 +79,8 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     unitPrice: "",
     requestDate: "",
     requestDateEnd: "",
+    arrivalHour: "",
+    arrivalMinute: "",
     managerContact: "",
     vehicleType: "",
     regionLarge: "",
@@ -92,6 +103,8 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     isPerDrop: false,
     requestDate: "",
     requestDateEnd: "",
+    arrivalHour: "",
+    arrivalMinute: "",
     vehicleType: "",
     campAddress: "",
     campAddressDetail: "",
@@ -110,6 +123,8 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     hasPartition: false,
     requestDate: "",
     requestDateEnd: "",
+    arrivalHour: "",
+    arrivalMinute: "",
     vehicleType: "",
     contact: "",
     loadingPoint: "",
@@ -122,115 +137,17 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     agreeToSubmit: false,
   });
 
-  // 작성 중 여부 (1단계 이후 진행 시 true)
-  const hasUnsavedProgress = useRef(false);
-
-  // 화면 포커스 시 임시 저장 체크 (탭 전환 후 돌아왔을 때도 동작)
-  useFocusEffect(
-    useCallback(() => {
-      const checkDraft = async () => {
-        // 이미 작성 중이면 다시 물어보지 않음
-        if (hasUnsavedProgress.current && currentStep > 1) return;
-
-        try {
-          const draft = await AsyncStorage.getItem(DRAFT_STORAGE_KEY);
-          if (draft) {
-            const parsed = JSON.parse(draft);
-            if (parsed.currentStep && parsed.currentStep > 1) {
-              Alert.alert(
-                "임시 저장된 오더",
-                "작성 중이던 오더가 있습니다. 이어서 작성하시겠습니까?",
-                [
-                  {
-                    text: "처음부터",
-                    style: "destructive",
-                    onPress: async () => {
-                      await clearDraft();
-                      resetForm();
-                    },
-                  },
-                  {
-                    text: "이어서 작성",
-                    onPress: () => {
-                      loadDraft();
-                    },
-                  },
-                ]
-              );
-            }
-          }
-        } catch (error) {
-          console.error("Failed to check draft:", error);
-        }
-      };
-      checkDraft();
-    }, [])
-  );
+  // 임시 저장 로드
+  useEffect(() => {
+    loadDraft();
+  }, []);
 
   // 임시 저장 자동 저장
   useEffect(() => {
     if (currentStep > 1) {
-      hasUnsavedProgress.current = true;
       saveDraft();
-    } else {
-      hasUnsavedProgress.current = false;
     }
   }, [currentStep, courierForm, otherCourierForm, coldTruckForm, activeTab]);
-
-  // 다른 탭으로 이동 시 저장/초기화 확인 다이얼로그
-  // 탭 전환 시: 자동으로 임시 저장하고, 돌아왔을 때 이어서 할지 물어봄
-  // (탭 전환은 preventDefault가 불가하므로 blur 시 자동 저장)
-  useEffect(() => {
-    const parentNav = navigation.getParent(); // CreateJobStack의 부모 = TabNavigator
-    if (!parentNav) return;
-
-    const unsubscribe = parentNav.addListener('blur', () => {
-      if (hasUnsavedProgress.current) {
-        saveDraft();
-      }
-    });
-
-    return () => unsubscribe();
-  }, [navigation]);
-
-  // 스택 내에서 뒤로가기(back 버튼, 제스처) 시 확인 다이얼로그
-  useEffect(() => {
-    const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
-      if (!hasUnsavedProgress.current) return;
-
-      e.preventDefault();
-
-      Alert.alert(
-        "오더 작성 중",
-        "작성 중인 오더를 어떻게 하시겠습니까?",
-        [
-          {
-            text: "취소",
-            style: "cancel",
-          },
-          {
-            text: "초기화",
-            style: "destructive",
-            onPress: async () => {
-              await clearDraft();
-              resetForm();
-              navigation.dispatch(e.data.action);
-            },
-          },
-          {
-            text: "저장",
-            onPress: async () => {
-              await saveDraft();
-              hasUnsavedProgress.current = false;
-              navigation.dispatch(e.data.action);
-            },
-          },
-        ]
-      );
-    });
-
-    return () => unsubscribe();
-  }, [navigation]);
 
   const loadDraft = async () => {
     try {
@@ -272,66 +189,124 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     }
   };
 
-  const resetForm = () => {
+  // 폼 입력 여부 감지 (step 2 이상이거나 필수 필드에 값이 있으면 dirty)
+  const hasUnsavedChanges = useMemo(() => {
+    if (currentStep > 1) return true;
+    // step 1에서도 회사 선택 등 입력이 있으면 dirty
+    if (activeTab === "택배사" && courierForm.company) return true;
+    if (activeTab === "기타택배" && otherCourierForm.companyName) return true;
+    if (activeTab === "냉탑전용" && coldTruckForm.company) return true;
+    return false;
+  }, [currentStep, activeTab, courierForm.company, otherCourierForm.companyName, coldTruckForm.company]);
+
+  // 폼 초기화 함수 (나가기 시 호출)
+  const resetAllForms = useCallback(() => {
     setCurrentStep(1);
     setActiveTab("택배사");
     setCourierForm({
-      company: "",
-      avgQuantity: "",
-      unitPrice: "",
-      requestDate: "",
-      requestDateEnd: "",
-      managerContact: "",
-      vehicleType: "",
-      regionLarge: "",
-      regionMedium: "",
-      regionSmall: "",
-      campAddress: "",
-      campAddressDetail: "",
-      deliveryGuide: "",
-      isUrgent: false,
-      agreeToSubmit: false,
+      company: "", avgQuantity: "", unitPrice: "", requestDate: "", requestDateEnd: "",
+      arrivalHour: "", arrivalMinute: "",
+      managerContact: "", vehicleType: "", regionLarge: "", regionMedium: "", regionSmall: "",
+      campAddress: "", campAddressDetail: "", deliveryGuide: "", isUrgent: false, agreeToSubmit: false,
     });
     setOtherCourierForm({
-      companyName: "",
-      boxCount: "",
-      unitPrice: "",
-      isDayDelivery: false,
-      isNightDelivery: false,
-      isPerBox: false,
-      isPerDrop: false,
-      requestDate: "",
-      requestDateEnd: "",
-      vehicleType: "",
-      campAddress: "",
-      campAddressDetail: "",
-      contact: "",
-      deliveryGuide: "",
-      isUrgent: false,
-      agreeToSubmit: false,
-      regionLarge: "",
-      regionMedium: "",
-      regionSmall: "",
+      companyName: "", boxCount: "", unitPrice: "", isDayDelivery: false, isNightDelivery: false,
+      isPerBox: false, isPerDrop: false, requestDate: "", requestDateEnd: "",
+      arrivalHour: "", arrivalMinute: "",
+      vehicleType: "", campAddress: "", campAddressDetail: "", contact: "", deliveryGuide: "",
+      isUrgent: false, agreeToSubmit: false, regionLarge: "", regionMedium: "", regionSmall: "",
     });
     setColdTruckForm({
-      company: "",
-      hasTachometer: false,
-      hasPartition: false,
-      requestDate: "",
-      requestDateEnd: "",
-      vehicleType: "",
-      contact: "",
-      loadingPoint: "",
-      loadingPointDetail: "",
-      waypoints: [""],
-      freight: "",
-      recommendedFee: "200000",
-      deliveryGuide: "",
-      isUrgent: false,
-      agreeToSubmit: false,
+      company: "", hasTachometer: false, hasPartition: false, requestDate: "", requestDateEnd: "",
+      arrivalHour: "", arrivalMinute: "",
+      vehicleType: "", contact: "", loadingPoint: "", loadingPointDetail: "", waypoints: [""],
+      freight: "", recommendedFee: "200000", deliveryGuide: "", isUrgent: false, agreeToSubmit: false,
     });
-    hasUnsavedProgress.current = false;
-  };
+    setImageUri(null);
+  }, []);
+
+  // 시스템 알림
+  const { sysAlert } = useSystemNotification();
+  const hasUnsavedRef = useRef(hasUnsavedChanges);
+  hasUnsavedRef.current = hasUnsavedChanges;
+  const isFocused = useIsFocused();
+
+  // 안드로이드 물리 뒤로가기 — 이 탭이 포커스된 경우에만 작동
+  useEffect(() => {
+    if (!isFocused) return; // ← 다른 탭에서는 BackHandler 등록 안 함
+
+    const onBackPress = () => {
+      if (!hasUnsavedRef.current) return false; // 변경사항 없으면 기본 동작
+
+      sysAlert('오더 작성 중', '작성 중인 내용이 있습니다.\n나가시면 임시저장된 내용에서 이어서 작성할 수 있습니다.', [
+        { text: '계속 작성', style: 'cancel' },
+        {
+          text: '나가기',
+          style: 'destructive',
+          onPress: () => {
+            resetAllForms();
+            navigation.goBack();
+          },
+        },
+      ]);
+      return true; // 기본 뒤로가기 방지
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, [isFocused, navigation, sysAlert, resetAllForms]);
+
+  // 헤더 뒤로가기, iOS 스와이프 — beforeRemove 이벤트
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
+      if (!hasUnsavedRef.current) return; // 변경사항 없으면 통과
+
+      e.preventDefault();
+      sysAlert('오더 작성 중', '작성 중인 내용이 있습니다.\n나가시면 임시저장된 내용에서 이어서 작성할 수 있습니다.', [
+        { text: '계속 작성', style: 'cancel' },
+        {
+          text: '나가기',
+          style: 'destructive',
+          onPress: () => {
+            resetAllForms();
+            navigation.dispatch(e.data.action);
+          },
+        },
+      ]);
+    });
+    return unsubscribe;
+  }, [navigation, sysAlert, resetAllForms]);
+
+  // 하단 탭 전환 시에도 경고 (탭은 beforeRemove가 발동하지 않으므로 별도 처리)
+  useEffect(() => {
+    const parent = navigation.getParent();
+    if (!parent) return;
+
+    const unsubscribe = parent.addListener('tabPress' as any, (e: any) => {
+      if (!isFocused) return;       // ← 이 탭이 아닐 때는 무시
+      if (!hasUnsavedRef.current) return; // 변경사항 없으면 통과
+
+      e.preventDefault();
+      sysAlert('오더 작성 중', '작성 중인 내용이 있습니다.\n나가시면 임시저장된 내용에서 이어서 작성할 수 있습니다.', [
+        { text: '계속 작성', style: 'cancel' },
+        {
+          text: '나가기',
+          style: 'destructive',
+          onPress: () => {
+            resetAllForms();
+            // 탭 전환 허용
+            const targetRoute = (e as any).target;
+            if (targetRoute) {
+              const targetRouteName = targetRoute.split('-')[0];
+              parent.navigate(targetRouteName);
+            }
+          },
+        },
+      ]);
+    });
+
+    return unsubscribe;
+  }, [navigation, isFocused, sysAlert, resetAllForms]);
 
   // API 쿼리
   const { data: couriers } = useQuery({
@@ -346,14 +321,6 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     queryKey: ['/api/meta/couriers', courierForm.company, 'tiered-pricing'],
     enabled: !!courierForm.company,
   });
-
-  const { data: contractSettingsData } = useQuery<ContractSettings>({
-    queryKey: ['/api/meta/contract-settings'],
-  });
-
-  const contractSettings: ContractSettings = contractSettingsData ?? {
-    depositRate: 10,
-  };
 
   const getMinDeliveryFee = (courierName: string): number => {
     if (couriers && Array.isArray(couriers)) {
@@ -426,16 +393,23 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     },
     onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
-      if (data?.id) setOrderId(data.id.toString());
-      // Step7에서 오더 제출 후 Step8(결제)로 이동
-      setCurrentStep(currentStep + 1);
+      await clearDraft();
+      resetAllForms(); // 폼 초기화 → hasUnsavedChanges = false → 나가기 경고 방지
+      if (data && data.id) {
+        // 계약서 작성 화면으로 이동
+        rootNavigation.navigate('CreateContract', { orderId: data.id });
+      } else {
+        Alert.alert("성공", "오더가 등록되었습니다", [
+          { text: "확인", onPress: () => navigation.goBack() }
+        ]);
+      }
     },
     onError: (error: any) => {
       Alert.alert("오류", error.message || "오더 등록에 실패했습니다");
     },
   });
 
-  const handleSubmit = async (contractData: ContractSubmitData) => {
+  const handleSubmit = async () => {
     let orderData: any = {};
 
     if (activeTab === "택배사") {
@@ -444,33 +418,42 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
         carrierCode: courierForm.company,
         courierCompany: courierForm.company,
         courierCategory: "parcel",
-        deliveryArea: [courierForm.regionLarge, courierForm.regionMedium, courierForm.regionSmall].filter(Boolean).join(' \\ '),
+        deliveryArea: `${courierForm.regionLarge} > ${courierForm.regionMedium}`,
         campAddress: courierForm.campAddress,
         campAddressDetail: courierForm.campAddressDetail,
         averageQuantity: courierForm.avgQuantity,
         pricePerUnit: parseInt(courierForm.unitPrice),
         scheduledDate: courierForm.requestDate,
         scheduledDateEnd: courierForm.requestDateEnd,
+        arrivalTime: courierForm.arrivalHour && courierForm.arrivalMinute
+          ? `${courierForm.arrivalHour.padStart(2, '0')}:${courierForm.arrivalMinute.padStart(2, '0')}`
+          : null,
         vehicleType: courierForm.vehicleType,
         contactPhone: courierForm.managerContact,
         deliveryGuide: courierForm.deliveryGuide,
         isUrgent: courierForm.isUrgent,
+        imageUri: imageUri || undefined,
       };
     } else if (activeTab === "기타택배") {
       orderData = {
         companyName: otherCourierForm.companyName,
         courierCategory: "other",
-        deliveryArea: [otherCourierForm.regionLarge, otherCourierForm.regionMedium, otherCourierForm.regionSmall].filter(Boolean).join(' \\ '),
+        pricingType: otherCourierForm.isPerDrop ? "per_drop" : "per_box",
+        deliveryArea: `${otherCourierForm.regionLarge} > ${otherCourierForm.regionMedium}`,
         campAddress: otherCourierForm.campAddress,
         campAddressDetail: otherCourierForm.campAddressDetail,
         averageQuantity: otherCourierForm.boxCount,
         pricePerUnit: parseInt(otherCourierForm.unitPrice),
         scheduledDate: otherCourierForm.requestDate,
         scheduledDateEnd: otherCourierForm.requestDateEnd,
+        arrivalTime: otherCourierForm.arrivalHour && otherCourierForm.arrivalMinute
+          ? `${otherCourierForm.arrivalHour.padStart(2, '0')}:${otherCourierForm.arrivalMinute.padStart(2, '0')}`
+          : null,
         vehicleType: otherCourierForm.vehicleType,
         contactPhone: otherCourierForm.contact,
         deliveryGuide: otherCourierForm.deliveryGuide,
         isUrgent: otherCourierForm.isUrgent,
+        imageUri: imageUri || undefined,
       };
     } else {
       orderData = {
@@ -478,8 +461,14 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
         courierCategory: "cold",
         campAddress: coldTruckForm.loadingPoint,
         campAddressDetail: coldTruckForm.loadingPointDetail,
+        deliveryArea: coldTruckForm.waypoints.filter(w => w).join(' → ') || coldTruckForm.loadingPoint || '냉탑전용',
+        averageQuantity: "1",
+        pricePerUnit: parseInt(coldTruckForm.freight) || 0,
         scheduledDate: coldTruckForm.requestDate,
         scheduledDateEnd: coldTruckForm.requestDateEnd,
+        arrivalTime: coldTruckForm.arrivalHour && coldTruckForm.arrivalMinute
+          ? `${coldTruckForm.arrivalHour.padStart(2, '0')}:${coldTruckForm.arrivalMinute.padStart(2, '0')}`
+          : null,
         vehicleType: coldTruckForm.vehicleType,
         contactPhone: coldTruckForm.contact,
         freight: parseInt(coldTruckForm.freight),
@@ -489,18 +478,9 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
         hasPartition: coldTruckForm.hasPartition,
         deliveryGuide: coldTruckForm.deliveryGuide,
         isUrgent: coldTruckForm.isUrgent,
+        imageUri: imageUri || undefined,
       };
     }
-
-    // 날짜 순서 보정: 시작일이 종료일보다 뒤면 교환
-    if (orderData.scheduledDate && orderData.scheduledDateEnd && orderData.scheduledDate > orderData.scheduledDateEnd) {
-      [orderData.scheduledDate, orderData.scheduledDateEnd] = [orderData.scheduledDateEnd, orderData.scheduledDate];
-    }
-
-    // 계약서 데이터 추가 (잔금입금예정일, 서명, 인증전화번호)
-    orderData.balancePaymentDueDate = contractData.balancePaymentDueDate;
-    orderData.signatureName = contractData.signatureName;
-    orderData.verificationPhone = contractData.verificationPhone;
 
     createJobMutation.mutate(orderData);
   };
@@ -519,28 +499,52 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     setShowSelectModal(false);
   };
 
-  const [orderId, setOrderId] = useState<string>("");
-  const totalSteps = activeTab === "냉탑전용" ? 7 : 8;
-  const displayStep = Math.min(currentStep, totalSteps);
+  const TOTAL_WORKFLOW_STEPS = 10;
+  const stepLabels: Record<number, string> = {
+    1: '업체 선택',
+    2: '물량/단가',
+    3: '일정',
+    4: '차종/연락처',
+    5: '배송지역',
+    6: '추가정보',
+    7: '최종확인',
+    8: '계약서',
+    9: '서명/인증',
+    10: '결제확정',
+  };
 
   const renderStepIndicator = () => (
-    <View style={[styles.stepIndicator, { paddingTop: headerHeight + Spacing.sm, backgroundColor: isDark ? '#1a365d' : '#EBF8FF', borderBottomColor: isDark ? '#2c5282' : '#BEE3F8' }]}>
-      <View style={styles.stepDots}>
-        {Array.from({ length: totalSteps }, (_, i) => i + 1).map((step) => (
-          <View
-            key={step}
-            style={[
-              styles.stepDot,
-              {
-                backgroundColor: step <= displayStep ? BrandColors.requester : Colors.light.backgroundSecondary,
-              },
-            ]}
-          />
-        ))}
+    <View style={[styles.stepIndicator, { backgroundColor: isDark ? '#1a365d' : '#EBF8FF', borderBottomColor: isDark ? '#2c5282' : '#BEE3F8' }]}>
+      <View style={styles.stepTopRow}>
+        <View style={styles.stepDots}>
+          {Array.from({ length: TOTAL_WORKFLOW_STEPS }, (_, i) => i + 1).map((step) => (
+            <View
+              key={step}
+              style={[
+                styles.stepDot,
+                {
+                  backgroundColor: step <= currentStep ? BrandColors.requester : Colors.light.backgroundSecondary,
+                  width: 8,
+                  height: 8,
+                  borderRadius: 4,
+                  opacity: step <= currentStep ? 1 : 0.6,
+                },
+              ]}
+            />
+          ))}
+        </View>
+        <ThemedText style={[styles.stepText, { color: BrandColors.requester }]}>
+          {currentStep}/{TOTAL_WORKFLOW_STEPS}
+        </ThemedText>
       </View>
-      <ThemedText style={[styles.stepText, { color: BrandColors.requester }]}>
-        {displayStep}/{totalSteps} 단계
-      </ThemedText>
+      <View style={styles.stepLabelRow}>
+        <ThemedText style={[styles.stepLabelText, { color: BrandColors.requester }]}>
+          {stepLabels[currentStep] || ''}
+        </ThemedText>
+        <View style={[styles.progressBar, { backgroundColor: isDark ? '#2d3748' : '#E0E0E0' }]}>
+          <View style={[styles.progressFill, { width: `${(currentStep / TOTAL_WORKFLOW_STEPS) * 100}%`, backgroundColor: BrandColors.requester }]} />
+        </View>
+      </View>
     </View>
   );
 
@@ -574,27 +578,17 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     </View>
   );
 
-  const handleComplete = async () => {
-    await clearDraft();
-    hasUnsavedProgress.current = false;
-    resetForm();
-    Alert.alert("완료", "오더 등록이 최종 완료되었습니다!", [
-      { text: "확인", onPress: () => navigation.goBack() }
-    ]);
-  };
-
   const renderCurrentStep = () => {
     const baseProps = {
       activeTab,
       theme,
       isDark,
-      bottomPadding: effectiveBottomPadding,
       onNext: () => setCurrentStep(currentStep + 1),
       onBack: () => setCurrentStep(currentStep - 1),
     };
 
     switch (currentStep) {
-      case 1: // 기본 정보
+      case 1:
         return (
           <Step1BasicInfo
             {...baseProps}
@@ -609,7 +603,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             onOpenSelectModal={openSelectModal}
           />
         );
-      case 2: // 수량·단가 + 요청일
+      case 2:
         return (
           <Step2Quantity
             {...baseProps}
@@ -628,7 +622,20 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             onOpenSelectModal={openSelectModal}
           />
         );
-      case 3: // 차종·담당자 연락처
+      case 3:
+        return (
+          <Step3Schedule
+            {...baseProps}
+            courierForm={courierForm}
+            setCourierForm={setCourierForm}
+            otherCourierForm={otherCourierForm}
+            setOtherCourierForm={setOtherCourierForm}
+            coldTruckForm={coldTruckForm}
+            setColdTruckForm={setColdTruckForm}
+            onOpenDatePicker={() => {}}
+          />
+        );
+      case 4:
         return (
           <Step4Vehicle
             {...baseProps}
@@ -642,7 +649,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             onOpenSelectModal={openSelectModal}
           />
         );
-      case 4: // 배송지역·캠프/터미널 주소
+      case 5:
         return (
           <Step5Location
             {...baseProps}
@@ -656,7 +663,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             onOpenSelectModal={openSelectModal}
           />
         );
-      case 5: // 배송가이드·파일 업로드 (선택)
+      case 6:
         return (
           <Step6AdditionalInfo
             {...baseProps}
@@ -666,9 +673,11 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             setOtherCourierForm={setOtherCourierForm}
             coldTruckForm={coldTruckForm}
             setColdTruckForm={setColdTruckForm}
+            imageUri={imageUri}
+            setImageUri={setImageUri}
           />
         );
-      case 6: // 오더확인·계약금확인·동의
+      case 7:
         return (
           <Step7Confirmation
             {...baseProps}
@@ -678,39 +687,9 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             setCourierForm={setCourierForm}
             setOtherCourierForm={setOtherCourierForm}
             setColdTruckForm={setColdTruckForm}
+            imageUri={imageUri}
             onSubmit={handleSubmit}
             isSubmitting={createJobMutation.isPending}
-          />
-        );
-      case 7: // 계약서 작성·서명·본인인증
-        return (
-          <Step7Contract
-            {...baseProps}
-            courierForm={courierForm}
-            otherCourierForm={otherCourierForm}
-            coldTruckForm={coldTruckForm}
-            setCourierForm={setCourierForm}
-            setOtherCourierForm={setOtherCourierForm}
-            setColdTruckForm={setColdTruckForm}
-            onSubmit={handleSubmit}
-            isSubmitting={createJobMutation.isPending}
-            contractSettings={contractSettings}
-          />
-        );
-      case 8: // 계약금 입금·최종 완료
-        return (
-          <Step8Payment
-            activeTab={activeTab}
-            courierForm={courierForm}
-            otherCourierForm={otherCourierForm}
-            coldTruckForm={coldTruckForm}
-            orderId={orderId}
-            onComplete={handleComplete}
-            onBack={() => setCurrentStep(currentStep - 1)}
-            theme={theme}
-            isDark={isDark}
-            bottomPadding={effectiveBottomPadding}
-            contractSettings={contractSettings}
           />
         );
       default:
@@ -718,17 +697,17 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     }
   };
 
+  const bottomOffset = keyboardHeight > 0 ? keyboardHeight - tabBarHeight : 0;
+
   return (
     <View
-      style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
+      style={[styles.container, { backgroundColor: theme.backgroundRoot, marginBottom: tabBarHeight, paddingBottom: bottomOffset > 0 ? bottomOffset : 0 }]}
     >
       {renderStepIndicator()}
       <View style={{ paddingTop: Spacing.md, paddingHorizontal: Spacing.lg }}>
         {renderTabs()}
       </View>
-      <View style={{ flex: 1, marginBottom: effectiveBottomPadding }}>
-        {renderCurrentStep()}
-      </View>
+      {renderCurrentStep()}
 
       {/* Select Modal */}
       <Modal visible={showSelectModal} transparent animationType="slide">
@@ -768,16 +747,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stepIndicator: {
-    paddingVertical: Spacing.md,
+    paddingVertical: Spacing.sm,
     paddingHorizontal: Spacing.lg,
     borderBottomWidth: 1,
+  },
+  stepTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: Spacing.xs,
   },
   stepDots: {
     flexDirection: 'row',
-    gap: Spacing.xs,
+    gap: 4,
+    alignItems: 'center',
   },
   stepDot: {
     width: 8,
@@ -787,6 +770,26 @@ const styles = StyleSheet.create({
   stepText: {
     ...Typography.caption,
     fontWeight: 'bold',
+  },
+  stepLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  stepLabelText: {
+    fontSize: 12,
+    fontWeight: '600',
+    minWidth: 55,
+  },
+  progressBar: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
   },
   tabContainer: {
     flexDirection: 'row',

@@ -10,7 +10,6 @@ import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
-import { QueryErrorState } from "@/components/QueryErrorState";
 
 type ProfileStackParamList = {
   RequesterDisputeList: undefined;
@@ -55,11 +54,9 @@ export default function RequesterDisputeListScreen({ navigation }: RequesterDisp
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
 
-  const { data: disputes = [], isLoading, refetch, isRefetching, isError, error } = useQuery<Dispute[]>({
+  const { data: disputes = [], isLoading, refetch, isRefetching } = useQuery<Dispute[]>({
     queryKey: ["/api/requester/disputes"],
   });
-
-  if (isError) return <QueryErrorState error={error as Error} onRetry={refetch} />;
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -106,7 +103,7 @@ export default function RequesterDisputeListScreen({ navigation }: RequesterDisp
           </ThemedText>
           {item.requestedAmount ? (
             <ThemedText style={[styles.amount, { color: BrandColors.requester }]}>
-              요청금액: {(item.requestedAmount || 0).toLocaleString()}원
+              요청금액: {item.requestedAmount.toLocaleString()}원
             </ThemedText>
           ) : null}
         </View>
@@ -115,7 +112,7 @@ export default function RequesterDisputeListScreen({ navigation }: RequesterDisp
           <View style={[styles.resolvedSection, { backgroundColor: theme.backgroundDefault }]}>
             <ThemedText style={[styles.resolvedLabel, { color: theme.tabIconDefault }]}>처리 결과</ThemedText>
             <ThemedText style={[styles.resolvedAmount, { color: theme.text }]}>
-              {(item.resolvedAmount || 0).toLocaleString()}원 {(item.resolvedAmount || 0) > 0 ? "지급 확정" : "미지급"}
+              {item.resolvedAmount.toLocaleString()}원 {item.resolvedAmount > 0 ? "지급 확정" : "미지급"}
             </ThemedText>
             {item.resolvedNote ? (
               <ThemedText style={[styles.resolvedNote, { color: theme.tabIconDefault }]}>

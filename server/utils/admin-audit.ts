@@ -172,3 +172,39 @@ export function canTransitionOrderStatus(
 export function validateOrderStatus(status: string): status is OrderStatus {
   return Object.values(ORDER_STATUS).includes(status as OrderStatus);
 }
+
+export const PAYMENT_STATUS = {
+  INITIATED: "initiated",
+  AUTHORIZED: "authorized",
+  CAPTURED: "captured", // 결제 완료
+  CANCELED: "canceled", // 승인 취소 (매입 전)
+  REFUNDED: "refunded", // 환불 완료 (매입 후)
+  PARTIAL_REFUNDED: "partial_refunded",
+  FAILED: "failed",
+  FRAUD_SUSPECTED: "fraud_suspected",
+} as const;
+
+export type PaymentStatus = typeof PAYMENT_STATUS[keyof typeof PAYMENT_STATUS];
+
+const VALID_PAYMENT_TRANSITIONS: Record<string, string[]> = {
+  initiated: ["authorized", "captured", "failed", "fraud_suspected"],
+  authorized: ["captured", "canceled", "failed", "fraud_suspected"],
+  captured: ["refunded", "partial_refunded", "fraud_suspected"],
+  canceled: ["fraud_suspected"],
+  failed: ["fraud_suspected"],
+  refunded: ["fraud_suspected"],
+  partial_refunded: ["refunded", "partial_refunded", "fraud_suspected"],
+  fraud_suspected: ["captured", "refunded", "failed"],
+};
+
+export function canTransitionPaymentStatus(
+  currentStatus: string,
+  targetStatus: string
+): boolean {
+  if (currentStatus === targetStatus) return true;
+  
+  const validTargets = VALID_PAYMENT_TRANSITIONS[currentStatus];
+  if (!validTargets) return false;
+  
+  return validTargets.includes(targetStatus);
+}

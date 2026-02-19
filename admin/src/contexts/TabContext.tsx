@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useConfirm } from '@/components/common/ConfirmDialog';
 
 export interface Tab {
   id: string;
@@ -48,7 +49,6 @@ const ROUTE_TO_TAB: Record<string, { id: string; title: string }> = {
   '/tax-invoices': { id: 'tax-invoices', title: '세금계산서' },
   '/carriers': { id: 'carriers', title: '택배사 관리' },
   '/carrier-rates': { id: 'carrier-rates', title: '운임/최저단가' },
-  '/minimum-guarantee': { id: 'minimum-guarantee', title: '최소수입보장' },
   '/disputes': { id: 'disputes', title: '분쟁/클레임' },
   '/cs-tickets': { id: 'cs-tickets', title: 'CS 티켓' },
   '/notifications': { id: 'notifications', title: '알림/공지' },
@@ -66,6 +66,7 @@ const ROUTE_TO_TAB: Record<string, { id: string; title: string }> = {
 
 export function TabProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const location = useLocation();
   const isInitialMount = useRef(true);
   const lastProcessedPath = useRef<string | null>(null);
@@ -136,29 +137,29 @@ export function TabProvider({ children }: { children: ReactNode }) {
     navigate(newTab.route);
   }, [navigate]);
 
-  const closeTab = useCallback((tabId: string) => {
+  const closeTab = useCallback(async (tabId: string) => {
+    const tabToClose = tabs.find(t => t.id === tabId);
+    if (!tabToClose || !tabToClose.closable) return;
+
+    if (tabToClose.hasUnsavedChanges) {
+      const confirmed = await confirm({ title: '변경사항 확인', description: '저장되지 않은 변경사항이 있습니다. 정말 닫으시겠습니까?', variant: 'destructive' });
+      if (!confirmed) return;
+    }
+
     setTabs(prev => {
-      const tabToClose = prev.find(t => t.id === tabId);
-      if (!tabToClose || !tabToClose.closable) return prev;
-
-      if (tabToClose.hasUnsavedChanges) {
-        const confirmed = window.confirm('저장되지 않은 변경사항이 있습니다. 정말 닫으시겠습니까?');
-        if (!confirmed) return prev;
-      }
-
       const tabIndex = prev.findIndex(t => t.id === tabId);
       const newTabs = prev.filter(t => t.id !== tabId);
-      
+
       if (activeTabId === tabId) {
         const newActiveTab = newTabs[Math.min(tabIndex, newTabs.length - 1)] || DEFAULT_TAB;
         setActiveTabId(newActiveTab.id);
         lastProcessedPath.current = newActiveTab.route;
         navigate(newActiveTab.route);
       }
-      
+
       return newTabs;
     });
-  }, [activeTabId, navigate]);
+  }, [tabs, activeTabId, navigate, confirm]);
 
   const setActiveTab = useCallback((tabId: string) => {
     setTabs(prev => {
@@ -178,29 +179,29 @@ export function TabProvider({ children }: { children: ReactNode }) {
     ));
   }, []);
 
-  const closeAllTabs = useCallback(() => {
+  const closeAllTabs = useCallback(async () => {
     const hasUnsaved = tabs.some(t => t.closable && t.hasUnsavedChanges);
     if (hasUnsaved) {
-      const confirmed = window.confirm('저장되지 않은 변경사항이 있습니다. 모든 탭을 닫으시겠습니까?');
+      const confirmed = await confirm({ title: '변경사항 확인', description: '저장되지 않은 변경사항이 있습니다. 모든 탭을 닫으시겠습니까?', variant: 'destructive' });
       if (!confirmed) return;
     }
-    
+
     setTabs([DEFAULT_TAB]);
     setActiveTabId('dashboard');
     lastProcessedPath.current = '/';
     navigate('/');
-  }, [tabs, navigate]);
+  }, [tabs, navigate, confirm]);
 
-  const closeOtherTabs = useCallback((tabId: string) => {
+  const closeOtherTabs = useCallback(async (tabId: string) => {
     const hasUnsaved = tabs.some(t => t.id !== tabId && t.closable && t.hasUnsavedChanges);
     if (hasUnsaved) {
-      const confirmed = window.confirm('저장되지 않은 변경사항이 있습니다. 다른 탭을 닫으시겠습니까?');
+      const confirmed = await confirm({ title: '변경사항 확인', description: '저장되지 않은 변경사항이 있습니다. 다른 탭을 닫으시겠습니까?', variant: 'destructive' });
       if (!confirmed) return;
     }
-    
+
     setTabs(prev => prev.filter(t => t.id === tabId || !t.closable));
     setActiveTabId(tabId);
-  }, [tabs]);
+  }, [tabs, confirm]);
 
   return (
     <TabContext.Provider value={{

@@ -111,13 +111,24 @@ export default function QRScannerScreen({ navigation, route }: QRScannerScreenPr
           token,
         };
       } else {
-        apiUrl = new URL('/api/checkin/qr', getApiUrl()).toString();
-        requestBody = {
-          qrData: result.data,
-          contractId,
-          type: scanType,
-          timestamp: result.timestamp,
-        };
+        // 스캔된 데이터가 12자리 영숫자 개인코드인지 확인
+        const scannedData = result.data.trim().toUpperCase();
+        if (/^[A-Z0-9]{12}$/.test(scannedData)) {
+          // 12자리 개인코드 → by-code 엔드포인트로 라우팅
+          apiUrl = new URL('/api/checkin/by-code', getApiUrl()).toString();
+          requestBody = {
+            requesterCode: scannedData,
+          };
+        } else {
+          // JSON QR 데이터 → qr 엔드포인트로 라우팅
+          apiUrl = new URL('/api/checkin/qr', getApiUrl()).toString();
+          requestBody = {
+            qrData: result.data,
+            contractId,
+            type: scanType,
+            timestamp: result.timestamp,
+          };
+        }
       }
 
       const response = await fetch(apiUrl, {

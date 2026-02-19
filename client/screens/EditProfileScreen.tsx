@@ -2,11 +2,9 @@ import React, { useState, useEffect } from "react";
 import { View, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Image, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as ImagePicker from 'expo-image-picker';
-import { File } from 'expo-file-system';
 
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,7 +24,6 @@ type EditProfileScreenProps = {
 export default function EditProfileScreen({ navigation }: EditProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
   const { user, refreshUser } = useAuth();
 
@@ -41,7 +38,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
   const [verificationCode, setVerificationCode] = useState('');
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showPhoneVerification, setShowPhoneVerification] = useState(false);
@@ -90,37 +87,27 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
     }
   }
 
-  async function handlePickProfileImage() {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        await uploadProfileImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Image picker error:', error);
-      Alert.alert('오류', '이미지 선택에 실패했습니다');
-    }
-  }
+  // handlePickProfileImage removed
 
   async function uploadProfileImage(uri: string) {
     setIsUploadingImage(true);
     try {
       const token = await getToken();
       const formData = new FormData();
-      
+
       if (Platform.OS === 'web') {
         const response = await fetch(uri);
         const blob = await response.blob();
         formData.append('file', blob, 'profile.jpg');
       } else {
-        const file = new File(uri);
-        formData.append('file', file as any);
+        const filename = uri.split('/').pop() || 'profile.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const mimeType = match ? `image/${match[1].toLowerCase()}` : 'image/jpeg';
+        formData.append('file', {
+          uri,
+          name: filename,
+          type: mimeType,
+        } as any);
       }
 
       const uploadResponse = await fetch(new URL('/api/upload/profile-image', getApiUrl()).toString(), {
@@ -191,7 +178,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
       const response = await fetch(new URL('/api/auth/verify-signup-code', getApiUrl()).toString(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           phoneNumber: phoneNumber.trim(),
           code: verificationCode.trim()
         }),
@@ -226,8 +213,8 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
 
     setIsSaving(true);
     try {
-      const fullAddress = addressDetail.trim() 
-        ? `${address} ${addressDetail.trim()}` 
+      const fullAddress = addressDetail.trim()
+        ? `${address} ${addressDetail.trim()}`
         : address;
 
       const token = await getToken();
@@ -276,16 +263,13 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: insets.bottom + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
     >
+      {/* Profile image editing removed as per request */}
       <View style={styles.profileImageSection}>
-        <Pressable 
-          onPress={handlePickProfileImage} 
-          disabled={isUploadingImage}
-          style={styles.profileImageContainer}
-        >
+        <View style={styles.profileImageContainer}>
           {profileImageUrl ? (
             profileImageUrl.startsWith('avatar:') ? (
               <Avatar uri={profileImageUrl} size={100} isHelper={user?.role === 'helper'} />
@@ -300,15 +284,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
               <Icon name="person-outline" size={48} color={primaryColor} />
             </View>
           )}
-          {isUploadingImage ? (
-            <View style={styles.profileImageOverlay}>
-              <ActivityIndicator size="small" color="#fff" />
-            </View>
-          ) : null}
-        </Pressable>
-        <ThemedText style={[styles.profileImageHint, { color: theme.tabIconDefault }]}>
-          프로필 사진을 등록하세요
-        </ThemedText>
+        </View>
       </View>
 
       <Card style={styles.formCard}>

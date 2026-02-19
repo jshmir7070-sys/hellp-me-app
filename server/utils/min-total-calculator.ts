@@ -56,9 +56,10 @@ export function calcPerBoxPricing(params: PricingCalcParams): PricingCalcResult 
     };
   }
 
-  // 1) 긴급 할증 먼저 적용
+  // 1) 긴급 할증 먼저 적용 (100원 단위 반올림)
   const urgentMultiplier = isUrgent ? (1 + urgentSurchargeRate / 100) : 1;
-  const baseAfterUrgent = Math.ceil(basePricePerBox * urgentMultiplier);
+  const rawAfterUrgent = basePricePerBox * urgentMultiplier;
+  const baseAfterUrgent = Math.round(rawAfterUrgent / 100) * 100; // 100원 단위 반올림
   const urgentApplied = isUrgent && urgentSurchargeRate > 0;
 
   // 2) 기본 총액
@@ -66,7 +67,7 @@ export function calcPerBoxPricing(params: PricingCalcParams): PricingCalcResult 
 
   // 3) 최저운임 미달 시 박스단가 자동 상승
   if (minTotalAmount > 0 && rawTotal < minTotalAmount) {
-    const requiredPerBox = Math.ceil(minTotalAmount / boxCount);
+    const requiredPerBox = Math.ceil(minTotalAmount / boxCount / 100) * 100; // 100원 단위 올림
     const finalPricePerBox = Math.max(baseAfterUrgent, requiredPerBox);
     const finalTotal = finalPricePerBox * boxCount;
 

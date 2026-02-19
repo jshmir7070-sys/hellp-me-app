@@ -53,6 +53,9 @@ export interface OrderCardDTO {
   applicationStatus?: ApplicationStatus;
   appliedAt?: string;
 
+  statusLabel?: string;
+  statusColor?: string;
+
   viewerRole: ViewerRole;
 }
 

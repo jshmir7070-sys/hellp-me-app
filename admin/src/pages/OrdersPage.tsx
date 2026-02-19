@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
+import { useConfirm } from '@/components/common/ConfirmDialog';
+import { downloadCSV } from '@/utils/csv-export';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { Button } from '@/components/ui/button';
@@ -93,6 +95,7 @@ function getCourierCategory(courierCompany: string): 'parcel' | 'other' | 'cold'
 
 export default function OrdersPage() {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   const [dateRange, setDateRange] = useState(getDefaultDateRange(7));
   const [activeView, setActiveView] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'parcel' | 'other' | 'cold'>('all');
@@ -113,6 +116,8 @@ export default function OrdersPage() {
   const [isHelperDetailOpen, setIsHelperDetailOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
   const [isCreateOrderModalOpen, setIsCreateOrderModalOpen] = useState(false);
+  const [isEditingDeposit, setIsEditingDeposit] = useState(false);
+  const [editDepositAmount, setEditDepositAmount] = useState('');
   const [orderCategoryTab, setOrderCategoryTab] = useState<'택배사' | '기타택배' | '냉탑전용'>('택배사');
   
   // 페이지네이션 상태
@@ -149,14 +154,13 @@ export default function OrdersPage() {
   });
 
   const { data: ordersResponse, isLoading, refetch } = useQuery({
-    queryKey: ['admin-orders', dateRange, activeView, currentPage, itemsPerPage, categoryFilter, searchQuery],
+    queryKey: ['admin-orders', dateRange, currentPage, itemsPerPage, searchQuery],
     refetchInterval: autoRefresh ? 10000 : false, // 자동 새로고침 시 10초마다
     queryFn: async () => {
       try {
         const params = new URLSearchParams();
-        params.append('page', String(currentPage));
-        params.append('limit', String(itemsPerPage));
-        if (activeView !== 'all') params.append('status', activeView);
+        params.append('page', '1');
+        params.append('limit', '500');
         if (searchQuery) params.append('search', searchQuery);
         
         const data = await apiRequest<{ 
@@ -309,7 +313,7 @@ export default function OrdersPage() {
         coldCompanyName: '',
       });
       refetch();
-      window.alert('본사 계약권 오더가 등록되었습니다.');
+      toast({ title: '본사 계약권 오더가 등록되었습니다.' });
     },
   });
 
@@ -458,7 +462,27 @@ export default function OrdersPage() {
       setIsDepositModalOpen(false);
       setSelectedOrder(null);
       setIsDrawerOpen(false);
-      window.alert('계약금이 승인되었습니다.');
+      toast({ title: '계약금이 승인되었습니다.' });
+    },
+  });
+
+  const updateDepositMutation = useMutation({
+    mutationFn: async ({ orderId, depositAmount }: { orderId: number; depositAmount: number }) => {
+      return apiRequest(`/orders/${orderId}/deposit-amount`, {
+        method: 'PATCH',
+        body: JSON.stringify({ depositAmount }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      if (selectedOrder) {
+        queryClient.invalidateQueries({ queryKey: ['admin-order', selectedOrder.id] });
+      }
+      setIsEditingDeposit(false);
+      toast({ title: '계약금이 수정되었습니다.' });
+    },
+    onError: (error: any) => {
+      toast({ title: `계약금 수정 실패: ${error.message || '알 수 없는 오류'}`, variant: 'destructive' });
     },
   });
 
@@ -477,7 +501,7 @@ export default function OrdersPage() {
       setHelperSearchQuery('');
       setIsDrawerOpen(false);
       refetch();
-      window.alert('헬퍼가 배정되었습니다.');
+      toast({ title: '헬퍼가 배정되었습니다.' });
     },
   });
 
@@ -491,7 +515,7 @@ export default function OrdersPage() {
       setSelectedOrder(null);
       setIsDrawerOpen(false);
       refetch();
-      window.alert('마감이 승인되었습니다.');
+      toast({ title: '마감이 승인되었습니다.' });
     },
   });
 
@@ -505,7 +529,7 @@ export default function OrdersPage() {
       setSelectedOrder(null);
       setIsDrawerOpen(false);
       refetch();
-      window.alert('잔금이 확인되었습니다.');
+      toast({ title: '잔금이 확인되었습니다.' });
     },
   });
 
@@ -519,14 +543,13 @@ export default function OrdersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       refetch();
-      window.alert('오더가 반려되었습니다.');
+      toast({ title: '오더가 반려되었습니다.' });
     },
   });
 
-  const handleCancelOrder = (orderId: number) => {
-    if (window.confirm('이 오더를 반려하시겠습니까?')) {
-      cancelOrderMutation.mutate(orderId);
-    }
+  const handleCancelOrder = async (orderId: number) => {
+    const ok = await confirm({ title: '오더 반려', description: '이 오더를 반려하시겠습니까?' });
+    if (ok) cancelOrderMutation.mutate(orderId);
   };
 
   const viewCounts = {
@@ -578,7 +601,7 @@ export default function OrdersPage() {
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
-    toast({ title: '데이터를 새로고침했습니다.' });
+    toast({ title: '데이터를 새로고침했습니다.', variant: 'success' });
   };
 
   const handleDownloadExcel = () => {
@@ -597,18 +620,7 @@ export default function OrdersPage() {
       '헬퍼': item.helperName || '',
       '요청일': item.scheduledDate || '',
     }));
-    const headers = Object.keys(data[0] || {});
-    const csvContent = [
-      headers.join(','),
-      ...data.map(row => headers.map(h => row[h as keyof typeof row]).join(','))
-    ].join('\n');
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `오더목록_${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadCSV(data, `오더목록_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
   const handleRowClick = (order: Order) => {
@@ -1196,7 +1208,59 @@ export default function OrdersPage() {
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">계약금</td>
-                      <td className="px-3 py-2"><Money amount={displayOrder?.depositAmount || 0} /></td>
+                      <td className="px-3 py-2">
+                        {isEditingDeposit ? (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              type="number"
+                              value={editDepositAmount}
+                              onChange={(e) => setEditDepositAmount(e.target.value)}
+                              className="w-32 h-8"
+                              placeholder="금액 입력"
+                            />
+                            <span className="text-sm text-gray-500">원</span>
+                            <Button
+                              size="sm"
+                              variant="default"
+                              className="h-8"
+                              onClick={() => {
+                                if (selectedOrder && editDepositAmount) {
+                                  updateDepositMutation.mutate({
+                                    orderId: selectedOrder.id,
+                                    depositAmount: Number(editDepositAmount),
+                                  });
+                                }
+                              }}
+                              disabled={updateDepositMutation.isPending}
+                            >
+                              {updateDepositMutation.isPending ? '저장중...' : '저장'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8"
+                              onClick={() => setIsEditingDeposit(false)}
+                            >
+                              취소
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Money amount={displayOrder?.depositAmount || 0} />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => {
+                                setEditDepositAmount(String(displayOrder?.depositAmount || 0));
+                                setIsEditingDeposit(true);
+                              }}
+                            >
+                              수정
+                            </Button>
+                          </div>
+                        )}
+                      </td>
                     </tr>
                     <tr>
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">계약서</td>

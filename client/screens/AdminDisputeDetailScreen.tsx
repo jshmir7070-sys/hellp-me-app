@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import {
   View,
   StyleSheet,
-  ScrollView,
   Pressable,
   TextInput,
   ActivityIndicator,
@@ -10,17 +9,13 @@ import {
 } from "react-native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useHeaderHeight } from "@react-navigation/elements";
-import { format } from "date-fns";
-import { ko } from "date-fns/locale";
-
+import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Icon } from "@/components/Icon";
-import { useTheme } from "@/hooks/useTheme";
 import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
+import { DisputeDetailView } from "@/components/disputes/DisputeDetailView";
 
 interface DisputeDetail {
   id: number;
@@ -37,6 +32,8 @@ interface DisputeDetail {
   createdAt: string;
   updatedAt: string;
   resolvedAt: string | null;
+  workDate?: string;
+  evidencePhotoUrl?: string; // API usually returns singular
   order: {
     id: number;
     carrierName: string;
@@ -47,47 +44,12 @@ interface DisputeDetail {
 
 type AdminDisputeDetailScreenProps = NativeStackScreenProps<any, "AdminDisputeDetail">;
 
-const getStatusLabel = (status: string) => {
-  const map: Record<string, string> = {
-    pending: "대기중",
-    in_review: "검토중",
-    resolved: "처리완료",
-    rejected: "반려",
-  };
-  return map[status] || status;
-};
-
-const getStatusColor = (status: string) => {
-  const map: Record<string, string> = {
-    pending: BrandColors.warning,
-    in_review: BrandColors.helper,
-    resolved: BrandColors.success,
-    rejected: BrandColors.error,
-  };
-  return map[status] || "#888";
-};
-
-const getDisputeTypeLabel = (type: string) => {
-  const map: Record<string, string> = {
-    settlement_error: "정산 금액 오류",
-    invoice_error: "세금계산서 오류",
-    contract_dispute: "계약 조건 분쟁",
-    service_complaint: "서비스 불만",
-    delay: "일정 관련",
-    other: "기타",
-  };
-  return map[type] || type;
-};
-
 export default function AdminDisputeDetailScreen({ route, navigation }: AdminDisputeDetailScreenProps) {
   const { disputeId } = route.params || {};
   const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
-  const headerHeight = useHeaderHeight();
   const queryClient = useQueryClient();
 
   const [adminNote, setAdminNote] = useState("");
-  const [selectedAction, setSelectedAction] = useState<string | null>(null);
 
   const { data: dispute, isLoading } = useQuery<DisputeDetail>({
     queryKey: [`/api/admin/helper-disputes/${disputeId}`],
@@ -158,66 +120,32 @@ export default function AdminDisputeDetailScreen({ route, navigation }: AdminDis
 
   const isResolved = dispute.status === "resolved" || dispute.status === "rejected";
 
-  return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
-      contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: insets.bottom + Spacing.xl,
-        paddingHorizontal: Spacing.lg,
-      }}
-    >
-      <Card style={styles.section}>
-        <View style={styles.headerRow}>
-          <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
-            이의제기 정보
-          </ThemedText>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: getStatusColor(dispute.status) + "20" },
-            ]}
-          >
-            <ThemedText
-              style={[styles.statusText, { color: getStatusColor(dispute.status) }]}
-            >
-              {getStatusLabel(dispute.status)}
-            </ThemedText>
-          </View>
-        </View>
+  // Map API data to DisputeDetailView format
+  const mappedDispute = {
+    ...dispute,
+    workDate: dispute.workDate || "-",
+    courierName: dispute.order?.carrierName,
+    adminReply: dispute.adminNote,
+    adminUserName: dispute.reviewerName,
+    evidencePhotoUrls: dispute.evidencePhotoUrl ? JSON.parse(dispute.evidencePhotoUrl) : [], // Parse JSON string to array
+    order: dispute.order ? {
+      ...dispute.order,
+      courierCompany: dispute.order.carrierName
+    } : null,
+  };
 
-        <View style={styles.infoGrid}>
-          <InfoRow label="오더 번호" value={`#${dispute.orderId}`} theme={theme} />
-          <InfoRow label="제기자" value={`${dispute.submitterName} (${dispute.submitterRole === "helper" ? "헬퍼" : "요청자"})`} theme={theme} />
-          <InfoRow label="유형" value={getDisputeTypeLabel(dispute.disputeType)} theme={theme} />
-          <InfoRow label="접수일" value={format(new Date(dispute.createdAt), "yyyy.MM.dd HH:mm", { locale: ko })} theme={theme} />
-          {dispute.resolvedAt ? (
-            <InfoRow label="처리일" value={format(new Date(dispute.resolvedAt), "yyyy.MM.dd HH:mm", { locale: ko })} theme={theme} />
-          ) : null}
-          {dispute.reviewerName ? (
-            <InfoRow label="담당자" value={dispute.reviewerName} theme={theme} />
-          ) : null}
-        </View>
-      </Card>
-
+  const footerContent = (
+    <>
       <Card style={styles.section}>
         <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
-          오더 정보
+          오더 정보 (상세)
         </ThemedText>
         <View style={styles.infoGrid}>
           <InfoRow label="운송사" value={dispute.order?.carrierName || "-"} theme={theme} />
           <InfoRow label="상차지" value={dispute.order?.pickupLocation || "-"} theme={theme} />
           <InfoRow label="하차지" value={dispute.order?.deliveryLocation || "-"} theme={theme} />
+          <InfoRow label="제기자" value={`${dispute.submitterName} (${dispute.submitterRole === "helper" ? "헬퍼" : "요청자"})`} theme={theme} />
         </View>
-      </Card>
-
-      <Card style={styles.section}>
-        <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
-          이의 내용
-        </ThemedText>
-        <ThemedText style={[styles.descriptionText, { color: theme.text }]}>
-          {dispute.description}
-        </ThemedText>
       </Card>
 
       <Card style={styles.section}>
@@ -301,7 +229,16 @@ export default function AdminDisputeDetailScreen({ route, navigation }: AdminDis
           </View>
         </Card>
       )}
-    </ScrollView>
+    </>
+  );
+
+  return (
+    <DisputeDetailView
+      dispute={mappedDispute}
+      hideAdminReply={true}
+      hideResolution={true}
+      footerContent={footerContent}
+    />
   );
 }
 
@@ -331,25 +268,10 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.md,
     padding: Spacing.lg,
   },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: Spacing.md,
-  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "600",
     marginBottom: Spacing.md,
-  },
-  statusBadge: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
-    borderRadius: BorderRadius.sm,
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: "600",
   },
   infoGrid: {
     gap: Spacing.sm,
@@ -365,10 +287,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
   },
-  descriptionText: {
-    fontSize: 14,
-    lineHeight: 22,
-  },
   textArea: {
     borderWidth: 1,
     borderRadius: BorderRadius.md,
@@ -378,7 +296,7 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     gap: Spacing.md,
-    marginTop: Spacing.md,
+    marginBottom: Spacing.xl, // add bottom margin for buttons since they are in footer
   },
   actionRow: {
     flexDirection: "row",

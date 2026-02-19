@@ -79,7 +79,7 @@ export class RealSmsProvider implements SmsProvider {
       throw new Error(`SMS API error: ${response.status} - ${errorText}`);
     }
 
-    const result = await response.json();
+    const result: any = await response.json();
     return { messageId: result.groupId || result.messageId || 'unknown' };
   }
 }

@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Platform } from 'react-native';
 import { apiRequest, getApiUrl, isApiConfigured, getApiConfigError } from '@/lib/query-client';
 import {
   getToken,
@@ -10,11 +9,6 @@ import {
   clearTokens,
   migrateTokensToSecureStore,
 } from '@/utils/secure-token-storage';
-import {
-  registerForPushNotificationsAsync,
-  savePushTokenToServer,
-  removePushTokenFromServer,
-} from '@/utils/push-notifications';
 
 export type UserRole = 'helper' | 'requester' | 'admin' | 'superadmin' | null;
 
@@ -78,29 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     migrateTokensToSecureStore().then(() => checkAuthStatus());
   }, []);
 
-  // 인증 상태 변경 시 push token 등록/해제
-  useEffect(() => {
-    if (state.isAuthenticated && state.user && Platform.OS !== 'web') {
-      registerPushToken();
-    }
-  }, [state.isAuthenticated]);
-
-  async function registerPushToken() {
-    try {
-      const pushToken = await registerForPushNotificationsAsync();
-      if (pushToken) {
-        await savePushTokenToServer(pushToken);
-      }
-    } catch (error) {
-      console.error('Push token registration error:', error);
-    }
-  }
-
   async function checkAuthStatus() {
     try {
       if (!isApiConfigured()) {
         const configError = getApiConfigError();
-        if (__DEV__) console.error('API not configured:', configError);
+        console.error('API not configured:', configError);
         setState({ user: null, isLoading: false, isAuthenticated: false });
         return;
       }
@@ -243,11 +219,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     try {
-      // Push token 서버에서 해제
-      if (Platform.OS !== 'web') {
-        await removePushTokenFromServer().catch(() => {});
-      }
-
       const token = await getToken();
       if (token) {
         const baseUrl = getApiUrl();

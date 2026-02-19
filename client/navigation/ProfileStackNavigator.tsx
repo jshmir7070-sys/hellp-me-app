@@ -22,7 +22,6 @@ import WriteReviewScreen from "@/screens/WriteReviewScreen";
 import RequesterDisputeScreen from "@/screens/RequesterDisputeScreen";
 import RequesterDisputeListScreen from "@/screens/RequesterDisputeListScreen";
 import RequesterDisputeDetailScreen from "@/screens/RequesterDisputeDetailScreen";
-import DisputesScreen from "@/screens/DisputesScreen";
 import HelperDisputeSubmitScreen from "@/screens/HelperDisputeSubmitScreen";
 import HelperDisputeListScreen from "@/screens/HelperDisputeListScreen";
 import HelperDisputeDetailScreen from "@/screens/HelperDisputeDetailScreen";
@@ -32,7 +31,7 @@ import BusinessCertSubmitScreen from "@/screens/BusinessCertSubmitScreen";
 import DriverLicenseSubmitScreen from "@/screens/DriverLicenseSubmitScreen";
 import CargoLicenseSubmitScreen from "@/screens/CargoLicenseSubmitScreen";
 import VehicleCertSubmitScreen from "@/screens/VehicleCertSubmitScreen";
-import TransportContractSubmitScreen from "@/screens/TransportContractSubmitScreen";
+import ContractSigningScreen from "@/screens/ContractSigningScreen";
 import IncidentListScreen from "@/screens/IncidentListScreen";
 import IncidentReportScreen from "@/screens/IncidentReportScreen";
 import RequesterIncidentDetailScreen from "@/screens/RequesterIncidentDetailScreen";
@@ -68,9 +67,6 @@ export type ProfileStackParamList = {
   RequesterDispute: { orderId: number };
   RequesterDisputeList: undefined;
   RequesterDisputeDetail: { disputeId: number };
-  Disputes: undefined;
-  DisputeCreate: { orderId?: number; type?: string };
-  DisputeDetail: { disputeId: number };
   HelperDisputeSubmit: undefined;
   HelperDisputeList: undefined;
   HelperDisputeDetail: { disputeId: number };
@@ -91,7 +87,7 @@ export type ProfileStackParamList = {
   DriverLicenseSubmit: undefined;
   CargoLicenseSubmit: undefined;
   VehicleCertSubmit: undefined;
-  TransportContractSubmit: undefined;
+  ContractSigning: undefined;
 };
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
@@ -249,27 +245,6 @@ export default function ProfileStackNavigator() {
         }}
       />
       <Stack.Screen
-        name="Disputes"
-        component={DisputesScreen}
-        options={{
-          headerTitle: '이의제기',
-        }}
-      />
-      <Stack.Screen
-        name="DisputeCreate"
-        component={HelperDisputeSubmitScreen}
-        options={{
-          headerTitle: '이의제기 접수',
-        }}
-      />
-      <Stack.Screen
-        name="DisputeDetail"
-        component={HelperDisputeDetailScreen}
-        options={{
-          headerTitle: '이의제기 상세',
-        }}
-      />
-      <Stack.Screen
         name="HelperDisputeSubmit"
         component={HelperDisputeSubmitScreen}
         options={{
@@ -354,6 +329,13 @@ export default function ProfileStackNavigator() {
         }}
       />
       <Stack.Screen
+        name="AdminIncidentDetail"
+        component={RequesterIncidentDetailScreen}
+        options={{
+          headerTitle: '사고 상세',
+        }}
+      />
+      <Stack.Screen
         name="AdminDeductionList"
         component={AdminDeductionListScreen}
         options={{
@@ -370,44 +352,32 @@ export default function ProfileStackNavigator() {
       <Stack.Screen
         name="DocumentsMenu"
         component={DocumentsMenuScreen}
-        options={{
-          headerTitle: '서류 제출',
-        }}
+        options={{ headerTitle: '서류 제출' }}
       />
       <Stack.Screen
         name="BusinessCertSubmit"
         component={BusinessCertSubmitScreen}
-        options={{
-          headerTitle: '사업자등록증',
-        }}
+        options={{ headerTitle: '사업자등록증' }}
       />
       <Stack.Screen
         name="DriverLicenseSubmit"
         component={DriverLicenseSubmitScreen}
-        options={{
-          headerTitle: '운전면허증',
-        }}
+        options={{ headerTitle: '운전면허증' }}
       />
       <Stack.Screen
         name="CargoLicenseSubmit"
         component={CargoLicenseSubmitScreen}
-        options={{
-          headerTitle: '화물운송종사자격증',
-        }}
+        options={{ headerTitle: '화물운송종사자격증' }}
       />
       <Stack.Screen
         name="VehicleCertSubmit"
         component={VehicleCertSubmitScreen}
-        options={{
-          headerTitle: '차량등록증',
-        }}
+        options={{ headerTitle: '차량등록증' }}
       />
       <Stack.Screen
-        name="TransportContractSubmit"
-        component={TransportContractSubmitScreen}
-        options={{
-          headerTitle: '화물위탁계약서',
-        }}
+        name="ContractSigning"
+        component={ContractSigningScreen}
+        options={{ headerTitle: '화물위탁운송계약서' }}
       />
     </Stack.Navigator>
   );

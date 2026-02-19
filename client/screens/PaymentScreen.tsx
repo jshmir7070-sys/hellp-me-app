@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, StyleSheet, Pressable, ActivityIndicator, Platform, Alert } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { WebView, WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -37,6 +38,7 @@ interface VerifyResult {
 
 export default function PaymentScreen({ navigation, route }: PaymentScreenProps) {
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
   const webViewRef = useRef<WebView>(null);
 
@@ -227,7 +229,7 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
   if (Platform.OS === 'web') {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
+        <View style={[styles.content, { paddingTop: headerHeight + Spacing.md }]}>
           <Card style={styles.webCard}>
             <View style={[styles.iconContainer, { backgroundColor: BrandColors.requesterLight }]}>
               <Icon name="card-outline" size={48} color={BrandColors.requester} />
@@ -279,7 +281,7 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
   if (paymentStatus === 'success') {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
+        <View style={[styles.content, { paddingTop: headerHeight + Spacing.md }]}>
           <Card style={styles.successCard}>
             <View style={[styles.iconContainer, { backgroundColor: BrandColors.successLight }]}>
               <Icon name="checkmark-circle-outline" size={48} color={BrandColors.success} />
@@ -299,7 +301,7 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
   if (paymentStatus === 'failed' || !paymentUrl) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={[styles.content, { paddingTop: insets.top + Spacing.xl }]}>
+        <View style={[styles.content, { paddingTop: headerHeight + Spacing.md }]}>
           <Card style={styles.errorCard}>
             <View style={[styles.iconContainer, { backgroundColor: BrandColors.errorLight }]}>
               <Icon name="alert-circle-outline" size={48} color={BrandColors.error} />
@@ -349,7 +351,7 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
         thirdPartyCookiesEnabled
         onError={(syntheticEvent: any) => {
           const { nativeEvent } = syntheticEvent;
-          if (__DEV__) console.error('WebView error:', nativeEvent);
+          console.error('WebView error:', nativeEvent);
           setPaymentStatus('failed');
           setErrorMessage('결제 페이지를 불러올 수 없습니다');
         }}

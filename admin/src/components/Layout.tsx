@@ -24,6 +24,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Headphones,
+  BarChart3,
+  Building2,
 } from 'lucide-react';
 
 import { Button } from './ui/button';
@@ -78,6 +80,7 @@ const navGroups: NavGroup[] = [
     menuKey: 'menu.settlements',
     items: [
       { href: '/settlements', label: '정산통합관리', icon: <Wallet className="h-5 w-5" />, permission: 'settlements.view' },
+      { href: '/settlement-stats', label: '정산통계', icon: <BarChart3 className="h-5 w-5" />, permission: 'settlements.view' },
     ],
   },
   {
@@ -124,6 +127,7 @@ const navGroups: NavGroup[] = [
     title: '설정',
     menuKey: 'menu.settings',
     items: [
+      { href: '/platform-settings', label: '플랫폼 정보', icon: <Building2 className="h-5 w-5" />, permission: 'superadmin_only' },
       { href: '/notifications', label: '공지/알림', icon: <Bell className="h-5 w-5" />, permission: 'orders.view' },
       { href: '/audit-logs', label: '감사 로그', icon: <ClipboardCheck className="h-5 w-5" />, permission: 'settings.view' },
       { href: '/admin-users', label: '직원/권한 관리', icon: <Lock className="h-5 w-5" />, permission: 'staff.view' },
@@ -170,6 +174,8 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   const checkItemPermission = (item: NavItem) => {
     if (!item.permission) return true;
+    // 슈퍼관리자 전용 메뉴
+    if (item.permission === 'superadmin_only') return isSuperAdmin;
     if (isSuperAdmin) return true;
     return hasPermission(item.permission);
   };

@@ -26,7 +26,6 @@ export type MainTabParamList = {
   WorkStatusTab: undefined;
   SettlementTab: undefined;
   ReviewsTab: undefined;
-  RecruitmentTab: undefined;
   ProfileTab: undefined;
 };
 
@@ -40,7 +39,8 @@ export default function MainTabNavigator() {
   const insets = useSafeAreaInsets();
 
   const isHelper = user?.role === 'helper';
-  const accentColor = isHelper ? BrandColors.helper : BrandColors.requester;
+  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  const accentColor = isAdmin ? BrandColors.helper : isHelper ? BrandColors.helper : BrandColors.requester;
   const showSidebar = (isDesktop || isTablet) && Platform.OS === 'web';
 
   return (
@@ -108,7 +108,7 @@ export default function MainTabNavigator() {
         }}
       />
       
-      {isHelper ? (
+      {isHelper || isAdmin ? (
         <Tab.Screen
           name="OrdersTab"
           component={JobsStackNavigator}
@@ -138,7 +138,7 @@ export default function MainTabNavigator() {
         name="WorkStatusTab"
         component={ClosingStackNavigator}
         options={{
-          title: isHelper ? "마감" : "마감확인",
+          title: isAdmin ? "마감관리" : isHelper ? "마감" : "마감확인",
           tabBarIcon: ({ color, size }) => (
             <Icon name="checkmark-circle-outline" size={size} color={color} />
           ),
@@ -156,6 +156,18 @@ export default function MainTabNavigator() {
               <Icon name="card-outline" size={size} color={color} />
             ),
             tabBarButtonTestID: "tab-settlement",
+          }}
+        />
+      ) : isAdmin ? (
+        <Tab.Screen
+          name="ReviewsTab"
+          component={ReviewStackNavigator}
+          options={{
+            title: "이력/리뷰",
+            tabBarIcon: ({ color, size }) => (
+              <Icon name="list-outline" size={size} color={color} />
+            ),
+            tabBarButtonTestID: "tab-reviews",
           }}
         />
       ) : (

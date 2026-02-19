@@ -14,6 +14,7 @@ export const Colors = {
     backgroundDefault: "#F3F4F6",
     backgroundSecondary: "#E5E7EB",
     backgroundTertiary: "#D1D5DB",
+    border: "#E5E7EB",
   },
   dark: {
     text: "#F9FAFB",
@@ -25,6 +26,7 @@ export const Colors = {
     backgroundDefault: "#1F2937",
     backgroundSecondary: "#374151",
     backgroundTertiary: "#4B5563",
+    border: "#374151",
   },
 };
 
@@ -100,15 +102,45 @@ export const Typography = {
     lineHeight: 28,
     fontWeight: "600" as const,
   },
+  heading2: {
+    fontSize: 22,
+    lineHeight: 30,
+    fontWeight: "700" as const,
+  },
+  heading3: {
+    fontSize: 18,
+    lineHeight: 26,
+    fontWeight: "600" as const,
+  },
+  subheading: {
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: "500" as const,
+  },
   body: {
     fontSize: 16,
     lineHeight: 24,
     fontWeight: "400" as const,
   },
+  label: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "600" as const,
+  },
   small: {
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "400" as const,
+  },
+  caption: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: "400" as const,
+  },
+  button: {
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: "600" as const,
   },
   link: {
     fontSize: 16,

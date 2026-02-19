@@ -187,6 +187,9 @@ export default function ClosingDetailScreen({ route, navigation }: ClosingDetail
         scrollIndicatorInsets={{ bottom: insets.bottom }}
       >
         <Card style={styles.summaryCard}>
+          <ThemedText style={[styles.cardTitle, { color: theme.text }]}>
+            업무 실적
+          </ThemedText>
           <View style={styles.amountSection}>
             <View style={styles.amountRow}>
               <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
@@ -210,12 +213,84 @@ export default function ClosingDetailScreen({ route, navigation }: ClosingDetail
               </ThemedText>
               <ThemedText style={[styles.amountValue, { color: theme.text }]}>
                 {summary?.etcCount || 0}건
+                {summary?.etcPricePerUnit ? ` (${formatCurrency(summary.etcPricePerUnit)}/건)` : ''}
               </ThemedText>
             </View>
           </View>
         </Card>
 
+        <Card style={styles.summaryCard}>
+          <ThemedText style={[styles.cardTitle, { color: theme.text }]}>
+            금액 정보
+          </ThemedText>
+          <View style={styles.amountSection}>
+            <View style={styles.amountRow}>
+              <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
+                공급가액
+              </ThemedText>
+              <ThemedText style={[styles.amountValue, { color: theme.text }]}>
+                {formatCurrency(summary?.supplyAmount || 0)}
+              </ThemedText>
+            </View>
+            <View style={styles.amountRow}>
+              <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
+                부가세 (10%)
+              </ThemedText>
+              <ThemedText style={[styles.amountValue, { color: theme.text }]}>
+                {formatCurrency(summary?.vatAmount || 0)}
+              </ThemedText>
+            </View>
+            {(summary?.etcCount || 0) > 0 && (summary?.etcAmount || 0) > 0 ? (
+              <View style={styles.amountRow}>
+                <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
+                  기타 비용
+                </ThemedText>
+                <ThemedText style={[styles.amountValue, { color: theme.text }]}>
+                  {formatCurrency(summary?.etcAmount || 0)}
+                </ThemedText>
+              </View>
+            ) : null}
+            <View style={[styles.amountRow, styles.totalRow, { borderTopColor: theme.backgroundSecondary }]}>
+              <ThemedText style={[styles.totalLabel, { color: theme.text }]}>
+                총 금액
+              </ThemedText>
+              <ThemedText style={[styles.totalValue, { color: BrandColors.requester }]}>
+                {formatCurrency(summary?.totalAmount || 0)}
+              </ThemedText>
+            </View>
+            <View style={styles.amountRow}>
+              <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
+                선금 (결제 완료)
+              </ThemedText>
+              <ThemedText style={[styles.amountValue, { color: BrandColors.success }]}>
+                -{formatCurrency(summary?.depositAmount || 0)}
+              </ThemedText>
+            </View>
+            <View style={[styles.amountRow, styles.balanceRow]}>
+              <ThemedText style={[styles.totalLabel, { color: theme.text }]}>
+                잔금 (결제 필요)
+              </ThemedText>
+              <ThemedText style={[styles.totalValue, { color: BrandColors.warning }]}>
+                {formatCurrency(summary?.balanceAmount || 0)}
+              </ThemedText>
+            </View>
+          </View>
+        </Card>
+
+        {summary?.helperClosingText ? (
+          <Card style={styles.summaryCard}>
+            <ThemedText style={[styles.cardTitle, { color: theme.text }]}>
+              헬퍼 메모
+            </ThemedText>
+            <ThemedText style={[styles.memoText, { color: theme.text }]}>
+              {summary.helperClosingText}
+            </ThemedText>
+          </Card>
+        ) : null}
+
         {renderImageGrid(summary?.deliveryHistoryImages || [], '집배송 이력 이미지', true)}
+
+        {renderImageGrid(summary?.etcImages || [], '추가 참고 이미지')}
 
         {summary?.closingStatus === 'submitted' ? (
           <View style={styles.actionButtons}>
@@ -291,6 +366,31 @@ const styles = StyleSheet.create({
   amountValue: {
     ...Typography.body,
     fontWeight: '600',
+  },
+  cardTitle: {
+    ...Typography.h4,
+    fontWeight: '700',
+    marginBottom: Spacing.md,
+  },
+  totalRow: {
+    borderTopWidth: 1,
+    paddingTop: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  totalLabel: {
+    ...Typography.body,
+    fontWeight: '700',
+  },
+  totalValue: {
+    ...Typography.h4,
+    fontWeight: '700',
+  },
+  balanceRow: {
+    marginTop: Spacing.xs,
+  },
+  memoText: {
+    ...Typography.body,
+    lineHeight: 22,
   },
   section: {
     marginBottom: Spacing.lg,

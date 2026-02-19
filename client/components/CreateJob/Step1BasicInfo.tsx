@@ -1,9 +1,8 @@
-import React, { useRef, useEffect } from "react";
+import React from "react";
 import { View, TextInput, Pressable, StyleSheet, ScrollView } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { Icon } from "@/components/Icon";
 import { Colors, Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
-import { useFormValidation } from "@/hooks/useFormValidation";
 import { Step1Props } from "./types";
 
 export default function Step1BasicInfo({
@@ -21,65 +20,14 @@ export default function Step1BasicInfo({
   onBack,
   theme,
   isDark,
-  bottomPadding,
 }: Step1Props) {
-
-  // Refs for auto-scroll and focus
-  const scrollViewRef = useRef<ScrollView>(null);
-  const courierCompanyRef = useRef<View>(null);
-  const otherCompanyRef = useRef<TextInput>(null);
-  const coldTruckCompanyRef = useRef<View>(null);
-
-  const { validate, registerField } = useFormValidation();
-
-  // Register fields based on active tab
-  useEffect(() => {
-    if (activeTab === "택배사") {
-      registerField('courierCompany', courierCompanyRef, scrollViewRef);
-    } else if (activeTab === "기타택배") {
-      registerField('otherCompany', otherCompanyRef, scrollViewRef);
-    } else if (activeTab === "냉탑전용") {
-      registerField('coldTruckCompany', coldTruckCompanyRef, scrollViewRef);
-    }
-  }, [activeTab]);
-
+  
   const handleNext = () => {
-    let validationRules: any[] = [];
-
-    if (activeTab === "택배사") {
-      validationRules = [
-        {
-          fieldName: 'courierCompany',
-          displayName: '택배사',
-          value: courierForm.company,
-          required: true,
-        },
-      ];
-    } else if (activeTab === "기타택배") {
-      validationRules = [
-        {
-          fieldName: 'otherCompany',
-          displayName: '업체명',
-          value: otherCourierForm.companyName,
-          required: true,
-          minLength: 2,
-          errorMessage: '업체명은 최소 2자 이상 입력해주세요.',
-        },
-      ];
-    } else if (activeTab === "냉탑전용") {
-      validationRules = [
-        {
-          fieldName: 'coldTruckCompany',
-          displayName: '냉탑 업체',
-          value: coldTruckForm.company,
-          required: true,
-        },
-      ];
-    }
-
-    const isValid = validate(validationRules);
-
-    if (isValid) {
+    if (activeTab === "택배사" && courierForm.company) {
+      onNext();
+    } else if (activeTab === "기타택배" && otherCourierForm.companyName) {
+      onNext();
+    } else if (activeTab === "냉탑전용" && coldTruckForm.company.trim().length >= 2) {
       onNext();
     }
   };
@@ -87,11 +35,11 @@ export default function Step1BasicInfo({
   const isValid = 
     (activeTab === "택배사" && !!courierForm.company) ||
     (activeTab === "기타택배" && !!otherCourierForm.companyName) ||
-    (activeTab === "냉탑전용" && !!coldTruckForm.company);
+    (activeTab === "냉탑전용" && coldTruckForm.company.trim().length >= 2);
 
   return (
     <View style={styles.container}>
-      <ScrollView ref={scrollViewRef} style={{ flex: 1 }} contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
             1단계: 기본 정보
@@ -99,7 +47,7 @@ export default function Step1BasicInfo({
           <ThemedText style={[styles.stepDescription, { color: Colors.light.tabIconDefault }]}>
             {activeTab === "택배사" && "택배사를 선택해주세요"}
             {activeTab === "기타택배" && "업체명을 입력해주세요"}
-            {activeTab === "냉탑전용" && "냉탑 업체를 선택해주세요"}
+            {activeTab === "냉탑전용" && "냉탑 업체명을 입력해주세요"}
           </ThemedText>
         </View>
 
@@ -109,7 +57,6 @@ export default function Step1BasicInfo({
               택배사 선택 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
             <Pressable
-              ref={courierCompanyRef}
               style={[
                 styles.selectButton,
                 {
@@ -138,7 +85,6 @@ export default function Step1BasicInfo({
               업체명 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
             <TextInput
-              ref={otherCompanyRef}
               style={[
                 styles.input,
                 {
@@ -147,7 +93,7 @@ export default function Step1BasicInfo({
                   borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
                 },
               ]}
-              placeholder="업체명 입력 (최소 2자)"
+              placeholder="업체명 입력"
               placeholderTextColor={Colors.light.tabIconDefault}
               value={otherCourierForm.companyName}
               onChangeText={(value) => setOtherCourierForm({ ...otherCourierForm, companyName: value })}
@@ -158,29 +104,22 @@ export default function Step1BasicInfo({
         {activeTab === "냉탑전용" && (
           <View style={styles.section}>
             <ThemedText style={[styles.label, { color: theme.text }]}>
-              냉탑 업체 선택 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
+              냉탑 업체명 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
             </ThemedText>
-            <Pressable
-              ref={coldTruckCompanyRef}
+            <TextInput
               style={[
-                styles.selectButton,
+                styles.input,
                 {
                   backgroundColor: theme.backgroundDefault,
+                  color: theme.text,
                   borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
                 },
               ]}
-              onPress={() => onOpenSelectModal("냉탑업체", coldTruckOptions, (value) => {
-                setColdTruckForm({ ...coldTruckForm, company: value });
-              })}
-            >
-              <ThemedText style={[
-                styles.selectButtonText,
-                { color: coldTruckForm.company ? theme.text : Colors.light.tabIconDefault }
-              ]}>
-                {coldTruckForm.company || "냉탑 업체 선택"}
-              </ThemedText>
-              <Icon name="chevron-down-outline" size={20} color={theme.text} />
-            </Pressable>
+              placeholder="업체명 입력 (최소 2자)"
+              placeholderTextColor={Colors.light.tabIconDefault}
+              value={coldTruckForm.company}
+              onChangeText={(value) => setColdTruckForm({ ...coldTruckForm, company: value })}
+            />
           </View>
         )}
       </ScrollView>
@@ -208,7 +147,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.lg,
-    paddingBottom: Spacing.lg,
+    paddingBottom: 100,
   },
   section: {
     marginBottom: Spacing.xl,
@@ -244,14 +183,15 @@ const styles = StyleSheet.create({
     ...Typography.body,
   },
   footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     padding: Spacing.lg,
-    flexDirection: 'row',
-    gap: Spacing.md,
     borderTopWidth: 1,
     borderTopColor: Colors.light.backgroundSecondary,
   },
   button: {
-    flex: 1,
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.md,
     alignItems: 'center',

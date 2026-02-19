@@ -16,13 +16,13 @@ import { useScreenOptions } from "@/hooks/useScreenOptions";
 export type RootStackParamList = {
   Main: undefined;
   Modal: undefined;
-  QRScanner: { contractId?: string; type?: 'checkin' };
+  QRScanner: { contractId?: string; orderId?: string; type?: 'checkin' | 'start_work' };
   WorkProof: { orderId?: string; contractId?: string; type?: 'pickup' | 'delivery' | 'other' };
   HelperOnboarding: undefined;
   ContractSigning: undefined;
   Payment: { orderId?: string; contractId?: string; amount?: number; paymentType?: 'deposit' | 'balance'; orderTitle?: string };
   Contract: { contractId?: string; orderId?: string };
-  CreateContract: { orderId: number };
+  CreateContract: { orderId: number; editMode?: boolean };
   IdentityVerification: { returnScreen?: string; purpose?: 'signup' | 'profile' | 'payment' };
 };
 

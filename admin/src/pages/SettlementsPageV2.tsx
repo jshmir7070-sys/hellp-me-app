@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useConfirm } from '@/components/common/ConfirmDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -135,6 +136,7 @@ function getMonthRange(year: number, month: number) {
 export default function SettlementsPageV2() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const confirm = useConfirm();
   
   const [activeTab, setActiveTab] = useState<'daily' | 'helper' | 'requester' | 'tax-invoices'>('daily');
   const [searchTerm, setSearchTerm] = useState('');
@@ -149,6 +151,7 @@ export default function SettlementsPageV2() {
   const monthRange = getMonthRange(selectedYear, selectedMonth);
   
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
+  const [selectedDailySettlement, setSelectedDailySettlement] = useState<DailySettlement | null>(null);
   const [selectedHelper, setSelectedHelper] = useState<HelperSettlement | null>(null);
   const [selectedRequester, setSelectedRequester] = useState<RequesterSettlement | null>(null);
 
@@ -310,7 +313,7 @@ export default function SettlementsPageV2() {
     queryClient.invalidateQueries({ queryKey: ['/api/admin/settlements/daily'] });
     queryClient.invalidateQueries({ queryKey: ['/api/admin/settlements/helper'] });
     queryClient.invalidateQueries({ queryKey: ['/api/admin/settlements/requester'] });
-    toast({ title: '데이터를 새로고침했습니다.' });
+    toast({ title: '데이터를 새로고침했습니다.', variant: 'success' });
   };
 
   const handleDownloadExcel = () => {
@@ -364,7 +367,7 @@ export default function SettlementsPageV2() {
     }
 
     if (data.length === 0) {
-      toast({ title: '다운로드할 데이터가 없습니다.', variant: 'destructive' });
+      toast({ title: '다운로드할 데이터가 없습니다.', variant: 'warning' });
       return;
     }
 
@@ -380,7 +383,7 @@ export default function SettlementsPageV2() {
     link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
-    toast({ title: 'Excel 다운로드 완료' });
+    toast({ title: 'Excel 다운로드 완료', variant: 'success' });
   };
 
   const handlePrevMonth = () => {
@@ -417,7 +420,7 @@ export default function SettlementsPageV2() {
       const orders = data.orders || [];
 
       if (orders.length === 0) {
-        toast({ title: '해당 기간 거래 내역이 없습니다.', variant: 'destructive' });
+        toast({ title: '해당 기간 거래 내역이 없습니다.', variant: 'warning' });
         return;
       }
 
@@ -456,9 +459,9 @@ export default function SettlementsPageV2() {
       link.click();
       URL.revokeObjectURL(url);
 
-      toast({ title: '거래명세서 다운로드 완료' });
+      toast({ title: '거래명세서 다운로드 완료', variant: 'success' });
     } catch (err: any) {
-      toast({ title: err.message || '거래명세서 다운로드 실패', variant: 'destructive' });
+      toast({ title: err.message || '거래명세서 다운로드 실패', variant: 'error' });
     }
   };
 
@@ -490,12 +493,13 @@ export default function SettlementsPageV2() {
       toast({
         title: '정산 확정 완료',
         description: `총 ${result.total}건 중 ${result.success}건 확정 완료${result.failed > 0 ? ` (${result.failed}건 실패/이미처리됨)` : ''}`,
+        variant: 'success',
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/settlements/daily'] });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/settlements/helper'] });
     },
     onError: (err: any) => {
-      toast({ title: err.message || '정산 확정 실패', variant: 'destructive' });
+      toast({ title: err.message || '정산 확정 실패', variant: 'error' });
     },
   });
 
@@ -540,10 +544,11 @@ export default function SettlementsPageV2() {
         description: result.issued
           ? '세금계산서가 성공적으로 발행되었습니다.'
           : result.message || '세금계산서가 생성되었습니다.',
+        variant: 'success',
       });
     },
     onError: (err: any) => {
-      toast({ title: err.message || '세금계산서 발행 실패', variant: 'destructive' });
+      toast({ title: err.message || '세금계산서 발행 실패', variant: 'error' });
     },
   });
 
@@ -582,6 +587,7 @@ export default function SettlementsPageV2() {
       toast({
         title: '입금 확인 완료',
         description: `총 ${result.total}건 중 ${result.success}건 처리 완료`,
+        variant: 'success',
       });
       setShowPaymentConfirm(false);
       setPaymentForm({ paymentMethod: 'bank_transfer', transactionId: '', paidAmount: '', notes: '' });
@@ -589,7 +595,7 @@ export default function SettlementsPageV2() {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/settlements/daily'] });
     },
     onError: (err: any) => {
-      toast({ title: err.message || '입금 확인 실패', variant: 'destructive' });
+      toast({ title: err.message || '입금 확인 실패', variant: 'error' });
     },
   });
 
@@ -607,11 +613,11 @@ export default function SettlementsPageV2() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: '세금계산서가 발행되었습니다.' });
+      toast({ title: '세금계산서가 발행되었습니다.', variant: 'success' });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/tax-invoices'] });
     },
     onError: (err: any) => {
-      toast({ title: err.message || '세금계산서 발행 실패', variant: 'destructive' });
+      toast({ title: err.message || '세금계산서 발행 실패', variant: 'error' });
     },
   });
 
@@ -632,10 +638,10 @@ export default function SettlementsPageV2() {
       return data;
     },
     onSuccess: () => {
-      toast({ title: 'PDF 다운로드 시작' });
+      toast({ title: 'PDF 다운로드 시작', variant: 'success' });
     },
     onError: (err: any) => {
-      toast({ title: err.message || 'PDF 다운로드 실패', variant: 'destructive' });
+      toast({ title: err.message || 'PDF 다운로드 실패', variant: 'error' });
     },
   });
 
@@ -657,11 +663,12 @@ export default function SettlementsPageV2() {
       toast({
         title: '월 일괄 세금계산서 생성 완료',
         description: `${data.created || 0}건 생성, ${data.skipped || 0}건 스킵`,
+        variant: 'success',
       });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/tax-invoices'] });
     },
     onError: (err: any) => {
-      toast({ title: err.message || '일괄 생성 실패', variant: 'destructive' });
+      toast({ title: err.message || '일괄 생성 실패', variant: 'error' });
     },
   });
 
@@ -987,9 +994,9 @@ export default function SettlementsPageV2() {
               variant="ghost"
               size="sm"
               className="h-7 px-2 text-xs text-blue-600"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
-                if (window.confirm('이 세금계산서를 발행하시겠습니까?')) {
+                if (await confirm({ title: '세금계산서 발행', description: '이 세금계산서를 발행하시겠습니까?' })) {
                   issueTaxInvoiceMutation.mutate(row.id);
                 }
               }}
@@ -1141,7 +1148,7 @@ export default function SettlementsPageV2() {
               <ExcelTable
                 columns={dailyColumns}
                 data={filteredDailySettlements.slice((dailyPage - 1) * itemsPerPage, dailyPage * itemsPerPage)}
-                onRowClick={(row) => console.log('Detail:', row)}
+                onRowClick={(row) => setSelectedDailySettlement(row)}
                 selectable={true}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
@@ -1331,8 +1338,8 @@ export default function SettlementsPageV2() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    if (window.confirm(`${selectedYear}년 ${monthNames[selectedMonth]} 세금계산서를 일괄 생성하시겠습니까?`)) {
+                  onClick={async () => {
+                    if (await confirm({ title: '세금계산서 일괄 생성', description: `${selectedYear}년 ${monthNames[selectedMonth]} 세금계산서를 일괄 생성하시겠습니까?` })) {
                       generateMonthlyTaxInvoicesMutation.mutate();
                     }
                   }}
@@ -1456,8 +1463,8 @@ export default function SettlementsPageV2() {
                 )}
                 {selectedTaxInvoice.status === 'draft' && (
                   <Button
-                    onClick={() => {
-                      if (window.confirm('이 세금계산서를 발행하시겠습니까?')) {
+                    onClick={async () => {
+                      if (await confirm({ title: '세금계산서 발행', description: '이 세금계산서를 발행하시겠습니까?' })) {
                         issueTaxInvoiceMutation.mutate(selectedTaxInvoice.id);
                         setSelectedTaxInvoice(null);
                       }
@@ -1565,8 +1572,8 @@ export default function SettlementsPageV2() {
                   거래명세서
                 </Button>
                 <Button
-                  onClick={() => {
-                    if (window.confirm(`${selectedHelper.helperName} 헬퍼의 ${selectedYear}년 ${monthNames[selectedMonth]} 정산을 확정하시겠습니까?`)) {
+                  onClick={async () => {
+                    if (await confirm({ title: '정산 확정', description: `${selectedHelper.helperName} 헬퍼의 ${selectedYear}년 ${monthNames[selectedMonth]} 정산을 확정하시겠습니까?` })) {
                       confirmSettlementMutation.mutate(selectedHelper.helperId);
                     }
                   }}
@@ -1742,8 +1749,8 @@ export default function SettlementsPageV2() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    if (window.confirm(`${selectedRequester.requesterName}님의 세금계산서를 발행하시겠습니까?`)) {
+                  onClick={async () => {
+                    if (await confirm({ title: '세금계산서 발행', description: `${selectedRequester.requesterName}님의 세금계산서를 발행하시겠습니까?` })) {
                       createTaxInvoiceMutation.mutate(selectedRequester.requesterId);
                     }
                   }}
@@ -1773,6 +1780,127 @@ export default function SettlementsPageV2() {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 일일 정산 상세 모달 */}
+      <Dialog open={!!selectedDailySettlement} onOpenChange={() => setSelectedDailySettlement(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>일일 정산 상세</DialogTitle>
+          </DialogHeader>
+          {selectedDailySettlement && (
+            <div className="space-y-6">
+              {/* 기본 정보 */}
+              <div className="grid grid-cols-2 gap-4 p-4 bg-muted rounded-lg">
+                <div>
+                  <div className="text-sm text-muted-foreground">오더번호</div>
+                  <div className="font-medium">#{selectedDailySettlement.orderId}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">정산 ID</div>
+                  <div className="font-mono text-sm">#{selectedDailySettlement.id}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">헬퍼</div>
+                  <div>
+                    <div className="font-medium">{selectedDailySettlement.helperName || '-'}</div>
+                    {selectedDailySettlement.helperPhone && (
+                      <div className="text-xs text-muted-foreground">{selectedDailySettlement.helperPhone}</div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">요청자</div>
+                  <div className="font-medium">{selectedDailySettlement.requesterName || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">카테고리</div>
+                  <Badge variant="outline">
+                    {CATEGORY_LABELS[selectedDailySettlement.category || ''] || selectedDailySettlement.category || '-'}
+                  </Badge>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">운송사</div>
+                  <div className="font-medium">{selectedDailySettlement.courierCompany || '-'}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">정산일</div>
+                  <div className="font-medium">{new Date(selectedDailySettlement.createdAt).toLocaleDateString('ko-KR')}</div>
+                </div>
+              </div>
+
+              {/* 배송 수량 */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-lg">배송 수량</h3>
+                <div className="border rounded-lg divide-y">
+                  <div className="flex justify-between p-3 hover:bg-muted/50">
+                    <span className="text-muted-foreground">배송 완료</span>
+                    <span className="font-medium">{selectedDailySettlement.deliveredCount}건</span>
+                  </div>
+                  <div className="flex justify-between p-3 hover:bg-muted/50">
+                    <span className="text-muted-foreground">반품</span>
+                    <span className="font-medium">{selectedDailySettlement.returnedCount}건</span>
+                  </div>
+                  <div className="flex justify-between p-3 hover:bg-muted/50">
+                    <span className="text-muted-foreground">기타</span>
+                    <span className="font-medium">{selectedDailySettlement.etcCount}건</span>
+                  </div>
+                  <div className="flex justify-between p-3 hover:bg-muted/50">
+                    <span className="text-muted-foreground">건당 단가</span>
+                    <span className="font-medium">{formatAmount(selectedDailySettlement.pricePerBox)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 추가 비용 */}
+              {selectedDailySettlement.extraCostsJson && selectedDailySettlement.extraCostsJson.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold text-lg">추가 비용</h3>
+                  <div className="border rounded-lg divide-y">
+                    {selectedDailySettlement.extraCostsJson.map((item, idx) => (
+                      <div key={idx} className="flex justify-between p-3 hover:bg-muted/50">
+                        <span className="text-muted-foreground">{item.name} (x{item.quantity})</span>
+                        <span className="font-medium">{formatAmount(item.unitPrice * item.quantity)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 정산 내역 */}
+              <div className="space-y-3">
+                <h3 className="font-semibold text-lg">정산 내역</h3>
+                <div className="border rounded-lg divide-y">
+                  <div className="flex justify-between p-3 hover:bg-muted/50 bg-blue-50">
+                    <span className="font-semibold">최종 금액</span>
+                    <span className="font-bold text-blue-600">{formatAmount(selectedDailySettlement.finalTotal)}</span>
+                  </div>
+                  <div className="flex justify-between p-3 hover:bg-muted/50">
+                    <span className="text-muted-foreground">플랫폼 수수료</span>
+                    <span className="font-medium text-red-600">-{formatAmount(selectedDailySettlement.platformFee)}</span>
+                  </div>
+                  <div className="flex justify-between p-3 bg-green-50">
+                    <span className="font-bold">헬퍼 지급액</span>
+                    <span className="font-bold text-xl text-green-600">{formatAmount(selectedDailySettlement.driverPayout)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 마감 메모 */}
+              {selectedDailySettlement.closingMemo && (
+                <div>
+                  <p className="text-sm text-muted-foreground">마감 메모</p>
+                  <p className="mt-1 text-sm whitespace-pre-wrap">{selectedDailySettlement.closingMemo}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedDailySettlement(null)}>
+              닫기
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -53,15 +53,15 @@ export default function NotificationsScreen() {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'order':
-        return 'package-variant-closed';
+        return 'cube-outline';
       case 'contract':
-        return 'file-document-outline';
+        return 'document-text-outline';
       case 'payment':
-        return 'credit-card-outline';
+        return 'card-outline';
       case 'message':
-        return 'message-outline';
+        return 'chatbox-outline';
       default:
-        return 'bell-outline';
+        return 'notifications-outline';
     }
   };
 
@@ -133,7 +133,7 @@ export default function NotificationsScreen() {
   const renderEmpty = () => (
     <Card style={styles.emptyCard}>
       <View style={[styles.emptyIconContainer, { backgroundColor: isHelper ? BrandColors.helperLight : BrandColors.requesterLight }]}>
-        <Icon name="bell-off-outline" size={32} color={primaryColor} />
+        <Icon name="notifications-outline" size={32} color={primaryColor} />
       </View>
       <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>알림이 없습니다</ThemedText>
       <ThemedText style={[styles.emptySubtitle, { color: theme.tabIconDefault }]}>

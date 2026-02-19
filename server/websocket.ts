@@ -2,8 +2,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
 import type { IncomingMessage } from "http";
 import jwt from "jsonwebtoken";
-
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
+import { EFFECTIVE_JWT_SECRET } from "./config/jwt";
 
 interface UserConnection {
   userId: string;
@@ -32,14 +31,14 @@ class NotificationWebSocket {
       }
 
       try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
+        const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET) as any;
         
         // userId 일치 확인
         if (!decoded.userId || decoded.userId !== userId) {
           ws.close(4003, "Invalid token");
           return;
         }
-      } catch (err) {
+      } catch (err: any) {
         ws.close(4002, "Invalid or expired token");
         return;
       }

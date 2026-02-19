@@ -7,7 +7,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Icon } from "@/components/Icon";
 import * as ImagePicker from 'expo-image-picker';
-import { compressImage } from "@/lib/image-upload";
 
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
@@ -15,8 +14,7 @@ import { Card } from "@/components/Card";
 import { OrderCard } from "@/components/order/OrderCard";
 import { adaptHelperMyOrder, type OrderCardDTO } from "@/adapters/orderCardAdapter";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
-import { apiRequest, apiUpload } from "@/lib/query-client";
-import { QueryErrorState } from "@/components/QueryErrorState";
+import { apiRequest, getApiUrl, getAuthToken } from "@/lib/query-client";
 
 type ClosingStackParamList = {
   HelperClosing: undefined;
@@ -39,11 +37,9 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
   const tabBarHeight = useBottomTabBarHeight();
   const queryClient = useQueryClient();
 
-  const { data: orders = [], isLoading, refetch, isRefetching, isError, error } = useQuery<any[]>({
+  const { data: orders = [], isLoading, refetch, isRefetching } = useQuery<any[]>({
     queryKey: ['/api/helper/my-orders'],
   });
-
-  if (isError) return <QueryErrorState error={error as Error} onRetry={refetch} />;
 
   const inProgressOrders = React.useMemo(() => {
     return orders
@@ -62,7 +58,9 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
   }, [navigation]);
 
   const handleCardAction = useCallback((action: string, item: OrderCardDTO) => {
-    if (action === 'CLOSE' || action === 'close') {
+    if (action === 'CLOSE' || action === 'close' || action === 'SUBMIT_CLOSING') {
+      handleCloseOrder(item);
+    } else if (action === 'VIEW_DETAIL' || action === 'VIEW_CLOSING') {
       handleCloseOrder(item);
     }
   }, [handleCloseOrder]);
@@ -122,7 +120,6 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
               key={order.orderId}
               data={order}
               context="helper_my_orders"
-              onAction={handleCardAction}
               onPress={() => handleCloseOrder(order)}
             />
           ))}
@@ -271,46 +268,53 @@ export function ClosingInputScreen({ route, navigation }: any) {
 
   const uploadImages = async (images: UploadedImage[]): Promise<string[]> => {
     const fileKeys: string[] = [];
-
+    const token = await getAuthToken();
+    
     for (const img of images) {
       try {
-        // 이미지 압축 (1200x1200, quality 0.7 JPEG)
-        let imageUri = img.uri;
-        if (Platform.OS !== 'web') {
-          try {
-            imageUri = await compressImage(img.uri, { maxWidth: 1200, maxHeight: 1200, quality: 0.7 });
-          } catch (compressErr) {
-            console.warn("Image compression failed, using original:", compressErr);
-          }
-        }
-
         const formData = new FormData();
-        const filename = imageUri.split('/').pop() || 'image.jpg';
-        const mimeType = 'image/jpeg'; // 압축 후 항상 JPEG
-
+        const filename = img.uri.split('/').pop() || 'image.jpg';
+        const ext = filename.split('.').pop()?.toLowerCase() || 'jpg';
+        const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+        
         if (Platform.OS === 'web') {
           const response = await fetch(img.uri);
           const blob = await response.blob();
           formData.append('file', blob, filename);
         } else {
           formData.append('file', {
-            uri: imageUri,
+            uri: img.uri,
             name: filename,
             type: mimeType,
           } as any);
         }
-
+        
         formData.append('imageType', img.type);
-
-        const uploadRes = await apiUpload('/api/upload/closing-image', formData);
-        const data = await uploadRes.json();
-        fileKeys.push(data.fileKey);
+        
+        const headers: Record<string, string> = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        
+        const uploadRes = await fetch(new URL('/api/upload/closing-image', getApiUrl()).toString(), {
+          method: 'POST',
+          body: formData,
+          headers,
+          credentials: 'include',
+        });
+        
+        if (uploadRes.ok) {
+          const data = await uploadRes.json();
+          fileKeys.push(data.fileKey);
+        } else {
+          const errorText = await uploadRes.text();
+          console.error('Upload failed:', uploadRes.status, errorText);
+        }
       } catch (err) {
         console.error('Upload error:', err);
-        Alert.alert('업로드 실패', `이미지 업로드에 실패했습니다. 네트워크 상태를 확인해주세요.`);
       }
     }
-
+    
     return fileKeys;
   };
 
@@ -320,12 +324,7 @@ export function ClosingInputScreen({ route, navigation }: any) {
       
       const deliveryHistoryFileKeys = await uploadImages(deliveryHistoryImages);
       const etcFileKeys = await uploadImages(etcImages);
-
-      // 필수 이미지(집배송 이력) 업로드 실패 시 제출 중단
-      if (deliveryHistoryImages.length > 0 && deliveryHistoryFileKeys.length === 0) {
-        throw new Error('집배송 이력 이미지 업로드에 실패했습니다. 다시 시도해주세요.');
-      }
-
+      
       const res = await apiRequest('POST', `/api/orders/${orderId}/close`, {
         text: closingText,
         deliveredCount: parseInt(deliveredCount) || 0,
@@ -421,14 +420,8 @@ export function ClosingInputScreen({ route, navigation }: any) {
       }}
     >
       <Card style={styles.orderSummary}>
-        <ThemedText style={[styles.orderLabel, { color: theme.tabIconDefault }]}>
-          오더 정보
-        </ThemedText>
         <ThemedText style={[styles.orderTitle, { color: theme.text }]}>
-          {orderDetail?.carrierName || '운송사'} - {orderDetail?.vehicleType || '차종'}
-        </ThemedText>
-        <ThemedText style={[styles.orderPeriod, { color: theme.tabIconDefault }]}>
-          {orderDetail?.workStartDate || '-'} ~ {orderDetail?.workEndDate || '-'}
+          오더 #{orderId}
         </ThemedText>
       </Card>
 

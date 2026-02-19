@@ -84,7 +84,8 @@ function HelperScanView({
   const [isVerifying, setIsVerifying] = useState(false);
 
   const handleScanQR = () => {
-    navigation.navigate('QRScanner', { type: 'checkin' });
+    // QRScanner는 RootStack에 등록됨 - ProfileStack → MainTab → RootStack
+    (navigation.getParent()?.getParent() as any)?.navigate('QRScanner', { type: 'checkin' });
   };
 
   const handleVerifyCode = async () => {
@@ -250,28 +251,31 @@ function RequesterQRView({
     queryKey: ['/api/requesters/me/personal-code'],
   });
 
-  const qrCode = personalData?.personalCode || '';
+  // QR 이미지에는 JSON 데이터를 인코딩 (서버 /api/checkin/qr 가 기대하는 형식)
+  const qrValue = qrData ? JSON.stringify(qrData) : '';
+  // 12자리 코드는 텍스트로 표시/공유용
+  const personalCode = personalData?.personalCode || '';
   const requesterName = qrData?.requesterName || user?.name || '-';
   const requesterPhone = qrData?.requesterPhone || user?.phoneNumber || '-';
 
   const handleCopy = async () => {
-    if (qrCode) {
-      await Clipboard.setStringAsync(qrCode);
+    if (personalCode) {
+      await Clipboard.setStringAsync(personalCode);
       if (Platform.OS !== 'web') {
-        Alert.alert('복사됨', 'QR 코드가 클립보드에 복사되었습니다.');
+        Alert.alert('복사됨', 'QR 번호가 클립보드에 복사되었습니다.');
       }
     }
   };
 
   const handleShare = async () => {
-    if (!qrCode) return;
-    
+    if (!personalCode) return;
+
     try {
       await Share.share({
-        message: `Hellp Me 출근용 QR\n코드: ${qrCode}\n이름: ${requesterName}\n전화번호: ${requesterPhone}`,
+        message: `Hellp Me 출근용 QR\n코드: ${personalCode}\n이름: ${requesterName}\n전화번호: ${requesterPhone}`,
       });
     } catch (error) {
-      // Share cancelled or failed
+      // Share cancelled or failed silently
     }
   };
 
@@ -298,9 +302,9 @@ function RequesterQRView({
         </ThemedText>
 
         <View style={[styles.qrCodeContainer, { backgroundColor: '#FFFFFF' }]}>
-          {qrCode ? (
+          {qrValue ? (
             <QRCode
-              value={qrCode}
+              value={qrValue}
               size={160}
               color="#000000"
               backgroundColor="#FFFFFF"
@@ -315,7 +319,7 @@ function RequesterQRView({
         <View style={[styles.infoContainer, { backgroundColor: theme.backgroundDefault }]}>
           <View style={styles.infoRow}>
             <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>QR 번호</ThemedText>
-            <ThemedText style={[styles.infoValue, { color: theme.text }]}>{qrCode || '-'}</ThemedText>
+            <ThemedText style={[styles.infoValue, { color: theme.text }]}>{personalCode || '-'}</ThemedText>
           </View>
           <View style={[styles.infoDivider, { backgroundColor: theme.tabIconDefault }]} />
           <View style={styles.infoRow}>

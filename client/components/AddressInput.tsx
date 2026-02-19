@@ -119,7 +119,7 @@ export function AddressInput({ value, onChangeAddress, placeholder = "주소를 
               value={searchQuery}
               onChangeText={setSearchQuery}
               onSubmitEditing={searchAddress}
-              returnKeyType="search-outline"
+              returnKeyType="search"
               autoFocus
             />
             <Pressable

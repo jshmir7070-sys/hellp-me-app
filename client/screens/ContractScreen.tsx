@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, TextInput, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useHeaderHeight } from '@react-navigation/elements';
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -9,6 +10,7 @@ import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
+import { SignaturePad } from '@/components/SignaturePad';
 import { Spacing, BorderRadius, Typography, BrandColors, Colors } from '@/constants/theme';
 import { apiRequest } from '@/lib/query-client';
 
@@ -48,6 +50,7 @@ interface Contract {
 
 export default function ContractScreen({ navigation, route }: ContractScreenProps) {
   const insets = useSafeAreaInsets();
+  const headerHeight = useHeaderHeight();
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -74,7 +77,7 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/contracts/${contractId}`] });
       queryClient.invalidateQueries({ queryKey: ['/api/contracts'] });
-      
+
       if (Platform.OS !== 'web') {
         Alert.alert('서명 완료', '계약서 서명이 완료되었습니다.', [
           { text: '확인', onPress: () => navigation.goBack() }
@@ -154,7 +157,7 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <ScrollView
         contentContainerStyle={{
-          paddingTop: Spacing.lg,
+          paddingTop: headerHeight + Spacing.md,
           paddingBottom: insets.bottom + 100,
           paddingHorizontal: Spacing.lg,
         }}
@@ -173,21 +176,21 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
 
         <Card style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>주문 정보</ThemedText>
-          
+
           <View style={styles.infoRow}>
             <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>주문명</ThemedText>
             <ThemedText style={[styles.infoValue, { color: theme.text }]}>
               {contract.orderTitle || `주문 #${contract.orderId}`}
             </ThemedText>
           </View>
-          
+
           <View style={styles.infoRow}>
             <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>픽업지</ThemedText>
             <ThemedText style={[styles.infoValue, { color: theme.text }]}>
               {contract.pickupAddress || '미정'}
             </ThemedText>
           </View>
-          
+
           <View style={styles.infoRow}>
             <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>배송지</ThemedText>
             <ThemedText style={[styles.infoValue, { color: theme.text }]}>
@@ -198,21 +201,21 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
 
         <Card style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>계약 조건</ThemedText>
-          
+
           <View style={styles.infoRow}>
             <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>근무기간</ThemedText>
             <ThemedText style={[styles.infoValue, { color: theme.text }]}>
               {formatDate(contract.startDate)} ~ {formatDate(contract.endDate)}
             </ThemedText>
           </View>
-          
+
           <View style={styles.infoRow}>
             <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>근무시간</ThemedText>
             <ThemedText style={[styles.infoValue, { color: theme.text }]}>
               {contract.workHours || '협의'}
             </ThemedText>
           </View>
-          
+
           <View style={styles.infoRow}>
             <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>일당</ThemedText>
             <ThemedText style={[styles.infoValue, { color: brandColor }]}>
@@ -223,14 +226,14 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
 
         <Card style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>결제 정보</ThemedText>
-          
+
           <View style={styles.infoRow}>
-            <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>계약금 (20%)</ThemedText>
+            <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>계약금</ThemedText>
             <ThemedText style={[styles.infoValue, { color: theme.text }]}>
               {formatCurrency(contract.depositAmount)}
             </ThemedText>
           </View>
-          
+
           <View style={styles.infoRow}>
             <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>잔금</ThemedText>
             <ThemedText style={[styles.infoValue, { color: theme.text }]}>
@@ -241,7 +244,7 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
 
         <Card style={styles.section}>
           <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>계약자 정보</ThemedText>
-          
+
           <View style={styles.partyRow}>
             <View style={styles.partyInfo}>
               <ThemedText style={[styles.partyLabel, { color: theme.tabIconDefault }]}>요청자</ThemedText>
@@ -255,8 +258,8 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
                     <ThemedText style={[styles.signedText, { color: BrandColors.success }]}>서명완료</ThemedText>
                   </View>
                   {contract.requesterSignature ? (
-                    <Image 
-                      source={{ uri: contract.requesterSignature }} 
+                    <Image
+                      source={{ uri: contract.requesterSignature }}
                       style={styles.signatureImage}
                       resizeMode="contain"
                     />
@@ -268,7 +271,7 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
                 </View>
               )}
             </View>
-            
+
             <View style={styles.partyInfo}>
               <ThemedText style={[styles.partyLabel, { color: theme.tabIconDefault }]}>헬퍼</ThemedText>
               <ThemedText style={[styles.partyName, { color: theme.text }]}>
@@ -281,8 +284,8 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
                     <ThemedText style={[styles.signedText, { color: BrandColors.success }]}>서명완료</ThemedText>
                   </View>
                   {contract.helperSignature ? (
-                    <Image 
-                      source={{ uri: contract.helperSignature }} 
+                    <Image
+                      source={{ uri: contract.helperSignature }}
                       style={styles.signatureImage}
                       resizeMode="contain"
                     />
@@ -309,7 +312,7 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
         {!isSigned ? (
           <Card style={styles.signSection}>
             <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>계약 서명</ThemedText>
-            
+
             <Pressable
               style={styles.agreeRow}
               onPress={() => setIsAgreed(!isAgreed)}
@@ -326,20 +329,13 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
             </Pressable>
 
             <View style={styles.signatureInput}>
-              <ThemedText style={[styles.signatureLabel, { color: theme.tabIconDefault }]}>서명 (이름 입력)</ThemedText>
-              <TextInput
-                style={[
-                  styles.signatureField,
-                  {
-                    backgroundColor: theme.backgroundDefault,
-                    color: theme.text,
-                    borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
-                  },
-                ]}
-                placeholder="서명을 입력하세요"
-                placeholderTextColor={Colors.light.tabIconDefault}
-                value={signature}
-                onChangeText={setSignature}
+              <ThemedText style={[styles.signatureLabel, { color: theme.tabIconDefault }]}>서명</ThemedText>
+              <SignaturePad
+                onSignatureChange={(hasSignature, data) => setSignature(data || '')}
+                primaryColor={brandColor}
+                width={300}
+                height={150}
+                fullScreenMode={false}
               />
             </View>
           </Card>
@@ -508,13 +504,7 @@ const styles = StyleSheet.create({
   },
   signatureLabel: {
     ...Typography.small,
-  },
-  signatureField: {
-    height: Spacing.inputHeight,
-    borderRadius: BorderRadius.xs,
-    paddingHorizontal: Spacing.lg,
-    borderWidth: 1,
-    ...Typography.body,
+    marginBottom: Spacing.sm,
   },
   footer: {
     position: 'absolute',

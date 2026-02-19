@@ -155,13 +155,13 @@ export default function DisputesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-disputes'] });
-      toast({ title: '환불 확정 완료' });
+      toast({ title: '환불 확정 완료', variant: 'success' });
       setIsDrawerOpen(false);
       setIsRefundModalOpen(false);
       refetchDisputes();
     },
     onError: () => {
-      toast({ title: '환불 확정 실패', variant: 'destructive' });
+      toast({ title: '환불 확정 실패', variant: 'error' });
     },
   });
 
@@ -188,12 +188,12 @@ export default function DisputesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-disputes'] });
-      toast({ title: '분쟁 해결 완료', description: '환불 없이 분쟁이 해결되었습니다.' });
+      toast({ title: '분쟁 해결 완료', description: '환불 없이 분쟁이 해결되었습니다.', variant: 'success' });
       setIsDrawerOpen(false);
       setIsResolveNoRefundModalOpen(false);
     },
     onError: () => {
-      toast({ title: '분쟁 해결 실패', variant: 'destructive' });
+      toast({ title: '분쟁 해결 실패', variant: 'error' });
     },
   });
 
@@ -213,7 +213,7 @@ export default function DisputesPage() {
     } else {
       await refetchDeductions();
     }
-    toast({ title: '새로고침 완료' });
+    toast({ title: '새로고침 완료', variant: 'success' });
   };
 
   const handleDownloadExcel = () => {
@@ -260,7 +260,7 @@ export default function DisputesPage() {
       a.click();
       URL.revokeObjectURL(url);
     }
-    toast({ title: '다운로드 완료' });
+    toast({ title: '다운로드 완료', variant: 'success' });
   };
 
   const statusCounts = {

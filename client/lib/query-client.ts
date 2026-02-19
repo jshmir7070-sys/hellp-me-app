@@ -170,49 +170,6 @@ export async function apiRequest(
   return res;
 }
 
-/**
- * FormData 파일 업로드용 API 요청 (multipart/form-data)
- * - Content-Type 헤더를 수동 설정하지 않음 (fetch가 boundary를 자동 생성)
- * - 401 시 토큰 자동 갱신 후 재시도
- */
-export async function apiUpload(
-  route: string,
-  formData: FormData,
-  retryCount = 0,
-): Promise<Response> {
-  const baseUrl = getApiUrl();
-
-  if (!baseUrl) {
-    const error = getApiConfigError() || '서버에 연결할 수 없습니다.';
-    throw new Error(error);
-  }
-
-  const url = new URL(route, baseUrl);
-  const token = await getToken();
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      ...(token ? { "Authorization": `Bearer ${token}` } : {}),
-    },
-    body: formData,
-    credentials: "include",
-  });
-
-  // 401 에러 시 토큰 갱신 후 재시도 (1회만)
-  if (res.status === 401 && retryCount === 0) {
-    const newToken = await refreshAccessToken();
-    if (newToken) {
-      return apiUpload(route, formData, retryCount + 1);
-    } else {
-      throw new Error('401: 인증이 만료되었습니다. 다시 로그인해주세요.');
-    }
-  }
-
-  await throwIfResNotOk(res);
-  return res;
-}
-
 type UnauthorizedBehavior = "returnNull" | "throw";
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;

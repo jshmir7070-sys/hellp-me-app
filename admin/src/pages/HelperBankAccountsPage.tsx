@@ -128,12 +128,12 @@ export default function HelperBankAccountsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/helper-bank-accounts'] });
-      toast({ title: '승인 완료', description: '계좌 정보가 승인되었습니다' });
+      toast({ title: '승인 완료', description: '계좌 정보가 승인되었습니다', variant: 'success' });
       setShowReviewDialog(false);
       setSelectedAccount(null);
     },
     onError: () => {
-      toast({ title: '오류', description: '승인 처리에 실패했습니다', variant: 'destructive' });
+      toast({ title: '오류', description: '승인 처리에 실패했습니다', variant: 'error' });
     },
   });
 
@@ -150,12 +150,12 @@ export default function HelperBankAccountsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/helper-bank-accounts'] });
-      toast({ title: '반려 완료', description: '계좌 정보가 반려되었습니다' });
+      toast({ title: '반려 완료', description: '계좌 정보가 반려되었습니다', variant: 'success' });
       setShowReviewDialog(false);
       setSelectedAccount(null);
     },
     onError: () => {
-      toast({ title: '오류', description: '반려 처리에 실패했습니다', variant: 'destructive' });
+      toast({ title: '오류', description: '반려 처리에 실패했습니다', variant: 'error' });
     },
   });
 
@@ -166,7 +166,7 @@ export default function HelperBankAccountsPage() {
       verifyMutation.mutate(selectedAccount.id);
     } else {
       if (!rejectionReason.trim()) {
-        toast({ title: '알림', description: '반려 사유를 입력해주세요', variant: 'destructive' });
+        toast({ title: '알림', description: '반려 사유를 입력해주세요', variant: 'warning' });
         return;
       }
       rejectMutation.mutate({
@@ -185,7 +185,6 @@ export default function HelperBankAccountsPage() {
 
   // 상세보기 열기
   const openDetailDialog = async (account: BankAccountWithUser) => {
-    console.log('Opening detail dialog for account:', account);
     setDetailAccount(account);
     setDetailImageUrl(null);
     setShowDetailDialog(true);

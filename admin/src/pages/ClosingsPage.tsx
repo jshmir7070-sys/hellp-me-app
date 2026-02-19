@@ -92,7 +92,7 @@ export default function ClosingsPage() {
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/admin/closings'] });
-    toast({ title: '데이터를 새로고침했습니다.' });
+    toast({ title: '데이터를 새로고침했습니다.', variant: 'success' });
   };
 
   const handleDownloadExcel = () => {

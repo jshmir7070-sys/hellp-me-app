@@ -151,7 +151,7 @@ function AlertButton({ button, onPress }: AlertButtonComponentProps) {
   const { theme } = useTheme();
   const style = button.style || 'default';
 
-  const buttonStyles = {
+  const buttonStyles: Record<string, { backgroundColor: string; color: string; borderWidth?: number; borderColor?: string }> = {
     default: {
       backgroundColor: BrandColors.primary,
       color: '#FFFFFF',

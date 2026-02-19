@@ -18,7 +18,10 @@ export default function CreateJobStackNavigator() {
       <Stack.Screen
         name="CreateJob"
         component={CreateJobContainer}
-        options={{ headerTitle: () => <HeaderTitle size="small" /> }}
+        options={{
+          headerTitle: () => <HeaderTitle size="small" />,
+          headerTransparent: false,
+        }}
       />
     </Stack.Navigator>
   );

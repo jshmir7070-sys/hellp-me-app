@@ -137,7 +137,7 @@ async function callPopbillAPI(
 
 function generateMgtKey(): string {
   const timestamp = Date.now().toString(36);
-  const random = randomBytes(4).toString('hex');
+  const random = crypto.randomBytes(4).toString('hex');
   return `HM${timestamp}${random}`.toUpperCase();
 }
 
@@ -235,8 +235,18 @@ export const popbill = {
     return callPopbillAPI('POST', path, corpNum, { memo });
   },
 
+  /**
+   * 세금계산서 데이터 빌드
+   *
+   * @param type - forward: 정발행 (요청자용, 플랫폼→요청자)
+   *               reverse: 역발행 (헬퍼용, 헬퍼→플랫폼, 플랫폼이 대신 발행 요청)
+   * @param purposeType - '영수': 결제 완료 후 발행
+   *                      '청구': 결제 전 청구용 발행
+   *                      미지정시 기본값 '영수'
+   */
   buildTaxInvoice(params: {
     type: 'forward' | 'reverse';
+    purposeType?: '영수' | '청구';
     writeDate: string;
     supplierCorpNum: string;
     supplierCorpName: string;
@@ -285,7 +295,7 @@ export const popbill = {
       writeDate: params.writeDate,
       chargeDirection: params.type === 'forward' ? 0 : 1,
       issueType: params.type === 'forward' ? '정발행' : '역발행',
-      purposeType: '영수',
+      purposeType: params.purposeType || '영수',
       taxType: '과세',
       supplyCostTotal: params.supplyAmount,
       taxTotal: params.vatAmount,

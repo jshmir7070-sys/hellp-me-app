@@ -222,7 +222,7 @@ export default function HelperDetailPage() {
       try {
         const startDate = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
         const endDate = new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0];
-        const data = await apiRequest<any[]>(`/admin/settlements/helper?startDate=${startDate}&endDate=${endDate}`);
+        const data = await apiRequest<any[]>(`/settlements/helper?startDate=${startDate}&endDate=${endDate}`);
         const helperData = data.find(s => s.helperId === helperId || s.helperId === parseInt(helperId));
         return helperData || null;
       } catch {
@@ -239,7 +239,7 @@ export default function HelperDetailPage() {
       try {
         const startDate = new Date(lastMonthYear, lastMonth, 1).toISOString().split('T')[0];
         const endDate = new Date(lastMonthYear, lastMonth + 1, 0).toISOString().split('T')[0];
-        const data = await apiRequest<any[]>(`/admin/settlements/helper?startDate=${startDate}&endDate=${endDate}`);
+        const data = await apiRequest<any[]>(`/settlements/helper?startDate=${startDate}&endDate=${endDate}`);
         const helperData = data.find(s => s.helperId === helperId || s.helperId === parseInt(helperId));
         return helperData || null;
       } catch {
@@ -255,7 +255,7 @@ export default function HelperDetailPage() {
     queryFn: async () => {
       if (!helperId) return [];
       try {
-        const data = await apiRequest<TaxInvoice[]>(`/admin/tax-invoices?targetType=helper&targetId=${helperId}`);
+        const data = await apiRequest<TaxInvoice[]>(`/tax-invoices?targetType=helper&targetId=${helperId}`);
         return data;
       } catch {
         return [];
@@ -272,11 +272,11 @@ export default function HelperDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['helper-documents', helperId] });
       queryClient.invalidateQueries({ queryKey: ['admin-helper-detail', helperId] });
-      toast({ title: '승인 완료', description: '서류가 승인되었습니다' });
+      toast({ title: '승인 완료', description: '서류가 승인되었습니다', variant: 'success' });
       setReviewDialog(null);
     },
     onError: () => {
-      toast({ title: '오류', description: '승인 처리에 실패했습니다', variant: 'destructive' });
+      toast({ title: '오류', description: '승인 처리에 실패했습니다', variant: 'error' });
     },
   });
 
@@ -292,12 +292,12 @@ export default function HelperDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['helper-documents', helperId] });
       queryClient.invalidateQueries({ queryKey: ['admin-helper-detail', helperId] });
-      toast({ title: '반려 완료', description: '서류가 반려되었습니다' });
+      toast({ title: '반려 완료', description: '서류가 반려되었습니다', variant: 'success' });
       setReviewDialog(null);
       setRejectionReason('');
     },
     onError: () => {
-      toast({ title: '오류', description: '반려 처리에 실패했습니다', variant: 'destructive' });
+      toast({ title: '오류', description: '반려 처리에 실패했습니다', variant: 'error' });
     },
   });
 
@@ -308,11 +308,11 @@ export default function HelperDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['helper-bank-account', helperId] });
-      toast({ title: '승인 완료', description: '통장 정보가 승인되었습니다' });
+      toast({ title: '승인 완료', description: '통장 정보가 승인되었습니다', variant: 'success' });
       setReviewDialog(null);
     },
     onError: () => {
-      toast({ title: '오류', description: '승인 처리에 실패했습니다', variant: 'destructive' });
+      toast({ title: '오류', description: '승인 처리에 실패했습니다', variant: 'error' });
     },
   });
 
@@ -327,12 +327,12 @@ export default function HelperDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['helper-bank-account', helperId] });
-      toast({ title: '반려 완료', description: '통장 정보가 반려되었습니다' });
+      toast({ title: '반려 완료', description: '통장 정보가 반려되었습니다', variant: 'success' });
       setReviewDialog(null);
       setRejectionReason('');
     },
     onError: () => {
-      toast({ title: '오류', description: '반려 처리에 실패했습니다', variant: 'destructive' });
+      toast({ title: '오류', description: '반려 처리에 실패했습니다', variant: 'error' });
     },
   });
 
@@ -347,7 +347,7 @@ export default function HelperDetailPage() {
       }
     } else {
       if (!rejectionReason.trim()) {
-        toast({ title: '알림', description: '반려 사유를 입력해주세요', variant: 'destructive' });
+        toast({ title: '알림', description: '반려 사유를 입력해주세요', variant: 'warning' });
         return;
       }
       if (reviewDialog.type === 'document') {

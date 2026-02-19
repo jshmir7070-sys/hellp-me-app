@@ -143,6 +143,7 @@ export default function IncidentsPageV2() {
   const [isIncidentDetailOpen, setIsIncidentDetailOpen] = useState(false);
   
   // 차감처리 관련 상태
+  const [selectedDeduction, setSelectedDeduction] = useState<Deduction | null>(null);
   const [deductionStatusFilter, setDeductionStatusFilter] = useState('pending');
   const [showCreateDeductionModal, setShowCreateDeductionModal] = useState(false);
   const [deductionForm, setDeductionForm] = useState({
@@ -156,6 +157,7 @@ export default function IncidentsPageV2() {
   // 환불처리 관련 상태
   const [refundStatusFilter, setRefundStatusFilter] = useState<'pending' | 'completed'>('pending');
   const [selectedRefund, setSelectedRefund] = useState<IncidentRefund | null>(null);
+  const [selectedRefundDetail, setSelectedRefundDetail] = useState<IncidentRefund | null>(null);
   const [showConfirmRefundModal, setShowConfirmRefundModal] = useState(false);
   const [adminMemo, setAdminMemo] = useState('');
 
@@ -276,7 +278,7 @@ export default function IncidentsPageV2() {
     queryClient.invalidateQueries({ queryKey: ['/api/admin/incidents'] });
     queryClient.invalidateQueries({ queryKey: ['/api/admin/deductions'] });
     queryClient.invalidateQueries({ queryKey: ['/api/admin/incident-refunds'] });
-    toast({ title: '데이터를 새로고침했습니다.' });
+    toast({ title: '데이터를 새로고침했습니다.', variant: 'success' });
   };
 
   const handleDownloadExcel = () => {
@@ -322,7 +324,7 @@ export default function IncidentsPageV2() {
     }
 
     if (data.length === 0) {
-      toast({ title: '다운로드할 데이터가 없습니다.', variant: 'destructive' });
+      toast({ title: '다운로드할 데이터가 없습니다.', variant: 'warning' });
       return;
     }
 
@@ -338,7 +340,7 @@ export default function IncidentsPageV2() {
     link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
-    toast({ title: 'Excel 다운로드 완료' });
+    toast({ title: 'Excel 다운로드 완료', variant: 'success' });
   };
 
   // 차감 적용/취소 mutation
@@ -354,7 +356,7 @@ export default function IncidentsPageV2() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/deductions'] });
-      toast({ title: '차감이 적용되었습니다.' });
+      toast({ title: '차감이 적용되었습니다.', variant: 'success' });
     },
   });
 
@@ -370,7 +372,7 @@ export default function IncidentsPageV2() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/deductions'] });
-      toast({ title: '차감이 취소되었습니다.' });
+      toast({ title: '차감이 취소되었습니다.', variant: 'success' });
     },
   });
 
@@ -396,7 +398,7 @@ export default function IncidentsPageV2() {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/deductions'] });
       setShowCreateDeductionModal(false);
       setDeductionForm({ targetId: '', amount: '', reason: '', category: 'other', memo: '' });
-      toast({ title: '차감이 생성되었습니다.' });
+      toast({ title: '차감이 생성되었습니다.', variant: 'success' });
     },
   });
 
@@ -413,7 +415,7 @@ export default function IncidentsPageV2() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/incident-refunds'] });
-      toast({ title: '환불 확정 완료' });
+      toast({ title: '환불 확정 완료', variant: 'success' });
       setShowConfirmRefundModal(false);
       setSelectedRefund(null);
       setAdminMemo('');
@@ -892,7 +894,7 @@ export default function IncidentsPageV2() {
               <ExcelTable
                 columns={deductionColumns}
                 data={filteredDeductions.slice((deductionPage - 1) * itemsPerPage, deductionPage * itemsPerPage)}
-                onRowClick={(row) => console.log('Deduction detail:', row)}
+                onRowClick={(row) => setSelectedDeduction(row)}
                 selectable={true}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
@@ -948,7 +950,7 @@ export default function IncidentsPageV2() {
               <ExcelTable
                 columns={refundColumns}
                 data={filteredRefunds.slice((refundPage - 1) * itemsPerPage, refundPage * itemsPerPage)}
-                onRowClick={(row) => console.log('Refund detail:', row)}
+                onRowClick={(row) => setSelectedRefundDetail(row)}
                 selectable={true}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
@@ -1139,6 +1141,160 @@ export default function IncidentsPageV2() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => { setIsIncidentDetailOpen(false); setSelectedIncident(null); }}>
+              닫기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 차감 상세 모달 */}
+      <Dialog open={!!selectedDeduction} onOpenChange={() => setSelectedDeduction(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>차감 상세</DialogTitle>
+          </DialogHeader>
+          {selectedDeduction && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">차감 ID</p>
+                  <p className="font-medium">#{selectedDeduction.id}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">주문 ID</p>
+                  <p className="font-medium">{selectedDeduction.orderId ? `#${selectedDeduction.orderId}` : '-'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">대상자</p>
+                  <div>
+                    <p className="font-medium">{selectedDeduction.targetName || `ID: ${selectedDeduction.targetId}`}</p>
+                    {selectedDeduction.targetPhone && (
+                      <p className="text-xs text-muted-foreground">{selectedDeduction.targetPhone}</p>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">대상 유형</p>
+                  <p className="font-medium">{selectedDeduction.targetType === 'helper' ? '헬퍼' : '요청자'}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">차감 금액</p>
+                  <p className="font-medium text-red-600">{formatAmount(selectedDeduction.amount)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">카테고리</p>
+                  <Badge variant="outline">
+                    {CATEGORY_LABELS[selectedDeduction.category || ''] || selectedDeduction.category || '기타'}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">상태</p>
+                  <Badge className={STATUS_COLORS[selectedDeduction.status] || 'bg-gray-100 text-gray-800'}>
+                    {STATUS_LABELS[selectedDeduction.status] || selectedDeduction.status}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">생성일</p>
+                  <p className="font-medium">{new Date(selectedDeduction.createdAt).toLocaleDateString('ko-KR')}</p>
+                </div>
+                {selectedDeduction.appliedAt && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">적용일</p>
+                    <p className="font-medium">{new Date(selectedDeduction.appliedAt).toLocaleDateString('ko-KR')}</p>
+                  </div>
+                )}
+                {selectedDeduction.appliedToSettlementId && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">적용 정산 ID</p>
+                    <p className="font-medium">#{selectedDeduction.appliedToSettlementId}</p>
+                  </div>
+                )}
+                {selectedDeduction.incidentId && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">사고접수 ID</p>
+                    <p className="font-medium">#{selectedDeduction.incidentId}</p>
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">차감 사유</p>
+                <p className="mt-1 text-sm whitespace-pre-wrap">{selectedDeduction.reason}</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedDeduction(null)}>
+              닫기
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 환불 상세 모달 */}
+      <Dialog open={!!selectedRefundDetail} onOpenChange={() => setSelectedRefundDetail(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>환불 상세</DialogTitle>
+          </DialogHeader>
+          {selectedRefundDetail && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-muted-foreground">환불 ID</p>
+                  <p className="font-medium">#{selectedRefundDetail.id}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">주문 ID</p>
+                  <p className="font-medium">#{selectedRefundDetail.orderId}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">요청자</p>
+                  <div>
+                    <p className="font-medium">{selectedRefundDetail.requesterName || '-'}</p>
+                    {selectedRefundDetail.requesterPhone && (
+                      <p className="text-xs text-muted-foreground">{selectedRefundDetail.requesterPhone}</p>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">사고 유형</p>
+                  <Badge variant="outline">
+                    {TYPE_LABELS[selectedRefundDetail.incidentType] || selectedRefundDetail.incidentType}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">요청 금액</p>
+                  <p className="font-medium">{formatAmount(selectedRefundDetail.requestedAmount)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">환불 금액</p>
+                  <p className="font-medium text-green-600">{formatAmount(selectedRefundDetail.refundAmount || selectedRefundDetail.requestedAmount)}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">환불 상태</p>
+                  <Badge className={selectedRefundDetail.requesterRefundApplied ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
+                    {selectedRefundDetail.requesterRefundApplied ? '완료' : '대기'}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">접수일</p>
+                  <p className="font-medium">{new Date(selectedRefundDetail.createdAt).toLocaleDateString('ko-KR')}</p>
+                </div>
+                {selectedRefundDetail.refundConfirmedAt && (
+                  <div>
+                    <p className="text-sm text-muted-foreground">확정일</p>
+                    <p className="font-medium">{new Date(selectedRefundDetail.refundConfirmedAt).toLocaleDateString('ko-KR')}</p>
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">사고 설명</p>
+                <p className="mt-1 text-sm whitespace-pre-wrap">{selectedRefundDetail.description}</p>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSelectedRefundDetail(null)}>
               닫기
             </Button>
           </DialogFooter>

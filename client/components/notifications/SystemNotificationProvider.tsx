@@ -111,5 +111,19 @@ export function useSystemNotification() {
             error: (message: string, title?: string, duration?: number) =>
                 showToast({ type: 'error', message, title, duration }),
         },
+
+        // Drop-in replacement for Alert.alert(title, message, buttons)
+        sysAlert: (
+            title: string,
+            message: string,
+            buttons?: Array<{ text: string; onPress?: () => void; style?: string }>,
+        ) => {
+            const mapped = buttons?.map((b) => ({
+                text: b.text,
+                onPress: b.onPress,
+                style: (b.style === 'cancel' ? 'secondary' : b.style === 'destructive' ? 'destructive' : 'primary') as 'primary' | 'secondary' | 'destructive',
+            }));
+            showAlert({ type: 'info', title, message, buttons: mapped });
+        },
     };
 }

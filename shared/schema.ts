@@ -1,8 +1,25 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, boolean, integer, timestamp, serial, numeric, unique } from "drizzle-orm/pg-core";
+import { pgTable, pgEnum, text, varchar, boolean, integer, timestamp, serial, numeric, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// ==========================================
+// Enum definitions (Phase 5-4)
+// Note: 기존 text 컬럼 → pgEnum 전환은 마이그레이션 스크립트로 별도 수행
+// 아래 enum 정의는 신규 코드 및 타입 체크에 활용
+// ==========================================
+export const userRoleEnum = pgEnum("user_role", ["helper", "requester", "admin", "superadmin"]);
+export const orderStatusEnum = pgEnum("order_status", [
+  "awaiting_deposit", "deposit_paid", "matching", "scheduled", "in_progress",
+  "closing_submitted", "final_amount_confirmed", "balance_paid", "settlement_paid",
+  "closed", "cancelled", "refunded",
+]);
+export const contractStatusEnum = pgEnum("contract_status", [
+  "pending", "signed", "executed", "voided", "refunded",
+]);
+export const onboardingStatusEnum = pgEnum("onboarding_status", [
+  "pending", "not_submitted", "reviewing", "approved", "rejected",
+]);
 // Users table
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -51,6 +68,7 @@ export const users = pgTable("users", {
   department: text("department"), // 부서 (예: 운영팀, 고객지원팀)
   menuPermissions: text("menu_permissions"), // JSON string - 메뉴 접근 권한 배열
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Teams table (팀)
@@ -172,7 +190,7 @@ export const helperDocuments = pgTable("helper_documents", {
   documentType: text("document_type").notNull(), // businessCert, driverLicense, cargoLicense, vehicleCert, transportContract
   status: text("status").default("not_submitted"), // not_submitted, pending, reviewing, approved, rejected
   imageUrl: text("image_url"), // 서류 이미지 URL
-  
+
   // 사업자등록증 관련
   businessNumber: text("business_number"), // 사업자번호
   businessName: text("business_name"), // 상호명
@@ -180,31 +198,31 @@ export const helperDocuments = pgTable("helper_documents", {
   businessAddress: text("business_address"), // 사업장주소
   businessType: text("business_type_doc"), // 업종
   businessCategory: text("business_category_doc"), // 업태
-  
+
   // 운전면허증 관련
   licenseNumber: text("license_number"), // 면허번호
   licenseType: text("license_type"), // 1종보통, 2종보통
   issueDate: text("issue_date"), // 발급일
   expiryDate: text("expiry_date"), // 만료일
-  
+
   // 차량등록증 관련
   plateNumber: text("plate_number"), // 차량번호
   vehicleType: text("vehicle_type"), // 차량종류
   vehicleOwnerName: text("vehicle_owner_name"), // 소유자명
-  
+
   // 화물위탁계약서 관련
   contractCompanyName: text("contract_company_name"), // 계약 회사명
   contractDate: text("contract_date"), // 계약일
   signatureName: text("signature_name"), // 서명자 성명
   verificationPhone: text("verification_phone"), // 인증 전화번호
   contractConsent: text("contract_consent"), // 동의사항 JSON
-  
+
   uploadedAt: timestamp("uploaded_at"), // 제출일시
   reviewedAt: timestamp("reviewed_at"), // 검토일시
   reviewedBy: varchar("reviewed_by"), // 검토자 (관리자 ID)
   rejectionReason: text("rejection_reason"), // 반려 사유
   adminNote: text("admin_note"), // 관리자 메모
-  
+
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
@@ -390,6 +408,7 @@ export const orders = pgTable("orders", {
   deliveryArea: text("delivery_area").notNull(), // 배송지역 (예: 서울시 강남구 역삼동일부)
   scheduledDate: text("scheduled_date").notNull(), // 일정 (예: 12월 22일)
   scheduledDateEnd: text("scheduled_date_end"), // 일정 종료일 (범위인 경우)
+  arrivalTime: text("arrival_time"), // 입차시간 (예: "07:00")
   vehicleType: text("vehicle_type").notNull(), // 차종 (예: 1톤 저탑)
   isUrgent: boolean("is_urgent").default(false), // 긴급 오더 표시 (냉탑, 기타택배)
   // 오더 상태 체계 (ORDER_STATUS enum)
@@ -414,9 +433,24 @@ export const orders = pgTable("orders", {
   deliveryGuide: text("delivery_guide"), // 배송가이드 텍스트
   deliveryGuideUrl: text("delivery_guide_url"), // 배송가이드 URL (외부 링크)
   campAddress: text("camp_address"), // 캠프 및 터미널주소
+  campAddressDetail: text("camp_address_detail"), // 캠프 주소 상세
+  contactPhone: text("contact_phone"), // 담당자 연락처
+  pricingType: text("pricing_type"), // 가격 유형 (per_box, per_drop) - 기타택배
+  // 냉탑전용 필드
+  freight: integer("freight"), // 운임
+  recommendedFee: integer("recommended_fee"), // 권장 수수료
+  waypoints: text("waypoints"), // 경유지 (JSON 배열 문자열)
+  hasTachometer: boolean("has_tachometer").default(false), // 타코미터 보유
+  hasPartition: boolean("has_partition").default(false), // 칸막이 보유
+  loadingPoint: text("loading_point"), // 상차지 주소
+  loadingPointDetail: text("loading_point_detail"), // 상차지 상세
+  // 계약서 관련
+  signatureData: text("signature_data"), // 전자서명 base64
+  requestTaxInvoice: boolean("request_tax_invoice").default(false), // 세금계산서 요청
   deliveryLat: text("delivery_lat"), // 배송지 위도
   deliveryLng: text("delivery_lng"), // 배송지 경도
   courierCompany: text("courier_company"), // 택배사명 (예: CJ대한통운, 로젠)
+  courierCategory: text("courier_category").default("parcel"), // parcel, other, cold
   requesterPhone: text("requester_phone"), // 담당자 연락처 (매칭 후 공유)
   helperPhoneShared: boolean("helper_phone_shared").default(false), // 헬퍼 전화번호 공유 여부
   matchedAt: timestamp("matched_at"), // 매칭 완료 시간
@@ -534,7 +568,6 @@ export const orderApplications = pgTable("order_applications", {
   id: serial("id").primaryKey(),
   orderId: integer("order_id")
     .notNull()
-    .unique() // orderId당 1개만 존재 (중복 정산 생성 구조적 차단)
     .references(() => orders.id, { onDelete: "cascade" }),
   helperId: varchar("helper_id")
     .notNull()
@@ -806,16 +839,16 @@ export const insertUserSchema = createInsertSchema(users)
     identityDi: z.string().optional(),
     identityVerifiedAt: z.date().optional(),
   });
-export const insertHelperCredentialSchema = createInsertSchema(helperCredentials).omit({ 
-  id: true, 
+export const insertHelperCredentialSchema = createInsertSchema(helperCredentials).omit({
+  id: true,
   createdAt: true,
-  userId: true 
+  userId: true
 });
-export const insertHelpPostSchema = createInsertSchema(helpPosts).omit({ 
-  id: true, 
+export const insertHelpPostSchema = createInsertSchema(helpPosts).omit({
+  id: true,
   createdAt: true,
   updatedAt: true,
-  userId: true 
+  userId: true
 });
 
 // Vehicle schemas
@@ -827,7 +860,7 @@ export const insertHelperVehicleSchema = createInsertSchema(helperVehicles)
   .extend({
     vehicleType: z.enum(vehicleTypes, { errorMap: () => ({ message: "차종을 선택해주세요" }) }),
     plateNumber: z.string()
-      .regex(/^(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)\d{2}[아바사자]\d{4}$/, 
+      .regex(/^(서울|경기|인천|부산|대구|광주|대전|울산|세종|강원|충북|충남|전북|전남|경북|경남|제주)\d{2}[아바사자]\d{4}$/,
         "올바른 차량번호 형식을 입력해주세요 (예: 서울81자0000)"),
   });
 
@@ -865,7 +898,7 @@ export const insertRequesterBusinessSchema = createInsertSchema(requesterBusines
 
 // Bank account schema
 const koreanBanks = [
-  "국민은행", "신한은행", "우리은행", "하나은행", "농협은행", "기업은행", 
+  "국민은행", "신한은행", "우리은행", "하나은행", "농협은행", "기업은행",
   "SC제일은행", "씨티은행", "케이뱅크", "카카오뱅크", "토스뱅크",
   "부산은행", "대구은행", "광주은행", "전북은행", "경남은행", "제주은행",
   "수협은행", "산업은행", "새마을금고", "신협", "우체국", "저축은행"
@@ -1011,6 +1044,7 @@ export const insertOrderSchema = createInsertSchema(orders)
     deliveryArea: z.string().min(1, "배송지역을 입력해주세요"),
     scheduledDate: z.string().min(1, "일정을 입력해주세요"),
     scheduledDateEnd: z.string().nullable().optional(),
+    arrivalTime: z.string().nullable().optional(),
     vehicleType: z.string().min(1, "차종을 입력해주세요"),
     status: z.enum(orderStatuses).default("awaiting_deposit"),
     maxHelpers: z.number().default(3),  // A안: 최대 3명 지원자 제한
@@ -1051,12 +1085,12 @@ export const insertOrderApplicationSchema = createInsertSchema(orderApplications
 
 // Notification schema
 const notificationTypes = [
-  "matching_success", 
-  "matching_failed", 
-  "announcement", 
-  "phone_shared", 
-  "order_completed", 
-  "onboarding_approved", 
+  "matching_success",
+  "matching_failed",
+  "announcement",
+  "phone_shared",
+  "order_completed",
+  "onboarding_approved",
   "onboarding_rejected",
   "new_order",           // 신규 오더 등록
   "order_application",   // 헬퍼가 오더 신청
@@ -1422,16 +1456,16 @@ export const paymentReminders = pgTable("payment_reminders", {
   dueDate: text("due_date").notNull(),
   overdueDate: text("overdue_date"),
   reminderLevel: integer("reminder_level").default(0), // 0=미발송, 1=1차, 2=2차, 3=3차(내용증명)
-  
+
   // 전자서명 정보
   signatureData: text("signature_data"), // base64 encoded signature image
   agreedAt: timestamp("agreed_at"),
-  
+
   // 휴대폰 인증 정보
   phoneNumber: text("phone_number"),
   phoneVerified: boolean("phone_verified").default(false),
   phoneVerifiedAt: timestamp("phone_verified_at"),
-  
+
   // 법적 보호 기록 (새로 추가)
   ipAddress: text("ip_address"),
   trackingNumber: text("tracking_number"),
@@ -2116,17 +2150,20 @@ export const taxInvoices = pgTable("tax_invoices", {
   contractId: integer("contract_id").references(() => contracts.id),
   orderId: integer("order_id").references(() => orders.id),
   settlementId: integer("settlement_id").references(() => settlementRecords.id),
-  
+
   // 팝빌 연동 필드
   popbillNtsconfirmNum: text("popbill_ntsconfirm_num"), // 국세청 승인번호
   popbillItemKey: text("popbill_item_key"), // 팝빌 문서번호
   popbillMgtKey: text("popbill_mgt_key"), // 관리번호 (우리 시스템에서 생성)
-  
+
   invoiceNumber: text("invoice_number"), // 세금계산서 번호
   issueType: text("issue_type").default("forward"), // forward(정발행), reverse(역발행)
+  purposeType: text("purpose_type").default("영수"), // '영수'(결제완료후) | '청구'(결제전)
   invoiceKind: text("invoice_kind").default("tax"), // tax(세금계산서), taxmod(수정세금계산서)
-  
-  // 공급자 정보 (정발행 시 우리, 역발행 시 요청자)
+
+  // 공급자 정보
+  // 헬퍼 세금계산서(역발행): 공급자=헬퍼(서비스 제공), 공급받는자=헬프미(서비스 구매)
+  // 요청자 세금계산서(정발행): 공급자=헬프미(서비스 제공), 공급받는자=요청자(서비스 구매)
   supplierCorpNum: text("supplier_corp_num"), // 공급자 사업자번호
   supplierCorpName: text("supplier_corp_name"), // 공급자 상호
   supplierCeoName: text("supplier_ceo_name"), // 공급자 대표자
@@ -2134,7 +2171,7 @@ export const taxInvoices = pgTable("tax_invoices", {
   supplierBizType: text("supplier_biz_type"), // 공급자 업태
   supplierBizClass: text("supplier_biz_class"), // 공급자 종목
   supplierEmail: text("supplier_email"), // 공급자 이메일
-  
+
   // 공급받는자 정보 (정발행 시 헬퍼, 역발행 시 우리)
   buyerCorpNum: text("buyer_corp_num"), // 공급받는자 사업자번호
   buyerCorpName: text("buyer_corp_name"), // 공급받는자 상호
@@ -2143,46 +2180,46 @@ export const taxInvoices = pgTable("tax_invoices", {
   buyerBizType: text("buyer_biz_type"), // 공급받는자 업태
   buyerBizClass: text("buyer_biz_class"), // 공급받는자 종목
   buyerEmail: text("buyer_email"), // 공급받는자 이메일
-  
+
   // 금액 정보
   supplyAmount: integer("supply_amount").default(0), // 공급가
   vatAmount: integer("vat_amount").default(0), // 부가세
   totalAmount: integer("total_amount").default(0), // 총액
-  
+
   // 날짜 정보
   writeDate: text("write_date"), // 작성일자 (YYYYMMDD)
   issueDate: text("issue_date"), // 발행일자 (YYYYMMDD)
-  
+
   // 품목 정보 (JSON)
   detailList: text("detail_list"), // JSON: [{sn, purchaseDT, itemName, spec, qty, unitCost, supplyCost, tax}]
-  
+
   // 상태 정보
   status: text("status").default("draft"), // draft(임시저장), pending(발행대기), issued(발행완료), accepted(국세청접수), cancelled(취소)
   popbillStatus: text("popbill_status"), // 팝빌 상태코드
   ntsResult: text("nts_result"), // 국세청 처리결과
   ntsSendDT: timestamp("nts_send_dt"), // 국세청 전송일시
   ntsResultDT: timestamp("nts_result_dt"), // 국세청 처리일시
-  
+
   // 비고
   remark1: text("remark1"), // 비고1
   remark2: text("remark2"), // 비고2
   remark3: text("remark3"), // 비고3
-  
+
   // 취소 정보
   cancelledAt: timestamp("cancelled_at"),
   cancelledBy: varchar("cancelled_by").references(() => users.id),
   cancelReason: text("cancel_reason"),
-  
+
   // 파일 정보
   pdfUrl: text("pdf_url"), // PDF 파일 URL
-  
+
   // 월별 합산 세금계산서 필드
   invoiceScope: text("invoice_scope").default("individual"), // individual(개별), monthly(월별합산)
   targetMonth: text("target_month"), // 월별합산 대상월 (YYYY-MM)
   targetUserId: varchar("target_user_id").references(() => users.id), // 대상 사용자
   targetUserType: text("target_user_type"), // helper, requester
   settlementIds: text("settlement_ids"), // 포함된 정산ID목록 (JSON array)
-  
+
   // 메타 정보
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
@@ -2742,9 +2779,9 @@ export const customerServiceInquiries = pgTable("customer_service_inquiries", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertCustomerServiceInquirySchema = createInsertSchema(customerServiceInquiries).omit({ 
-  id: true, 
-  createdAt: true, 
+export const insertCustomerServiceInquirySchema = createInsertSchema(customerServiceInquiries).omit({
+  id: true,
+  createdAt: true,
   updatedAt: true,
   respondedAt: true,
   respondedBy: true,
@@ -2767,9 +2804,9 @@ export type UpdateCustomerServiceInquiry = z.infer<typeof updateCustomerServiceI
 
 // API Request/Response types
 export type LoginRequest = { email: string; password: string };
-export type SignupRequest = { 
-  email: string; 
-  password: string; 
+export type SignupRequest = {
+  email: string;
+  password: string;
   name: string;
   address?: string;
   birthDate?: string;
@@ -3085,9 +3122,9 @@ export const virtualAccounts = pgTable("virtual_accounts", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertVirtualAccountSchema = createInsertSchema(virtualAccounts).omit({ 
-  id: true, 
-  createdAt: true 
+export const insertVirtualAccountSchema = createInsertSchema(virtualAccounts).omit({
+  id: true,
+  createdAt: true
 });
 export type VirtualAccount = typeof virtualAccounts.$inferSelect;
 export type InsertVirtualAccount = z.infer<typeof insertVirtualAccountSchema>;
@@ -3110,9 +3147,9 @@ export const phoneVerificationCodes = pgTable("phone_verification_codes", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertPhoneVerificationCodeSchema = createInsertSchema(phoneVerificationCodes).omit({ 
-  id: true, 
-  createdAt: true 
+export const insertPhoneVerificationCodeSchema = createInsertSchema(phoneVerificationCodes).omit({
+  id: true,
+  createdAt: true
 });
 export type PhoneVerificationCode = typeof phoneVerificationCodes.$inferSelect;
 export type InsertPhoneVerificationCode = z.infer<typeof insertPhoneVerificationCodeSchema>;
@@ -3137,8 +3174,8 @@ export const clientErrors = pgTable("client_errors", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertClientErrorSchema = createInsertSchema(clientErrors).omit({ 
-  id: true, 
+export const insertClientErrorSchema = createInsertSchema(clientErrors).omit({
+  id: true,
   createdAt: true,
   resolvedAt: true
 });
@@ -3163,8 +3200,8 @@ export const policyConsents = pgTable("policy_consents", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertPolicyConsentSchema = createInsertSchema(policyConsents).omit({ 
-  id: true, 
+export const insertPolicyConsentSchema = createInsertSchema(policyConsents).omit({
+  id: true,
   createdAt: true,
   agreedAt: true
 });
@@ -3185,8 +3222,8 @@ export const policyVersions = pgTable("policy_versions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertPolicyVersionSchema = createInsertSchema(policyVersions).omit({ 
-  id: true, 
+export const insertPolicyVersionSchema = createInsertSchema(policyVersions).omit({
+  id: true,
   createdAt: true
 });
 export type PolicyVersion = typeof policyVersions.$inferSelect;

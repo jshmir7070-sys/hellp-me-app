@@ -1,5 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
-import { AppState, AppStateStatus } from 'react-native';
+import { useEffect, useRef, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApiUrl } from '@/lib/query-client';
@@ -10,16 +9,11 @@ type WebSocketEvent = {
   data: any;
 };
 
-const MAX_RECONNECT_DELAY = 30000;
-const BASE_RECONNECT_DELAY = 3000;
-
 export function useOrderWebSocket() {
   const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isConnectingRef = useRef(false);
-  const reconnectAttemptRef = useRef(0);
-  const [isConnected, setIsConnected] = useState(false);
 
   const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN || isConnectingRef.current) {
@@ -43,7 +37,7 @@ export function useOrderWebSocket() {
 
       const userData = JSON.parse(userDataStr);
       const userId = userData.id;
-
+      
       if (!userId) {
         isConnectingRef.current = false;
         return;
@@ -54,46 +48,29 @@ export function useOrderWebSocket() {
         .replace('https://', 'wss://')
         .replace('http://', 'ws://')
         .replace(/\/$/, '');
-
-      const ws = new WebSocket(`${wsUrl}/ws/notifications?userId=${userId}&token=${token}`);
+      
+      const ws = new WebSocket(`${wsUrl}/ws/notifications?userId=${userId}`);
 
       ws.onopen = () => {
+        if (__DEV__) console.log('[WebSocket] Connected for real-time order updates');
         isConnectingRef.current = false;
-        reconnectAttemptRef.current = 0;
-        setIsConnected(true);
       };
 
       ws.onmessage = (event) => {
         try {
           const message: WebSocketEvent = JSON.parse(event.data);
-
-          switch (message.event) {
-            case 'new_order':
+          
+          if (message.event === 'new_order') {
+            if (__DEV__) console.log('[WebSocket] New order received:', message.data);
+            queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
+          } else if (message.event === 'order_status_updated') {
+            if (__DEV__) console.log('[WebSocket] Order status updated:', message.data);
+            queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/orders/my-applications'] });
+          } else if (message.event === 'data_refresh') {
+            if (message.data.type === 'order') {
               queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
-              break;
-            case 'order_status_updated':
-              queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
-              queryClient.invalidateQueries({ queryKey: ['/api/orders/my-applications'] });
-              queryClient.invalidateQueries({ queryKey: ['/api/helper/my-orders'] });
-              break;
-            case 'data_refresh':
-              if (message.data?.type === 'order' || message.data?.type === 'all') {
-                queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
-              }
-              if (message.data?.type === 'settlement' || message.data?.type === 'all') {
-                queryClient.invalidateQueries({ queryKey: ['/api/helper/settlements'] });
-              }
-              if (message.data?.type === 'onboarding' || message.data?.type === 'all') {
-                queryClient.invalidateQueries({ queryKey: ['/api/helpers/onboarding-status'] });
-              }
-              if (message.data?.type === 'contract' || message.data?.type === 'all') {
-                queryClient.invalidateQueries({ queryKey: ['/api/contracts'] });
-              }
-              break;
-            case 'notification':
-              // 알림 목록 갱신
-              queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
-              break;
+            }
           }
         } catch (e) {
           console.error('[WebSocket] Error parsing message:', e);
@@ -106,20 +83,13 @@ export function useOrderWebSocket() {
       };
 
       ws.onclose = () => {
+        if (__DEV__) console.log('[WebSocket] Disconnected, will reconnect in 5s');
         isConnectingRef.current = false;
         wsRef.current = null;
-        setIsConnected(false);
-
-        // Exponential backoff 재연결
-        const delay = Math.min(
-          BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttemptRef.current),
-          MAX_RECONNECT_DELAY
-        );
-        reconnectAttemptRef.current += 1;
-
+        
         reconnectTimeoutRef.current = setTimeout(() => {
           connect();
-        }, delay);
+        }, 5000);
       };
 
       wsRef.current = ws;
@@ -138,26 +108,7 @@ export function useOrderWebSocket() {
       wsRef.current.close();
       wsRef.current = null;
     }
-    setIsConnected(false);
   }, []);
-
-  // AppState 처리: 배경→복귀 시 재연결
-  useEffect(() => {
-    const handleAppStateChange = (nextState: AppStateStatus) => {
-      if (nextState === 'active') {
-        // 앱이 포그라운드로 돌아왔을 때
-        if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-          reconnectAttemptRef.current = 0;
-          connect();
-        }
-      }
-    };
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => {
-      subscription.remove();
-    };
-  }, [connect]);
 
   useEffect(() => {
     connect();
@@ -167,7 +118,7 @@ export function useOrderWebSocket() {
   }, [connect, disconnect]);
 
   return {
-    isConnected,
+    isConnected: wsRef.current?.readyState === WebSocket.OPEN,
     reconnect: connect,
   };
 }

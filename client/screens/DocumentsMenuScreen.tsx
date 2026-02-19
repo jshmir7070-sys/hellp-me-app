@@ -1,8 +1,7 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
@@ -10,7 +9,6 @@ import { useQuery } from '@tanstack/react-query';
 import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
 import { useTheme } from '@/hooks/useTheme';
-import { useAuth } from '@/contexts/AuthContext';
 import { Spacing, BorderRadius, BrandColors } from '@/constants/theme';
 
 type DocumentsMenuScreenProps = {
@@ -18,7 +16,7 @@ type DocumentsMenuScreenProps = {
 };
 
 interface DocumentStatus {
-  documentType: 'businessCert' | 'driverLicense' | 'cargoLicense' | 'vehicleCert' | 'transportContract';
+  type: 'businessCert' | 'driverLicense' | 'cargoLicense' | 'vehicleCert' | 'transportContract';
   status: 'pending' | 'reviewing' | 'approved' | 'rejected' | 'not_submitted';
   uploadedAt?: string;
   reviewedAt?: string;
@@ -60,11 +58,11 @@ const DOCUMENT_CONFIG = [
   },
   {
     type: 'transportContract' as const,
-    title: '화물위탁계약서',
-    description: '화물자동차 운송사업 위수탁 계약서',
-    icon: 'document-outline',
+    title: '화물위탁운송계약서',
+    description: '계약서 확인 · 약관동의 · 본인인증 · 전자서명',
+    icon: 'create-outline',
     required: true,
-    screen: 'TransportContractSubmit',
+    screen: 'ContractSigning',
   },
 ];
 
@@ -104,35 +102,20 @@ const STATUS_CONFIG = {
 export default function DocumentsMenuScreen({ navigation }: DocumentsMenuScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
-  const { user, refreshUser } = useAuth();
 
-  // 서류 상태 조회 (서버에서 onboardingStatus 자동 보정 트리거)
+  // 서류 상태 조회
   const { data: documentsStatus = [], isLoading } = useQuery<DocumentStatus[]>({
     queryKey: ['/api/helpers/documents/status'],
   });
 
-  // 서류 API 호출 후 서버에서 onboardingStatus가 갱신되었을 수 있으므로 사용자 정보 새로고침
-  useEffect(() => {
-    if (documentsStatus.length > 0 && user?.onboardingStatus !== 'approved') {
-      const requiredTypes = ['businessCert', 'driverLicense', 'cargoLicense', 'vehicleCert', 'transportContract'];
-      const allApproved = requiredTypes.every(type =>
-        documentsStatus.some((d: any) => d.documentType === type && d.status === 'approved')
-      );
-      if (allApproved) {
-        refreshUser();
-      }
-    }
-  }, [documentsStatus]);
-
   const getDocumentStatus = (type: string): DocumentStatus['status'] => {
-    const doc = documentsStatus.find(d => d.documentType === type);
+    const doc = documentsStatus.find(d => d.type === type);
     return doc?.status || 'not_submitted';
   };
 
   const getDocumentData = (type: string) => {
-    return documentsStatus.find(d => d.documentType === type);
+    return documentsStatus.find(d => d.type === type);
   };
 
   // 완료된 서류 수 계산
@@ -144,8 +127,8 @@ export default function DocumentsMenuScreen({ navigation }: DocumentsMenuScreenP
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.xl,
-        paddingBottom: tabBarHeight + Spacing.xl + 40,
+        paddingTop: headerHeight + Spacing.md,
+        paddingBottom: insets.bottom + 120,
         paddingHorizontal: Spacing.lg,
       }}
     >
@@ -200,10 +183,8 @@ export default function DocumentsMenuScreen({ navigation }: DocumentsMenuScreenP
             ]} 
           />
         </View>
-        <ThemedText style={[styles.progressHint, { color: approvedCount >= requiredCount ? BrandColors.success : theme.tabIconDefault }]}>
-          {approvedCount >= requiredCount
-            ? '모든 필수 서류가 승인되었습니다'
-            : '필수 서류를 모두 제출해주세요'}
+        <ThemedText style={[styles.progressHint, { color: theme.tabIconDefault }]}>
+          필수 서류를 모두 제출해주세요
         </ThemedText>
       </Card>
 

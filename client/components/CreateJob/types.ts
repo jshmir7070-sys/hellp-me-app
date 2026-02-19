@@ -1,16 +1,14 @@
 // 공통 타입 정의
 export type CategoryTab = "택배사" | "기타택배" | "냉탑전용";
 
-export interface ContractSettings {
-  depositRate: number;
-}
-
 export interface CourierFormData {
   company: string;
   avgQuantity: string;
   unitPrice: string;
   requestDate: string;
   requestDateEnd: string;
+  arrivalHour: string;
+  arrivalMinute: string;
   managerContact: string;
   vehicleType: string;
   regionLarge: string;
@@ -33,6 +31,8 @@ export interface OtherCourierFormData {
   isPerDrop: boolean;
   requestDate: string;
   requestDateEnd: string;
+  arrivalHour: string;
+  arrivalMinute: string;
   vehicleType: string;
   campAddress: string;
   campAddressDetail: string;
@@ -51,6 +51,8 @@ export interface ColdTruckFormData {
   hasPartition: boolean;
   requestDate: string;
   requestDateEnd: string;
+  arrivalHour: string;
+  arrivalMinute: string;
   vehicleType: string;
   contact: string;
   loadingPoint: string;
@@ -72,7 +74,6 @@ export interface BaseStepProps {
   onBack: () => void;
   theme: any;
   isDark: boolean;
-  bottomPadding?: number;
 }
 
 export interface Step1Props extends BaseStepProps {
@@ -101,6 +102,16 @@ export interface Step2Props extends BaseStepProps {
   getCourierPolicy: (courierName: string) => any;
   calcFinalPricePerBox: (basePricePerBox: number, boxCount: number, minTotal: number, urgentSurchargeRate: number, isUrgent: boolean) => any;
   onOpenSelectModal: (type: string, options: string[], callback: (value: string) => void) => void;
+}
+
+export interface Step3Props extends BaseStepProps {
+  courierForm: CourierFormData;
+  setCourierForm: React.Dispatch<React.SetStateAction<CourierFormData>>;
+  otherCourierForm: OtherCourierFormData;
+  setOtherCourierForm: React.Dispatch<React.SetStateAction<OtherCourierFormData>>;
+  coldTruckForm: ColdTruckFormData;
+  setColdTruckForm: React.Dispatch<React.SetStateAction<ColdTruckFormData>>;
+  onOpenDatePicker: (mode: 'start' | 'end', target: 'courier' | 'other' | 'cold') => void;
 }
 
 export interface Step4Props extends BaseStepProps {
@@ -132,12 +143,8 @@ export interface Step6Props extends BaseStepProps {
   setOtherCourierForm: React.Dispatch<React.SetStateAction<OtherCourierFormData>>;
   coldTruckForm: ColdTruckFormData;
   setColdTruckForm: React.Dispatch<React.SetStateAction<ColdTruckFormData>>;
-}
-
-export interface ContractSubmitData {
-  balancePaymentDueDate: string;
-  signatureName: string;
-  verificationPhone: string;
+  imageUri: string | null;
+  setImageUri: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 export interface Step7Props extends BaseStepProps {
@@ -147,23 +154,9 @@ export interface Step7Props extends BaseStepProps {
   setCourierForm: React.Dispatch<React.SetStateAction<CourierFormData>>;
   setOtherCourierForm: React.Dispatch<React.SetStateAction<OtherCourierFormData>>;
   setColdTruckForm: React.Dispatch<React.SetStateAction<ColdTruckFormData>>;
-  onSubmit: (contractData: ContractSubmitData) => void;
+  imageUri: string | null;
+  onSubmit: () => void;
   isSubmitting: boolean;
-  contractSettings?: ContractSettings;
-}
-
-export interface Step8Props {
-  activeTab: CategoryTab;
-  courierForm: CourierFormData;
-  otherCourierForm: OtherCourierFormData;
-  coldTruckForm: ColdTruckFormData;
-  orderId?: string;
-  onComplete: () => void;
-  onBack: () => void;
-  theme: any;
-  isDark: boolean;
-  bottomPadding?: number;
-  contractSettings?: ContractSettings;
 }
 
 // 유틸리티 함수
@@ -200,19 +193,27 @@ export const validateStep1 = (activeTab: CategoryTab, courierForm: CourierFormDa
   }
 };
 
-// 2단계: 수량·단가 + 요청일
 export const validateStep2 = (activeTab: CategoryTab, courierForm: CourierFormData, otherCourierForm: OtherCourierFormData, coldTruckForm: ColdTruckFormData): boolean => {
   if (activeTab === "택배사") {
-    return !!courierForm.avgQuantity && !!courierForm.unitPrice && !!courierForm.requestDate && !!courierForm.requestDateEnd;
+    return !!courierForm.avgQuantity && !!courierForm.unitPrice;
   } else if (activeTab === "기타택배") {
-    return !!otherCourierForm.boxCount && !!otherCourierForm.unitPrice && !!otherCourierForm.requestDate && !!otherCourierForm.requestDateEnd;
+    return !!otherCourierForm.boxCount && !!otherCourierForm.unitPrice;
   } else {
-    return !!coldTruckForm.freight && !!coldTruckForm.requestDate && !!coldTruckForm.requestDateEnd;
+    return !!coldTruckForm.freight;
   }
 };
 
-// 3단계: 차종·담당자 연락처
 export const validateStep3 = (activeTab: CategoryTab, courierForm: CourierFormData, otherCourierForm: OtherCourierFormData, coldTruckForm: ColdTruckFormData): boolean => {
+  if (activeTab === "택배사") {
+    return !!courierForm.requestDate && !!courierForm.requestDateEnd;
+  } else if (activeTab === "기타택배") {
+    return !!otherCourierForm.requestDate && !!otherCourierForm.requestDateEnd;
+  } else {
+    return !!coldTruckForm.requestDate && !!coldTruckForm.requestDateEnd;
+  }
+};
+
+export const validateStep4 = (activeTab: CategoryTab, courierForm: CourierFormData, otherCourierForm: OtherCourierFormData, coldTruckForm: ColdTruckFormData): boolean => {
   if (activeTab === "택배사") {
     return !!courierForm.vehicleType && !!courierForm.managerContact;
   } else if (activeTab === "기타택배") {
@@ -222,8 +223,7 @@ export const validateStep3 = (activeTab: CategoryTab, courierForm: CourierFormDa
   }
 };
 
-// 4단계: 배송지역·캠프/터미널 주소
-export const validateStep4 = (activeTab: CategoryTab, courierForm: CourierFormData, otherCourierForm: OtherCourierFormData, coldTruckForm: ColdTruckFormData): boolean => {
+export const validateStep5 = (activeTab: CategoryTab, courierForm: CourierFormData, otherCourierForm: OtherCourierFormData, coldTruckForm: ColdTruckFormData): boolean => {
   if (activeTab === "택배사") {
     return !!courierForm.regionLarge && !!courierForm.regionMedium && !!courierForm.campAddress;
   } else if (activeTab === "기타택배") {
@@ -233,13 +233,12 @@ export const validateStep4 = (activeTab: CategoryTab, courierForm: CourierFormDa
   }
 };
 
-// 5단계: 배송가이드·파일 업로드 (선택)
-export const validateStep5 = (activeTab: CategoryTab, courierForm: CourierFormData, otherCourierForm: OtherCourierFormData, coldTruckForm: ColdTruckFormData): boolean => {
+export const validateStep6 = (activeTab: CategoryTab, courierForm: CourierFormData, otherCourierForm: OtherCourierFormData, coldTruckForm: ColdTruckFormData): boolean => {
+  // 배송 가이드와 긴급 여부는 선택사항이므로 항상 true
   return true;
 };
 
-// 6단계: 오더확인·계약금확인·동의
-export const validateStep6 = (activeTab: CategoryTab, courierForm: CourierFormData, otherCourierForm: OtherCourierFormData, coldTruckForm: ColdTruckFormData): boolean => {
+export const validateStep7 = (activeTab: CategoryTab, courierForm: CourierFormData, otherCourierForm: OtherCourierFormData, coldTruckForm: ColdTruckFormData): boolean => {
   if (activeTab === "택배사") {
     return courierForm.agreeToSubmit;
   } else if (activeTab === "기타택배") {

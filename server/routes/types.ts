@@ -53,6 +53,7 @@ export interface RouteContext {
   broadcastNewOrderToHelpers: (orderData: any) => Promise<void>;
   sendFcmToUser: (userId: string, payload: any) => Promise<any>;
   sendExpoPushToUser: (userId: string, payload: any) => Promise<any>;
+  sendPushToUser: (userId: string, payload: { title: string; body: string; url?: string; tag?: string }) => Promise<{ sent: number; failed: number }>;
 
   // 결제
   pgService: any;
@@ -109,6 +110,7 @@ export interface RouteContext {
 
   // 기타
   getOrderDepositInfo: (orderId: number) => Promise<any>;
+  getDepositRate: () => Promise<number>;
   getOrCreatePersonalCode: (userId: string) => Promise<string>;
 }
 

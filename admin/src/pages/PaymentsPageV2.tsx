@@ -180,6 +180,7 @@ export default function PaymentsPageV2() {
     onSuccess: (_data, variables) => {
       toast({
         title: variables.status === 'completed' ? '환불이 승인되었습니다.' : '환불이 거절되었습니다.',
+        variant: 'success',
       });
       setSelectedRefund(null);
       setRejectModalOpen(false);
@@ -190,7 +191,7 @@ export default function PaymentsPageV2() {
       toast({
         title: '환불 처리 실패',
         description: error.message,
-        variant: 'destructive',
+        variant: 'error',
       });
     },
   });
@@ -212,12 +213,13 @@ export default function PaymentsPageV2() {
     onSuccess: (data) => {
       toast({
         title: `일괄 승인 완료: ${data.succeeded}건 성공${data.failed > 0 ? `, ${data.failed}건 실패` : ''}`,
+        variant: 'success',
       });
       setSelectedIds(new Set());
       queryClient.invalidateQueries({ queryKey: ['refunds'] });
     },
     onError: (error: any) => {
-      toast({ title: '일괄 승인 실패', description: error.message, variant: 'destructive' });
+      toast({ title: '일괄 승인 실패', description: error.message, variant: 'error' });
     },
   });
 
@@ -319,7 +321,7 @@ export default function PaymentsPageV2() {
     queryClient.invalidateQueries({ queryKey: ['deposit-payments'] });
     queryClient.invalidateQueries({ queryKey: ['balance-payments'] });
     queryClient.invalidateQueries({ queryKey: ['refunds'] });
-    toast({ title: '데이터를 새로고침했습니다.' });
+    toast({ title: '데이터를 새로고침했습니다.', variant: 'success' });
   };
 
   const handleDownloadExcel = () => {
@@ -382,7 +384,7 @@ export default function PaymentsPageV2() {
     }
 
     if (data.length === 0) {
-      toast({ title: '다운로드할 데이터가 없습니다.', variant: 'destructive' });
+      toast({ title: '다운로드할 데이터가 없습니다.', variant: 'warning' });
       return;
     }
 
@@ -398,7 +400,7 @@ export default function PaymentsPageV2() {
     link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
-    toast({ title: 'Excel 다운로드 완료' });
+    toast({ title: 'Excel 다운로드 완료', variant: 'success' });
   };
 
   // ============ 컬럼 정의 ============
@@ -874,7 +876,7 @@ export default function PaymentsPageV2() {
                         .filter(r => selectedIds.has(r.id) && r.status === 'pending')
                         .map(r => r.id);
                       if (pendingIds.length === 0) {
-                        toast({ title: '승인 가능한 환불 건이 없습니다.', variant: 'destructive' });
+                        toast({ title: '승인 가능한 환불 건이 없습니다.', variant: 'warning' });
                         return;
                       }
                       if (confirm(`처리대기 중인 ${pendingIds.length}건을 일괄 승인하시겠습니까?`)) {
@@ -982,7 +984,18 @@ export default function PaymentsPageV2() {
                   닫기
                 </Button>
                 {selectedDeposit.paymentStatus === 'unpaid' && (
-                  <Button onClick={() => toast({ title: '입금 확인 기능은 개발 예정입니다.' })}>
+                  <Button
+                    onClick={async () => {
+                      try {
+                        await apiRequest(`/orders/${selectedDeposit.orderId}/approve-deposit`, { method: 'POST' });
+                        toast({ title: '입금 확인 완료', description: `오더 #${selectedDeposit.orderId}의 입금이 확인되었습니다.` });
+                        queryClient.invalidateQueries({ queryKey: ['/api/admin/payments'] });
+                        setSelectedDeposit(null);
+                      } catch (error: any) {
+                        toast({ title: '오류', description: error.message || '입금 확인에 실패했습니다.', variant: 'destructive' });
+                      }
+                    }}
+                  >
                     <CheckCircle className="h-4 w-4 mr-2" />
                     입금 확인
                   </Button>
@@ -1292,7 +1305,7 @@ export default function PaymentsPageV2() {
               variant="destructive"
               onClick={() => {
                 if (!rejectReason.trim()) {
-                  toast({ title: '거절 사유를 입력해주세요.', variant: 'destructive' });
+                  toast({ title: '거절 사유를 입력해주세요.', variant: 'warning' });
                   return;
                 }
                 if (selectedRefund) {

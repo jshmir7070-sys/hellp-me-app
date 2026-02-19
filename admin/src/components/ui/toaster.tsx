@@ -1,112 +1,66 @@
 import * as React from "react";
-import * as ToastPrimitives from "@radix-ui/react-toast";
-import { cva, type VariantProps } from "class-variance-authority";
-import { X } from "lucide-react";
+import { X, CheckCircle2, AlertTriangle, XCircle, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const ToastProvider = ToastPrimitives.Provider;
+// ==================== Toast Types ====================
 
-const ToastViewport = React.forwardRef<
-  React.ElementRef<typeof ToastPrimitives.Viewport>,
-  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Viewport>
->(({ className, ...props }, ref) => (
-  <ToastPrimitives.Viewport
-    ref={ref}
-    className={cn(
-      "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
-      className
-    )}
-    {...props}
-  />
-));
-ToastViewport.displayName = ToastPrimitives.Viewport.displayName;
+export type ToastVariant = "success" | "error" | "warning" | "info";
 
-const toastVariants = cva(
-  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border p-6 pr-8 shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
-  {
-    variants: {
-      variant: {
-        default: "border bg-background text-foreground",
-        destructive: "destructive group border-destructive bg-destructive text-destructive-foreground",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  }
-);
-
-const Toast = React.forwardRef<
-  React.ElementRef<typeof ToastPrimitives.Root>,
-  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> &
-    VariantProps<typeof toastVariants>
->(({ className, variant, ...props }, ref) => {
-  return (
-    <ToastPrimitives.Root
-      ref={ref}
-      className={cn(toastVariants({ variant }), className)}
-      {...props}
-    />
-  );
-});
-Toast.displayName = ToastPrimitives.Root.displayName;
-
-const ToastClose = React.forwardRef<
-  React.ElementRef<typeof ToastPrimitives.Close>,
-  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Close>
->(({ className, ...props }, ref) => (
-  <ToastPrimitives.Close
-    ref={ref}
-    className={cn(
-      "absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-2 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600",
-      className
-    )}
-    toast-close=""
-    {...props}
-  >
-    <X className="h-4 w-4" />
-  </ToastPrimitives.Close>
-));
-ToastClose.displayName = ToastPrimitives.Close.displayName;
-
-const ToastTitle = React.forwardRef<
-  React.ElementRef<typeof ToastPrimitives.Title>,
-  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Title>
->(({ className, ...props }, ref) => (
-  <ToastPrimitives.Title
-    ref={ref}
-    className={cn("text-sm font-semibold", className)}
-    {...props}
-  />
-));
-ToastTitle.displayName = ToastPrimitives.Title.displayName;
-
-const ToastDescription = React.forwardRef<
-  React.ElementRef<typeof ToastPrimitives.Description>,
-  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Description>
->(({ className, ...props }, ref) => (
-  <ToastPrimitives.Description
-    ref={ref}
-    className={cn("text-sm opacity-90", className)}
-    {...props}
-  />
-));
-ToastDescription.displayName = ToastPrimitives.Description.displayName;
-
-type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>;
-
-export interface ToastActionElement {
-  altText: string;
-  action: React.ReactNode;
+interface ToastItem {
+  id: string;
+  title?: string;
+  description?: string;
+  variant: ToastVariant;
 }
 
+// ==================== Variant Config (컬러/아이콘별 분리) ====================
+
+const VARIANT_CONFIG: Record<ToastVariant, {
+  headerBg: string;
+  borderColor: string;
+  icon: React.ReactNode;
+  iconBg: string;
+  progressBg: string;
+  label: string;
+}> = {
+  success: {
+    headerBg: "bg-emerald-500",
+    borderColor: "border-l-emerald-500",
+    icon: <CheckCircle2 className="h-5 w-5 text-white" />,
+    iconBg: "bg-emerald-600",
+    progressBg: "bg-emerald-500",
+    label: "완료",
+  },
+  error: {
+    headerBg: "bg-red-500",
+    borderColor: "border-l-red-500",
+    icon: <XCircle className="h-5 w-5 text-white" />,
+    iconBg: "bg-red-600",
+    progressBg: "bg-red-500",
+    label: "오류",
+  },
+  warning: {
+    headerBg: "bg-amber-500",
+    borderColor: "border-l-amber-500",
+    icon: <AlertTriangle className="h-5 w-5 text-white" />,
+    iconBg: "bg-amber-600",
+    progressBg: "bg-amber-500",
+    label: "주의",
+  },
+  info: {
+    headerBg: "bg-blue-500",
+    borderColor: "border-l-blue-500",
+    icon: <Info className="h-5 w-5 text-white" />,
+    iconBg: "bg-blue-600",
+    progressBg: "bg-blue-500",
+    label: "알림",
+  },
+};
+
+// ==================== State Management ====================
+
 interface ToastState {
-  toasts: Array<{
-    id: string;
-    title?: string;
-    description?: string;
-    variant?: "default" | "destructive";
-  }>;
+  toasts: ToastItem[];
 }
 
 const toastState: ToastState = { toasts: [] };
@@ -116,24 +70,106 @@ function emitChange() {
   listeners.forEach((listener) => listener());
 }
 
+/**
+ * 토스트 표시 함수
+ * 기존 variant ("default" | "destructive") 와도 호환됨
+ */
 export function toast({
   title,
   description,
-  variant = "default",
+  variant = "info",
 }: {
   title?: string;
   description?: string;
-  variant?: "default" | "destructive";
+  variant?: ToastVariant | "default" | "destructive";
 }) {
+  // 기존 variant 호환 맵핑
+  let mappedVariant: ToastVariant = "info";
+  if (variant === "destructive" || variant === "error") mappedVariant = "error";
+  else if (variant === "success") mappedVariant = "success";
+  else if (variant === "warning") mappedVariant = "warning";
+  else if (variant === "info" || variant === "default") mappedVariant = "info";
+
   const id = Math.random().toString(36).slice(2);
-  toastState.toasts = [...toastState.toasts, { id, title, description, variant }];
+  toastState.toasts = [...toastState.toasts, { id, title, description, variant: mappedVariant }];
   emitChange();
-  
+
   setTimeout(() => {
     toastState.toasts = toastState.toasts.filter((t) => t.id !== id);
     emitChange();
-  }, 5000);
+  }, 4500);
 }
+
+function dismissToast(id: string) {
+  toastState.toasts = toastState.toasts.filter((t) => t.id !== id);
+  emitChange();
+}
+
+// ==================== Toast Card Component ====================
+
+function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void }) {
+  const config = VARIANT_CONFIG[item.variant];
+  const [isExiting, setIsExiting] = React.useState(false);
+  const [isVisible, setIsVisible] = React.useState(false);
+
+  React.useEffect(() => {
+    // 진입 애니메이션 트리거
+    requestAnimationFrame(() => setIsVisible(true));
+  }, []);
+
+  const handleDismiss = () => {
+    setIsExiting(true);
+    setTimeout(onDismiss, 300);
+  };
+
+  return (
+    <div
+      className={cn(
+        "pointer-events-auto w-[400px] overflow-hidden rounded-xl shadow-2xl border-l-4 bg-white transition-all duration-300 ease-out",
+        config.borderColor,
+        isVisible && !isExiting
+          ? "translate-x-0 opacity-100"
+          : "translate-x-full opacity-0"
+      )}
+      style={{ boxShadow: "0 8px 30px rgba(0,0,0,0.12)" }}
+    >
+      {/* 컬러 헤더 바 */}
+      <div className={cn("flex items-center gap-2.5 px-4 py-3", config.headerBg)}>
+        <div className={cn("flex items-center justify-center w-7 h-7 rounded-full shrink-0", config.iconBg)}>
+          {config.icon}
+        </div>
+        <span className="text-sm font-bold flex-1 text-white">
+          {item.title || config.label}
+        </span>
+        <button
+          onClick={handleDismiss}
+          className="p-0.5 rounded-full hover:bg-white/20 transition-colors shrink-0"
+        >
+          <X className="h-4 w-4 text-white/80 hover:text-white" />
+        </button>
+      </div>
+
+      {/* 본문 (description 있을 때만) */}
+      {item.description && (
+        <div className="px-4 py-3.5 bg-white">
+          <p className="text-sm text-gray-600 leading-relaxed">{item.description}</p>
+        </div>
+      )}
+
+      {/* 하단 프로그레스 바 (자동 닫힘 시각화) */}
+      <div className="h-1 bg-gray-100 overflow-hidden">
+        <div
+          className={cn("h-full rounded-r-full", config.progressBg)}
+          style={{
+            animation: "toast-shrink 4.5s linear forwards",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ==================== Toaster (Root Component) ====================
 
 export function Toaster() {
   const [toasts, setToasts] = React.useState(toastState.toasts);
@@ -148,20 +184,25 @@ export function Toaster() {
   }, []);
 
   return (
-    <ToastProvider>
-      {toasts.map(({ id, title, description, variant }) => (
-        <Toast key={id} variant={variant}>
-          <div className="grid gap-1">
-            {title ? <ToastTitle>{title}</ToastTitle> : null}
-            {description ? <ToastDescription>{description}</ToastDescription> : null}
-          </div>
-          <ToastClose />
-        </Toast>
-      ))}
-      <ToastViewport />
-    </ToastProvider>
+    <>
+      {/* CSS keyframe for progress bar */}
+      <style>{`
+        @keyframes toast-shrink {
+          from { width: 100%; }
+          to { width: 0%; }
+        }
+      `}</style>
+
+      {/* Toast container - 우하단 고정, 최대 3개 */}
+      <div className="fixed bottom-4 right-4 z-[100] flex flex-col-reverse gap-3">
+        {toasts.slice(0, 3).map((item) => (
+          <ToastCard
+            key={item.id}
+            item={item}
+            onDismiss={() => dismissToast(item.id)}
+          />
+        ))}
+      </div>
+    </>
   );
 }
-
-export { Toast, ToastClose, ToastDescription, ToastTitle, ToastProvider, ToastViewport };
-export type { ToastProps };

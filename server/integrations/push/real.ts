@@ -115,8 +115,8 @@ export class RealPushProvider implements PushProvider {
         return false;
       }
 
-      const result = await response.json();
-      
+      const result: any = await response.json();
+
       if (result.data?.status === 'error') {
         console.error('[ExpoPush] Push error:', result.data.message);
         return false;

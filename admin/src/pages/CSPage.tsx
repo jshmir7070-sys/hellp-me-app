@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminFetch } from '@/lib/api';
+import { toast } from '@/components/ui/toaster';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +39,26 @@ const STATUS_COLORS: Record<string, string> = {
 export default function CSPage() {
   const [selectedTicket, setSelectedTicket] = useState<CSTicket | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
+  const queryClient = useQueryClient();
+
+  const resolveTicketMutation = useMutation({
+    mutationFn: async (ticketId: number) => {
+      const res = await adminFetch(`/api/admin/cs/${ticketId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'resolved' }),
+      });
+      if (!res.ok) throw new Error('상태 변경 실패');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/cs'] });
+      toast({ title: 'CS 티켓이 해결되었습니다', variant: 'success' });
+    },
+    onError: () => {
+      toast({ title: 'CS 티켓 상태 변경 실패', variant: 'error' });
+    },
+  });
 
   const { data: tickets = [], isLoading } = useQuery({
     queryKey: ['/api/admin/cs'],
@@ -123,7 +144,16 @@ export default function CSPage() {
             <Eye className="h-4 w-4" />
           </Button>
           {row.status !== 'resolved' ? (
-            <Button size="sm" variant="ghost" className="text-green-600">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-green-600"
+              onClick={(e) => {
+                e.stopPropagation();
+                resolveTicketMutation.mutate(row.id);
+              }}
+              disabled={resolveTicketMutation.isPending}
+            >
               <CheckCircle className="h-4 w-4" />
             </Button>
           ) : null}

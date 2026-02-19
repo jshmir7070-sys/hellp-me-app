@@ -6,7 +6,7 @@ import { useScreenOptions } from "@/hooks/useScreenOptions";
 
 export type SettlementStackParamList = {
   Settlement: undefined;
-  SettlementDetail: { date: string };
+  SettlementDetail: { date: string; orderId?: number };
 };
 
 const Stack = createNativeStackNavigator<SettlementStackParamList>();

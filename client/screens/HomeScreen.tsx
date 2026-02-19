@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import { View, FlatList, Pressable, StyleSheet, RefreshControl, ActivityIndicator, ScrollView, Dimensions, Modal, Alert, Platform, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
@@ -89,7 +89,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
-  const { user, refreshUser } = useAuth();
+  const { user } = useAuth();
   const { isDesktop, isTablet, isMobile, containerMaxWidth } = useResponsive();
 
   const [editOrder, setEditOrder] = useState<any>(null);
@@ -100,33 +100,14 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const isHelper = user?.role === 'helper';
   const primaryColor = isHelper ? BrandColors.helper : BrandColors.requester;
   
-  // 서류 상태 조회 → 서버에서 onboardingStatus 자동 보정 트리거
-  const { data: docStatusData } = useQuery<any[]>({
-    queryKey: ['/api/helpers/documents/status'],
-    enabled: isHelper && user?.onboardingStatus !== 'approved',
-  });
-
-  // 서류 API 호출 후 서버에서 onboardingStatus가 갱신되었을 수 있으므로 사용자 정보 새로고침
-  useEffect(() => {
-    if (docStatusData && isHelper && user?.onboardingStatus !== 'approved') {
-      const requiredTypes = ['businessCert', 'driverLicense', 'cargoLicense', 'vehicleCert', 'transportContract'];
-      const allApproved = requiredTypes.every(type =>
-        docStatusData.some((d: any) => d.documentType === type && d.status === 'approved')
-      );
-      if (allApproved) {
-        refreshUser();
-      }
-    }
-  }, [docStatusData]);
-
   const showOnboardingBanner = isHelper && user?.onboardingStatus !== 'approved';
 
-  const { data: helperStats, isLoading: isLoadingHelperStats, isFetching: isFetchingHelperStats, refetch: refetchHelperStats } = useQuery<any>({
+  const { data: helperStats, isLoading: isLoadingHelperStats } = useQuery<any>({
     queryKey: ['/api/helper/work-history', { limit: 10 }],
     enabled: isHelper,
   });
 
-  const { data: requesterOrders, isLoading: isLoadingRequesterOrders, isFetching: isFetchingRequesterOrders, refetch: refetchRequesterOrders } = useQuery<any[]>({
+  const { data: requesterOrders, isLoading: isLoadingRequesterOrders } = useQuery<any[]>({
     queryKey: ['/api/requester/orders'],
     enabled: !isHelper,
   });
@@ -151,16 +132,9 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   }, [isHelper, helperStats, requesterOrders]);
 
   const isLoadingStats = isHelper ? isLoadingHelperStats : isLoadingRequesterOrders;
-  const isRefetching = isHelper ? isFetchingHelperStats : isFetchingRequesterOrders;
+  const isRefetching = false;
 
-  const refetchStats = () => {
-    if (isHelper) {
-      refetchHelperStats();
-    } else {
-      refetchRequesterOrders();
-    }
-    refetchScheduled();
-  };
+  const refetchStats = () => {};
 
   const { data: scheduledOrdersRaw = [], refetch: refetchScheduled } = useQuery<any[]>({
     queryKey: ['/api/orders/scheduled'],
@@ -238,7 +212,7 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
       {bannerContent ? (
         <Pressable 
           style={[styles.onboardingBanner, { backgroundColor: bannerContent.color + '15', borderColor: bannerContent.color }]}
-          onPress={bannerContent.buttonText ? () => (navigation as any).navigate('ProfileTab', { screen: 'DocumentsMenu' }) : undefined}
+          onPress={bannerContent.buttonText ? () => navigation.navigate('DocumentsMenu' as any) : undefined}
         >
           <View style={styles.onboardingBannerContent}>
             <Icon name={bannerContent.icon} size={24} color={bannerContent.color} />
@@ -653,8 +627,7 @@ function HelperDashboard({
               <View key={order.id} style={styles.swipeOrderCard}>
                 <OrderCard
                   data={orderDTO}
-                  context="helper_my_orders"
-                  onAction={(action, data) => handleOrderAction(action, data, navigation)}
+                  context="helper_home"
                   onPress={(data) => onShowModal(data)}
                 />
               </View>
@@ -699,37 +672,6 @@ function HelperDashboard({
       />
     </>
   );
-}
-
-function handleOrderAction(action: string, data: OrderCardDTO, navigation: NativeStackNavigationProp<any>) {
-  const navigateToJobDetail = () => {
-    navigation.getParent()?.navigate('OrdersTab', {
-      screen: 'JobDetail',
-      params: { jobId: data.orderId },
-    });
-  };
-  
-  switch (action) {
-    case 'VIEW_DETAIL':
-    case 'START_WORK':
-      navigateToJobDetail();
-      break;
-    case 'SUBMIT_CLOSING':
-      navigation.getParent()?.navigate('OrdersTab', {
-        screen: 'ClosingReport',
-        params: { orderId: Number(data.orderId) },
-      });
-      break;
-    case 'VIEW_CLOSING':
-      navigateToJobDetail();
-      break;
-    case 'REPORT_DISPUTE':
-      navigation.getParent()?.navigate('OrdersTab', {
-        screen: 'DisputeCreate',
-        params: { orderId: data.orderId, type: 'amount_error' },
-      });
-      break;
-  }
 }
 
 function RequesterDashboard({ 
@@ -834,7 +776,7 @@ function RequesterDashboard({
       stars.push(
         <Icon
           key={i}
-          name={i <= displayRating ? "star" : "star-outline"}
+          name={i <= displayRating ? "star-outline" : "star-outline"}
           size={18}
           color={i <= displayRating ? BrandColors.warning : BrandColors.neutral}
           style={{ marginRight: 2 }}
@@ -870,48 +812,8 @@ function RequesterDashboard({
                   <OrderCard
                     data={orderDTO}
                     context="requester_home"
-                    onAction={(action, data) => {
-                      if (action === 'EDIT_ORDER') {
-                        onEditOrder(order);
-                      } else {
-                        handleRequesterAction(action, data, navigation);
-                      }
-                    }}
                     onPress={(data) => onShowModal(data, order)}
                   />
-                  {(order.applicants && order.applicants.length > 0) ? (
-                    <View style={styles.helperCardsContainer}>
-                      <View style={styles.helperCardsHeader}>
-                        <ThemedText style={[styles.helperCardsTitle, { color: theme.text }]}>
-                          신청 헬퍼 ({order.applicants.length})
-                        </ThemedText>
-                        {order.applicants.length > 3 && (
-                          <ThemedText style={[styles.helperCardsMore, { color: primaryColor }]}>
-                            +{order.applicants.length - 3}명 더보기
-                          </ThemedText>
-                        )}
-                      </View>
-                      {order.applicants.slice(0, 3).map((applicant: any) => (
-                        <HelperCard
-                          key={applicant.id}
-                          helper={applicant}
-                          onPress={() => handleApplicantPress(applicant, order.id)}
-                          onQuickAction={(action) => {
-                            if (action === 'select') {
-                              handleApplicantPress(applicant, order.id);
-                            }
-                          }}
-                        />
-                      ))}
-                    </View>
-                  ) : (
-                    <View style={styles.noApplicantCard}>
-                      <Icon name="person-outline" size={24} color={theme.tabIconDefault} />
-                      <ThemedText style={[styles.noApplicantText, { color: theme.tabIconDefault }]}>
-                        신청한 헬퍼가 없습니다
-                      </ThemedText>
-                    </View>
-                  )}
                 </View>
               );
             })}
@@ -939,7 +841,46 @@ function RequesterDashboard({
         </Card>
       )}
 
-
+      {/* 헬퍼 지원자 카드 - 매칭중 상태일 때 */}
+      {applicants.length > 0 && currentOrder && (
+        ['MATCHING', 'OPEN'].includes((currentOrder.status || '').toUpperCase())
+      ) ? (
+        <View style={styles.helperCardsContainer}>
+          <View style={styles.helperCardsHeader}>
+            <ThemedText style={[styles.helperCardsTitle, { color: theme.text }]}>
+              지원한 헬퍼 ({applicants.length}명)
+            </ThemedText>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {applicants.map((applicant: Applicant) => (
+              <Pressable
+                key={applicant.helperId}
+                style={styles.helperApplicantCard}
+                onPress={() => handleApplicantPress(applicant, currentOrder.id)}
+              >
+                <View style={styles.helperApplicantAvatar}>
+                  <Icon name="person" size={24} color={BrandColors.helper} />
+                </View>
+                <ThemedText
+                  style={[styles.helperApplicantName, { color: theme.text }]}
+                  numberOfLines={1}
+                >
+                  {applicant.helperNickname || applicant.helperName}
+                </ThemedText>
+                <View style={styles.helperApplicantRating}>
+                  <Icon name="star" size={12} color={BrandColors.warning} />
+                  <ThemedText style={[styles.helperApplicantRatingText, { color: theme.text }]}>
+                    {applicant.averageRating ? applicant.averageRating.toFixed(1) : '-'}
+                  </ThemedText>
+                </View>
+                <ThemedText style={[styles.helperApplicantReviewCount, { color: theme.tabIconDefault }]}>
+                  리뷰 {applicant.reviewCount}개
+                </ThemedText>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </View>
+      ) : null}
 
       <Modal
         visible={applicantModalVisible}
@@ -1111,6 +1052,9 @@ function handleRequesterAction(action: string, data: OrderCardDTO, navigation: N
     case 'VIEW_CLOSING':
       navigation.navigate('Contract', { contractId: data.contractId || data.orderId });
       break;
+    case 'REVIEW_CLOSING':
+      navigation.navigate('RequesterClosing', { orderId: Number(data.orderId) });
+      break;
     case 'PAY_DOWN':
     case 'PAY_BALANCE':
       navigation.navigate('Payment', { orderId: data.orderId });
@@ -1125,28 +1069,6 @@ function handleRequesterAction(action: string, data: OrderCardDTO, navigation: N
       navigation.navigate('CreateContract', { editMode: true, orderId: data.orderId });
       break;
     case 'CANCEL_ORDER':
-      Alert.alert(
-        '오더 취소',
-        '이 오더를 취소하시겠습니까?\n취소 후에는 되돌릴 수 없습니다.',
-        [
-          { text: '아니오', style: 'cancel' },
-          {
-            text: '취소하기',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                const { apiRequest, queryClient: qc } = await import('@/lib/query-client');
-                await apiRequest('DELETE', `/api/orders/${data.orderId}`);
-                qc.invalidateQueries({ queryKey: ['/api/requester/orders'] });
-                qc.invalidateQueries({ queryKey: ['/api/orders'] });
-                Alert.alert('완료', '오더가 취소되었습니다.');
-              } catch (err: any) {
-                Alert.alert('오류', err.message || '오더 취소에 실패했습니다.');
-              }
-            },
-          },
-        ]
-      );
       break;
   }
 }

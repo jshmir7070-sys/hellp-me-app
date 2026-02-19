@@ -58,8 +58,7 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
     enabled: !!orderId,
   });
 
-  const getImageUrl = (imagePath: string | undefined | null) => {
-    if (!imagePath) return '';
+  const getImageUrl = (imagePath: string) => {
     if (imagePath.startsWith('http')) return imagePath;
     return new URL(imagePath, getApiUrl()).toString();
   };
@@ -72,7 +71,7 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsEditing: false,
       aspect: [4, 3],
       quality: 0.8,
     });

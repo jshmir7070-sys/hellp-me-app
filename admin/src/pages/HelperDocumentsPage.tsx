@@ -149,12 +149,12 @@ export default function HelperDocumentsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/helper-documents'] });
-      toast({ title: '성공', description: '서류가 승인되었습니다' });
+      toast({ title: '성공', description: '서류가 승인되었습니다', variant: 'success' });
       setShowReviewDialog(false);
       setSelectedDocument(null);
     },
     onError: () => {
-      toast({ title: '오류', description: '승인 처리에 실패했습니다', variant: 'destructive' });
+      toast({ title: '오류', description: '승인 처리에 실패했습니다', variant: 'error' });
     },
   });
 
@@ -168,12 +168,12 @@ export default function HelperDocumentsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/helper-documents'] });
-      toast({ title: '성공', description: '서류가 반려되었습니다' });
+      toast({ title: '성공', description: '서류가 반려되었습니다', variant: 'success' });
       setShowReviewDialog(false);
       setSelectedDocument(null);
     },
     onError: () => {
-      toast({ title: '오류', description: '반려 처리에 실패했습니다', variant: 'destructive' });
+      toast({ title: '오류', description: '반려 처리에 실패했습니다', variant: 'error' });
     },
   });
 
@@ -187,7 +187,7 @@ export default function HelperDocumentsPage() {
       });
     } else {
       if (!rejectionReason.trim()) {
-        toast({ title: '알림', description: '반려 사유를 입력해주세요', variant: 'destructive' });
+        toast({ title: '알림', description: '반려 사유를 입력해주세요', variant: 'warning' });
         return;
       }
       rejectMutation.mutate({
@@ -212,10 +212,10 @@ export default function HelperDocumentsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/helper-documents'] });
-      toast({ title: '승인 완료', description: '모든 서류가 승인되었습니다' });
+      toast({ title: '승인 완료', description: '모든 서류가 승인되었습니다', variant: 'success' });
     },
     onError: () => {
-      toast({ title: '오류', description: '일부 서류 승인에 실패했습니다', variant: 'destructive' });
+      toast({ title: '오류', description: '일부 서류 승인에 실패했습니다', variant: 'error' });
     },
   });
 

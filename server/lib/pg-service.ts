@@ -115,7 +115,7 @@ class PGService {
         body: body ? JSON.stringify(body) : undefined,
       });
 
-      const responseData = await response.json().catch(() => ({}));
+      const responseData: any = await response.json().catch(() => ({}));
 
       if (!response.ok) {
         throw new PGServiceError(
@@ -126,7 +126,7 @@ class PGService {
       }
 
       return responseData as T;
-    } catch (err) {
+    } catch (err: any) {
       if (err instanceof PGServiceError) throw err;
       throw new PGServiceError(
         "PG_NETWORK_ERROR",
@@ -182,7 +182,7 @@ class PGService {
         message: "결제 상태 조회 성공",
         pgRawResponse: data,
       };
-    } catch (err) {
+    } catch (err: any) {
       if (err instanceof PGServiceError) {
         return {
           success: false,
@@ -260,7 +260,7 @@ class PGService {
         message: "환불 처리 성공",
         pgRawResponse: data,
       };
-    } catch (err) {
+    } catch (err: any) {
       if (err instanceof PGServiceError) {
         return {
           success: false,

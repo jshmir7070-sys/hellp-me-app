@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { registerApiDocs } from "./api-docs";
 import { serveStatic } from "./static";
@@ -11,6 +12,12 @@ const app = express();
 const httpServer = createServer(app);
 
 notificationWS.initialize(httpServer);
+
+// Security headers (Strict-Transport-Security, X-Content-Type-Options, etc.)
+app.use(helmet({
+  contentSecurityPolicy: false, // CSP는 프론트엔드와 충돌 가능 → 별도 설정 필요
+  crossOriginEmbedderPolicy: false, // Capacitor 앱 호환
+}));
 
 declare module "http" {
   interface IncomingMessage {
@@ -107,12 +114,15 @@ app.use("/uploads", (req, res, next) => {
     return res.status(401).json({ message: "인증이 필요합니다" });
   }
 
-  const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-this";
+  const JWT_SECRET = process.env.JWT_SECRET;
+  if (!JWT_SECRET) {
+    return res.status(500).json({ message: "서버 인증 설정 오류" });
+  }
 
   try {
     jwt.verify(token, JWT_SECRET);
     next();
-  } catch (err) {
+  } catch (err: any) {
     return res.status(401).json({ message: "유효하지 않은 토큰입니다" });
   }
 }, express.static(path.join(process.cwd(), "uploads")));

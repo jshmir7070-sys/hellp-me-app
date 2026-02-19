@@ -19,7 +19,6 @@ export default function Step4Vehicle({
   onBack,
   theme,
   isDark,
-  bottomPadding,
 }: Step4Props) {
   
   const isValid = 
@@ -33,10 +32,10 @@ export default function Step4Vehicle({
 
   return (
     <View style={styles.container}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
-            3단계: 차종 · 담당자 연락처
+            4단계: 차량 & 연락처
           </ThemedText>
           <ThemedText style={[styles.stepDescription, { color: Colors.light.tabIconDefault }]}>
             차량 타입과 담당자 연락처를 입력해주세요
@@ -267,7 +266,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.lg,
-    paddingBottom: Spacing.lg,
+    paddingBottom: 100,
   },
   section: {
     marginBottom: Spacing.xl,
@@ -315,6 +314,10 @@ const styles = StyleSheet.create({
     ...Typography.body,
   },
   footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     padding: Spacing.lg,
     flexDirection: 'row',
     gap: Spacing.md,

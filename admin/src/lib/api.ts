@@ -19,13 +19,8 @@ function handleSessionExpired() {
   localStorage.removeItem('admin_token');
   localStorage.removeItem('admin_user');
   
-  const confirmed = window.confirm(
-    '세션이 만료되었습니다.\n다시 로그인해주세요.\n\n확인을 누르면 로그인 페이지로 이동합니다.'
-  );
-  
-  if (confirmed || !confirmed) {
-    window.location.href = '/admin/login';
-  }
+  // 세션 만료 시 즉시 로그인 페이지로 리다이렉트
+  window.location.href = '/admin/login';
   
   setTimeout(() => {
     sessionExpiredShown = false;

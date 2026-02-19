@@ -140,7 +140,7 @@ export default function VehicleCertSubmitScreen({ navigation }: VehicleCertSubmi
       if (uploadResponse.ok) {
         await queryClient.invalidateQueries({ queryKey: ['/api/helpers/documents'] });
         await queryClient.invalidateQueries({ queryKey: ['/api/helpers/documents/status'] });
-        Alert.alert('완료', '저장되었습니다.', [{ text: '확인', onPress: () => navigation.goBack() }]);
+        Alert.alert('완료', '차량등록증이 제출되었습니다', [{ text: '확인', onPress: () => navigation.goBack() }]);
       } else {
         const data = await uploadResponse.json();
         Alert.alert('오류', data.message || '제출에 실패했습니다');
@@ -153,24 +153,14 @@ export default function VehicleCertSubmitScreen({ navigation }: VehicleCertSubmi
     }
   };
 
-  const canResubmit = true; // 승인 후에도 수정 가능
-  const isReadOnly = document?.status === 'reviewing'; // 검토중일 때만 읽기전용
-
-  // 이미지 URL 처리 (상대 경로면 전체 URL로 변환)
-  const displayImageUrl = React.useMemo(() => {
-    if (!selectedImage) return null;
-    if (selectedImage.startsWith('http') || selectedImage.startsWith('file://')) {
-      return selectedImage;
-    }
-    return `${getApiUrl()}${selectedImage}`;
-  }, [selectedImage]);
+  const canResubmit = document?.status === 'rejected' || !document;
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
-        paddingTop: headerHeight + Spacing.xl,
-        paddingBottom: insets.bottom + Spacing.xl + 60,
+        paddingTop: headerHeight + Spacing.md,
+        paddingBottom: insets.bottom + 120,
         paddingHorizontal: Spacing.lg,
       }}
     >
@@ -214,12 +204,10 @@ export default function VehicleCertSubmitScreen({ navigation }: VehicleCertSubmi
         <ThemedText style={[styles.cardTitle, { color: theme.text }]}>차량등록증 이미지</ThemedText>
         {selectedImage ? (
           <View style={styles.imagePreview}>
-            <Image source={{ uri: displayImageUrl || selectedImage }} style={styles.previewImage} resizeMode="contain" />
-            {!isReadOnly && (
-              <Pressable style={({ pressed }) => [styles.removeImageButton, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setSelectedImage(null)}>
-                <Icon name="close-circle" size={28} color="#EF4444" />
-              </Pressable>
-            )}
+            <Image source={{ uri: selectedImage }} style={styles.previewImage} resizeMode="contain" />
+            <Pressable style={({ pressed }) => [styles.removeImageButton, { opacity: pressed ? 0.7 : 1 }]} onPress={() => setSelectedImage(null)}>
+              <Icon name="close-circle" size={28} color="#EF4444" />
+            </Pressable>
           </View>
         ) : (
           <View style={[styles.uploadPlaceholder, { backgroundColor: isDark ? '#374151' : '#F3F4F6' }]}>
@@ -227,20 +215,18 @@ export default function VehicleCertSubmitScreen({ navigation }: VehicleCertSubmi
             <ThemedText style={[styles.uploadHint, { color: theme.tabIconDefault }]}>차량등록증을 촬영하거나 선택해주세요</ThemedText>
           </View>
         )}
-        {!isReadOnly && (
-          <View style={styles.uploadButtons}>
-            <Pressable style={({ pressed }) => [styles.uploadButton, { backgroundColor: BrandColors.helperLight, opacity: pressed ? 0.7 : 1 }]} onPress={handlePickImage}>
-              <Icon name="images-outline" size={20} color={BrandColors.helper} />
-              <ThemedText style={[styles.uploadButtonText, { color: BrandColors.helper }]}>갤러리</ThemedText>
+        <View style={styles.uploadButtons}>
+          <Pressable style={({ pressed }) => [styles.uploadButton, { backgroundColor: BrandColors.helperLight, opacity: pressed ? 0.7 : 1 }]} onPress={handlePickImage}>
+            <Icon name="images-outline" size={20} color={BrandColors.helper} />
+            <ThemedText style={[styles.uploadButtonText, { color: BrandColors.helper }]}>갤러리</ThemedText>
+          </Pressable>
+          {Platform.OS !== 'web' && (
+            <Pressable style={({ pressed }) => [styles.uploadButton, { backgroundColor: BrandColors.helperLight, opacity: pressed ? 0.7 : 1 }]} onPress={handleTakePhoto}>
+              <Icon name="camera-outline" size={20} color={BrandColors.helper} />
+              <ThemedText style={[styles.uploadButtonText, { color: BrandColors.helper }]}>카메라</ThemedText>
             </Pressable>
-            {Platform.OS !== 'web' && (
-              <Pressable style={({ pressed }) => [styles.uploadButton, { backgroundColor: BrandColors.helperLight, opacity: pressed ? 0.7 : 1 }]} onPress={handleTakePhoto}>
-                <Icon name="camera-outline" size={20} color={BrandColors.helper} />
-                <ThemedText style={[styles.uploadButtonText, { color: BrandColors.helper }]}>카메라</ThemedText>
-              </Pressable>
-            )}
-          </View>
-        )}
+          )}
+        </View>
       </Card>
 
       <Card style={styles.infoCard}>
@@ -248,12 +234,11 @@ export default function VehicleCertSubmitScreen({ navigation }: VehicleCertSubmi
         <View style={styles.inputGroup}>
           <ThemedText style={[styles.inputLabel, { color: theme.text }]}>차량번호 <ThemedText style={{ color: '#EF4444' }}>*</ThemedText></ThemedText>
           <TextInput
-            style={[styles.input, { backgroundColor: isReadOnly ? (isDark ? '#1F2937' : '#F9FAFB') : theme.backgroundDefault, color: theme.text, borderColor: isDark ? '#4B5563' : '#D1D5DB' }]}
+            style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? '#4B5563' : '#D1D5DB' }]}
             placeholder="서울 12가 3456"
             placeholderTextColor={theme.tabIconDefault}
             value={plateNumber}
             onChangeText={setPlateNumber}
-            editable={!isReadOnly}
           />
           <ThemedText style={[styles.plateHint, { color: theme.tabIconDefault }]}>지역 + 번호 형식 (예: 서울 12가 3456)</ThemedText>
         </View>
@@ -264,8 +249,7 @@ export default function VehicleCertSubmitScreen({ navigation }: VehicleCertSubmi
               <Pressable
                 key={t.id}
                 style={[styles.vehicleTypeButton, { backgroundColor: vehicleType === t.id ? BrandColors.helperLight : (isDark ? '#374151' : '#F3F4F6'), borderColor: vehicleType === t.id ? BrandColors.helper : (isDark ? '#4B5563' : '#D1D5DB') }]}
-                onPress={() => !isReadOnly && setVehicleType(t.id)}
-                disabled={isReadOnly}
+                onPress={() => setVehicleType(t.id)}
               >
                 <ThemedText style={{ color: vehicleType === t.id ? BrandColors.helper : theme.text, fontWeight: '600', fontSize: 13 }}>{t.label}</ThemedText>
               </Pressable>
@@ -275,12 +259,11 @@ export default function VehicleCertSubmitScreen({ navigation }: VehicleCertSubmi
         <View style={styles.inputGroup}>
           <ThemedText style={[styles.inputLabel, { color: theme.text }]}>차량 소유자명 <ThemedText style={{ color: '#EF4444' }}>*</ThemedText></ThemedText>
           <TextInput
-            style={[styles.input, { backgroundColor: isReadOnly ? (isDark ? '#1F2937' : '#F9FAFB') : theme.backgroundDefault, color: theme.text, borderColor: isDark ? '#4B5563' : '#D1D5DB' }]}
+            style={[styles.input, { backgroundColor: theme.backgroundDefault, color: theme.text, borderColor: isDark ? '#4B5563' : '#D1D5DB' }]}
             placeholder="차량 소유자명을 입력하세요"
             placeholderTextColor={theme.tabIconDefault}
             value={vehicleOwnerName}
             onChangeText={setVehicleOwnerName}
-            editable={!isReadOnly}
           />
         </View>
       </Card>
@@ -297,23 +280,16 @@ export default function VehicleCertSubmitScreen({ navigation }: VehicleCertSubmi
         </ThemedText>
       </Card>
 
+      {/* 제출 버튼 */}
       <Pressable
-        style={({ pressed }) => [
-          styles.submitButton,
-          {
-            backgroundColor: isReadOnly ? (isDark ? '#374151' : '#E5E7EB') : BrandColors.helper,
-            opacity: (pressed || isUploading) ? 0.7 : 1
-          }
-        ]}
-        onPress={isReadOnly ? () => navigation.goBack() : handleSubmit}
-        disabled={isUploading}
+        style={({ pressed }) => [styles.submitButton, { backgroundColor: BrandColors.helper, opacity: (pressed || isUploading || !canResubmit) ? 0.7 : 1 }]}
+        onPress={handleSubmit}
+        disabled={isUploading || !canResubmit}
       >
         {isUploading ? <ActivityIndicator color="#fff" /> : (
           <>
-            <Icon name={isReadOnly ? "checkmark-outline" : "checkmark-circle-outline"} size={20} color={isReadOnly ? theme.text : "#fff"} />
-            <ThemedText style={[styles.submitButtonText, { color: isReadOnly ? theme.text : '#fff' }]}>
-              {isReadOnly ? '확인' : document?.status === 'rejected' ? '재제출하기' : document?.status === 'approved' ? '수정하기' : '제출하기'}
-            </ThemedText>
+            <Icon name="checkmark-circle-outline" size={20} color="#fff" />
+            <ThemedText style={styles.submitButtonText}>{document?.status === 'rejected' ? '재제출하기' : '제출하기'}</ThemedText>
           </>
         )}
       </Pressable>

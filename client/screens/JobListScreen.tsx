@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from "react";
-import { View, FlatList, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Alert } from "react-native";
+import { View, FlatList, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 
 import { useTheme } from "@/hooks/useTheme";
 import { useOrderWebSocket } from "@/hooks/useOrderWebSocket";
@@ -23,32 +23,73 @@ type JobListScreenProps = {
 
 type TabType = 'jobs' | 'applications';
 
+interface PaginatedResponse {
+  items: any[];
+  totalCount: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
 export default function JobListScreen({ navigation }: JobListScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
-  
+
   useOrderWebSocket();
 
   const [activeTab, setActiveTab] = useState<TabType>('jobs');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<string>('전체지역');
+  const [selectedSort, setSelectedSort] = useState<string>('최신순');
+  const [showRegionPicker, setShowRegionPicker] = useState(false);
+  const [showSortPicker, setShowSortPicker] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<OrderCardDTO | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  const { data: orders = [], isLoading, refetch, isRefetching } = useQuery<any[]>({
-    queryKey: ['/api/orders'],
-    refetchInterval: 30000, // 30초마다 자동 새로고침
+  const regions = ['전체지역','서울','경기','인천','부산','대구','광주','대전','울산','세종','강원','충북','충남','전북','전남','경북','경남','제주'];
+  const sortOptions = ['최신순','등록중','매칭중','마감'];
+
+  // UI 카테고리명 → API 카테고리 코드 매핑
+  const categoryCodeMap: Record<string, string> = {
+    '택배사': 'parcel',
+    '기타택배': 'other',
+    '냉탑전용': 'cold',
+  };
+
+  const {
+    data: ordersData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+    refetch,
+    isRefetching
+  } = useInfiniteQuery<PaginatedResponse>({
+    queryKey: ['/api/orders', selectedCategory],
+    queryFn: async ({ pageParam = 1 }) => {
+      const categoryParam = selectedCategory && selectedCategory !== '전체'
+        ? `&category=${encodeURIComponent(selectedCategory)}`
+        : '';
+      const res = await apiRequest('GET', `/api/orders?page=${pageParam}&limit=20${categoryParam}`);
+      return res.json();
+    },
+    getNextPageParam: (lastPage) => {
+      return lastPage.hasMore ? lastPage.page + 1 : undefined;
+    },
+    initialPageParam: 1,
+    refetchInterval: 30000,
   });
 
   const { data: myApplications = [], isLoading: isLoadingApplications, refetch: refetchApplications, isRefetching: isRefetchingApplications } = useQuery<any[]>({
     queryKey: ['/api/orders/my-applications'],
   });
 
-  const appliedOrderIds = useMemo(() => 
+  const appliedOrderIds = useMemo(() =>
     new Set(myApplications.map((app: any) => String(app.orderId || app.id))),
-  [myApplications]);
+    [myApplications]);
 
   const applyMutation = useMutation({
     mutationFn: async (orderId: string) => {
@@ -58,9 +99,6 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/orders/my-applications'] });
       queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
-    },
-    onError: (err: any) => {
-      Alert.alert("지원 실패", err?.message || "오더 지원에 실패했습니다.");
     },
   });
 
@@ -73,45 +111,49 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
       queryClient.invalidateQueries({ queryKey: ['/api/orders/my-applications'] });
       queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
     },
-    onError: (err: any) => {
-      Alert.alert("취소 실패", err?.message || "지원 취소에 실패했습니다.");
-    },
   });
 
-  // 카테고리 목록을 서버 메타데이터에서 가져오되, 실패 시 기본값 사용
-  const { data: metaCategories } = useQuery<any[]>({
-    queryKey: ['/api/meta/couriers'],
-    staleTime: 5 * 60 * 1000, // 5분 캐시
-  });
-  const categories = useMemo(() => {
-    if (metaCategories && Array.isArray(metaCategories) && metaCategories.length > 0) {
-      const names = metaCategories.map((c: any) => c.courierName || c.name).filter(Boolean);
-      return ['전체', ...names];
-    }
-    return ['전체', '택배사', '기타택배', '냉탑전용'];
-  }, [metaCategories]);
+  const categories = ['전체', '택배사', '기타택배', '냉탑전용'];
+
+  const totalOrders = ordersData?.pages[0]?.totalCount ?? 0;
 
   const filteredOrders = useMemo(() => {
-    const filtered = selectedCategory && selectedCategory !== '전체'
-      ? orders.filter((order: any) => order.courierCompany === selectedCategory)
-      : orders;
-    
-    return filtered.map((order: any) => 
+    let allOrders = ordersData?.pages.flatMap(page => page.items) || [];
+
+    // 지역 필터
+    if (selectedRegion !== '전체지역') {
+      allOrders = allOrders.filter((o: any) =>
+        (o.deliveryArea || '').startsWith(selectedRegion)
+      );
+    }
+
+    // 상태 필터
+    if (selectedSort === '등록중') {
+      allOrders = allOrders.filter((o: any) => o.status === 'open');
+    } else if (selectedSort === '매칭중') {
+      allOrders = allOrders.filter((o: any) => o.status === 'scheduled');
+    } else if (selectedSort === '마감') {
+      allOrders = allOrders.filter((o: any) =>
+        ['closed', 'cancelled', 'in_progress'].includes(o.status)
+      );
+    }
+
+    return allOrders.map((order: any) =>
       adaptHelperRecruitmentOrder(order, appliedOrderIds.has(String(order.id)))
     );
-  }, [orders, selectedCategory, appliedOrderIds]);
+  }, [ordersData, appliedOrderIds, selectedRegion, selectedSort]);
 
   const applicationOrders = useMemo(() => {
     return myApplications.map((app: any) => adaptHelperApplicationOrder(app));
   }, [myApplications]);
 
-  const pendingApplications = useMemo(() => 
+  const pendingApplications = useMemo(() =>
     applicationOrders.filter(app => app.applicationStatus === 'pending'),
-  [applicationOrders]);
+    [applicationOrders]);
 
-  const decidedApplications = useMemo(() => 
+  const decidedApplications = useMemo(() =>
     applicationOrders.filter(app => app.applicationStatus !== 'pending'),
-  [applicationOrders]);
+    [applicationOrders]);
 
   const handleAction = (action: string, data: OrderCardDTO) => {
     switch (action) {
@@ -130,8 +172,7 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
   };
 
   const handlePress = (data: OrderCardDTO) => {
-    setSelectedOrder(data);
-    setModalVisible(true);
+    navigation.navigate('JobDetail', { jobId: data.orderId });
   };
 
   const handleCloseModal = () => {
@@ -218,12 +259,18 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
 
       <View style={styles.resultInfo}>
         <ThemedText style={[styles.resultCount, { color: theme.text }]}>
-          {filteredOrders.length}개의 일거리
+          오더등록:{totalOrders}
         </ThemedText>
-        <Pressable style={styles.sortButton}>
-          <Icon name="tune" size={16} color={theme.tabIconDefault} />
-          <ThemedText style={[styles.sortText, { color: theme.tabIconDefault }]}>정렬</ThemedText>
-        </Pressable>
+        <View style={styles.dropdownGroup}>
+          <Pressable onPress={() => setShowRegionPicker(true)} style={[styles.dropdown, { borderColor: theme.border }]}>
+            <ThemedText style={[styles.dropdownText, { color: theme.text }]}>{selectedRegion}</ThemedText>
+            <Icon name="chevron-down" size={10} color={theme.tabIconDefault} />
+          </Pressable>
+          <Pressable onPress={() => setShowSortPicker(true)} style={[styles.dropdown, { borderColor: theme.border }]}>
+            <ThemedText style={[styles.dropdownText, { color: theme.text }]}>{selectedSort}</ThemedText>
+            <Icon name="chevron-down" size={10} color={theme.tabIconDefault} />
+          </Pressable>
+        </View>
       </View>
     </View>
   );
@@ -263,10 +310,32 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
   const renderItem = ({ item }: { item: OrderCardDTO }) => (
     <OrderCard
       data={item}
-      context={activeTab === 'jobs' ? "helper_recruitment" : "helper_application"}
-      onAction={handleAction}
+      context="helper_home"
       onPress={handlePress}
     />
+  );
+
+  const FilterModal = ({ visible, onClose, options, selected, onSelect, title }: {
+    visible: boolean; onClose: () => void; options: string[]; selected: string;
+    onSelect: (v: string) => void; title: string;
+  }) => (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <View style={[styles.modalContent, { backgroundColor: theme.backgroundRoot }]}>
+          <ThemedText style={[styles.modalTitle, { color: theme.text }]}>{title}</ThemedText>
+          <View style={styles.modalOptions}>
+            {options.map(opt => (
+              <Pressable key={opt} onPress={() => { onSelect(opt); onClose(); }}
+                style={[styles.modalOption, selected === opt && { backgroundColor: BrandColors.helper, borderColor: BrandColors.helper }]}>
+                <ThemedText style={{ color: selected === opt ? '#FFF' : theme.text, fontSize: 12 }}>
+                  {opt}
+                </ThemedText>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      </Pressable>
+    </Modal>
   );
 
   const renderJobsEmpty = () => (
@@ -339,6 +408,17 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
     );
   }
 
+  const renderFooter = () => {
+    if (isFetchingNextPage) {
+      return (
+        <View style={{ paddingVertical: Spacing.md, alignItems: 'center' }}>
+          <ActivityIndicator size="small" color={BrandColors.helper} />
+        </View>
+      );
+    }
+    return null;
+  };
+
   return (
     <>
       <FlatList
@@ -354,7 +434,12 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
         keyExtractor={(item) => item.orderId}
         renderItem={renderItem}
         ListHeaderComponent={renderJobsHeader}
+        ListFooterComponent={renderFooter}
         ListEmptyComponent={renderJobsEmpty}
+        onEndReached={() => {
+          if (hasNextPage) fetchNextPage();
+        }}
+        onEndReachedThreshold={0.5}
         refreshControl={
           <RefreshControl
             refreshing={isRefetching}
@@ -367,6 +452,22 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
         visible={modalVisible}
         onClose={handleCloseModal}
         order={selectedOrder}
+      />
+      <FilterModal
+        visible={showRegionPicker}
+        onClose={() => setShowRegionPicker(false)}
+        options={regions}
+        selected={selectedRegion}
+        onSelect={setSelectedRegion}
+        title="지역 선택"
+      />
+      <FilterModal
+        visible={showSortPicker}
+        onClose={() => setShowSortPicker(false)}
+        options={sortOptions}
+        selected={selectedSort}
+        onSelect={setSelectedSort}
+        title="정렬/상태"
       />
     </>
   );
@@ -437,16 +538,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   resultCount: {
-    ...Typography.body,
+    fontSize: 12,
     fontWeight: '600',
   },
-  sortButton: {
+  dropdownGroup: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  dropdown: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.xs,
+    borderWidth: 1,
+    gap: 2,
   },
-  sortText: {
-    ...Typography.small,
+  dropdownText: {
+    fontSize: 11,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '80%',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.lg,
+    maxHeight: '60%',
+  },
+  modalTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: Spacing.md,
+    textAlign: 'center',
+  },
+  modalOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  modalOption: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   applicationsSummary: {
     marginBottom: Spacing.md,

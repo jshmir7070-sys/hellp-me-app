@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, TextInput } from "react-native";
+import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, TextInput, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -10,7 +10,8 @@ import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getAuthToken } from "@/lib/query-client";
+import { pickImage, uploadEvidence } from "@/lib/image-upload";
 
 type ProfileStackParamList = {
   RequesterDispute: { orderId: number };
@@ -47,6 +48,39 @@ export default function RequesterDisputeScreen({ navigation, route }: RequesterD
 
   const [disputeType, setDisputeType] = useState("");
   const [description, setDescription] = useState("");
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handlePickImage = async () => {
+    try {
+      const uri = await pickImage();
+      if (!uri) return;
+
+      setIsUploading(true);
+      const token = await getAuthToken();
+      if (!token) {
+        Alert.alert("오류", "로그인이 필요합니다.");
+        return;
+      }
+
+      const result = await uploadEvidence(uri, { category: 'dispute' }, token);
+
+      if (result.success && result.url) {
+        setPhotos(prev => [...prev, result.url!]);
+      } else {
+        Alert.alert("오류", "사진 업로드에 실패했습니다.");
+      }
+    } catch (e) {
+      console.error(e);
+      Alert.alert("오류", "사진 선택 중 문제가 발생했습니다.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos(prev => prev.filter((_, i) => i !== index));
+  };
 
   const { data: order, isLoading: isLoadingOrder } = useQuery<any>({
     queryKey: [`/api/requester/orders/${orderId}`],
@@ -67,6 +101,7 @@ export default function RequesterDisputeScreen({ navigation, route }: RequesterD
         orderId: orderId || null,
         incidentType: disputeType,
         description,
+        evidencePhotoUrls: photos,
       });
     },
     onSuccess: () => {
@@ -124,13 +159,13 @@ export default function RequesterDisputeScreen({ navigation, route }: RequesterD
               </ThemedText>
             ) : null}
           </View>
-          
+
           {isLoadingOrder ? (
             <ActivityIndicator size="small" color={BrandColors.requester} style={{ marginVertical: Spacing.md }} />
           ) : order ? (
             <>
               <ThemedText style={[styles.orderTitle, { color: theme.text }]}>{deliveryArea}</ThemedText>
-              
+
               <View style={styles.orderDetails}>
                 <View style={styles.orderDetailRow}>
                   <Icon name="person-outline" size={14} color={theme.tabIconDefault} />
@@ -235,6 +270,40 @@ export default function RequesterDisputeScreen({ navigation, route }: RequesterD
                 value={description}
                 onChangeText={setDescription}
               />
+            </Card>
+
+            <Card style={styles.section}>
+              <ThemedText style={[styles.label, { color: theme.text }]}>증빙 사진 (선택)</ThemedText>
+              <View style={styles.photoContainer}>
+                {photos.map((photo, index) => (
+                  <View key={index} style={styles.photoWrapper}>
+                    <Pressable
+                      style={styles.photoDeleteButton}
+                      onPress={() => removePhoto(index)}
+                    >
+                      <Icon name="close-circle" size={20} color={BrandColors.error} />
+                    </Pressable>
+                    <Image source={{ uri: photo }} style={styles.photoThumbnail} />
+                  </View>
+                ))}
+
+                <Pressable
+                  style={[styles.addPhotoButton, { borderColor: theme.backgroundTertiary }]}
+                  onPress={handlePickImage}
+                  disabled={isUploading}
+                >
+                  {isUploading ? (
+                    <ActivityIndicator size="small" color={theme.tabIconDefault} />
+                  ) : (
+                    <>
+                      <Icon name="camera-outline" size={24} color={theme.tabIconDefault} />
+                      <ThemedText style={[styles.addPhotoText, { color: theme.tabIconDefault }]}>
+                        사진 추가
+                      </ThemedText>
+                    </>
+                  )}
+                </Pressable>
+              </View>
             </Card>
 
             <Pressable
@@ -400,5 +469,42 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "700",
+  },
+  photoContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  photoWrapper: {
+    position: "relative",
+  },
+  photoThumbnail: {
+    width: 80,
+    height: 80,
+    borderRadius: BorderRadius.md,
+    backgroundColor: "#eee",
+  },
+  photoDeleteButton: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+    zIndex: 1,
+    backgroundColor: "white",
+    borderRadius: 12,
+  },
+  addPhotoButton: {
+    width: 80,
+    height: 80,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+  },
+  addPhotoText: {
+    fontSize: 11,
+    fontWeight: "500",
   },
 });

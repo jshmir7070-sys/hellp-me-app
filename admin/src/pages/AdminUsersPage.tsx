@@ -120,13 +120,13 @@ export default function AdminUsersPage() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: '운영자가 등록되었습니다' });
+      toast({ title: '운영자가 등록되었습니다', variant: 'success' });
       setShowAddModal(false);
       setNewOperator({ name: '', email: '', password: '', phone: '', address: '', role: 'admin', position: '', department: '' });
       queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
     },
     onError: (error: Error) => {
-      toast({ title: '오류', description: error.message, variant: 'destructive' });
+      toast({ title: '오류', description: error.message, variant: 'error' });
     },
   });
 
@@ -144,12 +144,12 @@ export default function AdminUsersPage() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: '정보가 수정되었습니다' });
+      toast({ title: '정보가 수정되었습니다', variant: 'success' });
       setEditMode(false);
       queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
     },
     onError: (error: Error) => {
-      toast({ title: '오류', description: error.message, variant: 'destructive' });
+      toast({ title: '오류', description: error.message, variant: 'error' });
     },
   });
 
@@ -160,7 +160,7 @@ export default function AdminUsersPage() {
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['/api/admin/users'] });
     queryClient.invalidateQueries({ queryKey: ['/api/admin/roles'] });
-    toast({ title: '데이터를 새로고침했습니다.' });
+    toast({ title: '데이터를 새로고침했습니다.', variant: 'success' });
   };
 
   const handleDownloadExcel = () => {
@@ -200,7 +200,7 @@ export default function AdminUsersPage() {
 
   const handleAddOperator = () => {
     if (!newOperator.name || !newOperator.email || !newOperator.password) {
-      toast({ title: '필수 항목을 입력해주세요', variant: 'destructive' });
+      toast({ title: '필수 항목을 입력해주세요', variant: 'warning' });
       return;
     }
     createOperatorMutation.mutate(newOperator);

@@ -101,105 +101,107 @@ export default function AdminRefundListScreen({ navigation }: AdminRefundListScr
   };
 
   const renderItem = ({ item }: { item: RefundItem }) => (
-    <Card style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.orderInfo}>
-          <ThemedText style={[styles.orderId, { color: theme.text }]}>
-            오더 #{item.orderId}
-          </ThemedText>
-          <View
-            style={[
-              styles.statusBadge,
-              {
-                backgroundColor: item.requesterRefundApplied
-                  ? BrandColors.success + "20"
-                  : BrandColors.warning + "20",
-              },
-            ]}
-          >
-            <ThemedText
+    <Pressable onPress={() => navigation.navigate("AdminIncidentDetail" as any, { incidentId: item.id })}>
+      <Card style={styles.card}>
+        <View style={styles.cardHeader}>
+          <View style={styles.orderInfo}>
+            <ThemedText style={[styles.orderId, { color: theme.text }]}>
+              오더 #{item.orderId}
+            </ThemedText>
+            <View
               style={[
-                styles.statusText,
+                styles.statusBadge,
                 {
-                  color: item.requesterRefundApplied
-                    ? BrandColors.success
-                    : BrandColors.warning,
+                  backgroundColor: item.requesterRefundApplied
+                    ? BrandColors.success + "20"
+                    : BrandColors.warning + "20",
                 },
               ]}
             >
-              {item.requesterRefundApplied ? "환불완료" : "환불대기"}
-            </ThemedText>
+              <ThemedText
+                style={[
+                  styles.statusText,
+                  {
+                    color: item.requesterRefundApplied
+                      ? BrandColors.success
+                      : BrandColors.warning,
+                  },
+                ]}
+              >
+                {item.requesterRefundApplied ? "환불완료" : "환불대기"}
+              </ThemedText>
+            </View>
           </View>
         </View>
-      </View>
 
-      <View style={styles.cardBody}>
-        <View style={styles.infoRow}>
-          <ThemedText style={[styles.label, { color: theme.tabIconDefault }]}>
-            사고유형
-          </ThemedText>
-          <ThemedText style={[styles.value, { color: theme.text }]}>
-            {getIncidentTypeLabel(item.incidentType)}
-          </ThemedText>
-        </View>
-        <View style={styles.infoRow}>
-          <ThemedText style={[styles.label, { color: theme.tabIconDefault }]}>
-            요청자
-          </ThemedText>
-          <ThemedText style={[styles.value, { color: theme.text }]}>
-            {item.requesterName || "-"}
-          </ThemedText>
-        </View>
-        <View style={styles.infoRow}>
-          <ThemedText style={[styles.label, { color: theme.tabIconDefault }]}>
-            환불금액
-          </ThemedText>
-          <ThemedText style={[styles.value, { color: BrandColors.success, fontWeight: "600" }]}>
-            {item.deductionAmount?.toLocaleString()}원
-          </ThemedText>
-        </View>
-        {item.deductionReason ? (
+        <View style={styles.cardBody}>
           <View style={styles.infoRow}>
             <ThemedText style={[styles.label, { color: theme.tabIconDefault }]}>
-              환불사유
+              사고유형
             </ThemedText>
             <ThemedText style={[styles.value, { color: theme.text }]}>
-              {item.deductionReason}
+              {getIncidentTypeLabel(item.incidentType)}
             </ThemedText>
           </View>
-        ) : null}
-        <View style={styles.infoRow}>
-          <ThemedText style={[styles.label, { color: theme.tabIconDefault }]}>
-            접수일
-          </ThemedText>
-          <ThemedText style={[styles.value, { color: theme.text }]}>
-            {format(new Date(item.createdAt), "yyyy.MM.dd HH:mm", { locale: ko })}
-          </ThemedText>
-        </View>
-        {item.deductionConfirmedAt ? (
           <View style={styles.infoRow}>
             <ThemedText style={[styles.label, { color: theme.tabIconDefault }]}>
-              확정일
+              요청자
             </ThemedText>
             <ThemedText style={[styles.value, { color: theme.text }]}>
-              {format(new Date(item.deductionConfirmedAt), "yyyy.MM.dd HH:mm", { locale: ko })}
+              {item.requesterName || "-"}
             </ThemedText>
           </View>
-        ) : null}
-      </View>
+          <View style={styles.infoRow}>
+            <ThemedText style={[styles.label, { color: theme.tabIconDefault }]}>
+              환불금액
+            </ThemedText>
+            <ThemedText style={[styles.value, { color: BrandColors.success, fontWeight: "600" }]}>
+              {item.deductionAmount?.toLocaleString()}원
+            </ThemedText>
+          </View>
+          {item.deductionReason ? (
+            <View style={styles.infoRow}>
+              <ThemedText style={[styles.label, { color: theme.tabIconDefault }]}>
+                환불사유
+              </ThemedText>
+              <ThemedText style={[styles.value, { color: theme.text }]}>
+                {item.deductionReason}
+              </ThemedText>
+            </View>
+          ) : null}
+          <View style={styles.infoRow}>
+            <ThemedText style={[styles.label, { color: theme.tabIconDefault }]}>
+              접수일
+            </ThemedText>
+            <ThemedText style={[styles.value, { color: theme.text }]}>
+              {format(new Date(item.createdAt), "yyyy.MM.dd HH:mm", { locale: ko })}
+            </ThemedText>
+          </View>
+          {item.deductionConfirmedAt ? (
+            <View style={styles.infoRow}>
+              <ThemedText style={[styles.label, { color: theme.tabIconDefault }]}>
+                확정일
+              </ThemedText>
+              <ThemedText style={[styles.value, { color: theme.text }]}>
+                {format(new Date(item.deductionConfirmedAt), "yyyy.MM.dd HH:mm", { locale: ko })}
+              </ThemedText>
+            </View>
+          ) : null}
+        </View>
 
-      {!item.requesterRefundApplied && item.deductionAmount > 0 ? (
-        <Pressable
-          style={[styles.confirmButton, { backgroundColor: BrandColors.success }]}
-          onPress={() => handleConfirmRefund(item)}
-          disabled={confirmMutation.isPending}
-        >
-          <ThemedText style={styles.confirmButtonText}>
-            {confirmMutation.isPending ? "처리중..." : "환불 확정"}
-          </ThemedText>
-        </Pressable>
-      ) : null}
-    </Card>
+        {!item.requesterRefundApplied && item.deductionAmount > 0 ? (
+          <Pressable
+            style={[styles.confirmButton, { backgroundColor: BrandColors.success }]}
+            onPress={() => handleConfirmRefund(item)}
+            disabled={confirmMutation.isPending}
+          >
+            <ThemedText style={styles.confirmButtonText}>
+              {confirmMutation.isPending ? "처리중..." : "환불 확정"}
+            </ThemedText>
+          </Pressable>
+        ) : null}
+      </Card>
+    </Pressable>
   );
 
   return (

@@ -117,7 +117,7 @@ export default function HelperDetailModal({ helperId, isOpen, onClose }: HelperD
 
   const { data: helperContracts = [] } = useQuery<HelperContract[]>({
     queryKey: ['admin-helper-contracts', helperId],
-    queryFn: () => apiRequest<HelperContract[]>(`/admin/helpers/${helperId}/contracts`),
+    queryFn: () => apiRequest<HelperContract[]>(`/helpers/${helperId}/contracts`),
     enabled: isOpen && !!helperId,
   });
 

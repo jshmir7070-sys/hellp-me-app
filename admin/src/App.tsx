@@ -2,33 +2,19 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TabProvider } from './contexts/TabContext';
 import { Toaster } from './components/ui/toaster';
+import { ConfirmProvider } from './components/common/ConfirmDialog';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import OrdersPage from './pages/OrdersPage';
 import ClosingsPage from './pages/ClosingsPage';
-// import SettlementsPage from './pages/SettlementsPage';
-// import DailySettlementPage from './pages/DailySettlementPage';
-// import HelperSettlementPage from './pages/HelperSettlementPage';
-// import RequesterSettlementPage from './pages/RequesterSettlementPage';
 import SettlementsPageV2 from './pages/SettlementsPageV2';
-// import HelpersPage from './pages/HelpersPage';
-// import HelpersPendingPage from './pages/HelpersPendingPage';
 import HelperDetailPage from './pages/HelperDetailPage';
 import RequesterDetailPage from './pages/RequesterDetailPage';
-// import RequestersPage from './pages/RequestersPage';
-// import RequestersPendingPage from './pages/RequestersPendingPage';
 import MembersPageV2 from './pages/MembersPageV2';
 import RatesPage from './pages/RatesPage';
 import RefundPolicyPage from './pages/RefundPolicyPage';
-// import PaymentsPage from './pages/PaymentsPage';
-// import DepositPaymentsPage from './pages/DepositPaymentsPage';
-// import BalancePaymentsPage from './pages/BalancePaymentsPage';
-// import RefundsPage from './pages/RefundsPage';
 import PaymentsPageV2 from './pages/PaymentsPageV2';
-// import IncidentsPage from './pages/IncidentsPage';
-// import DeductionsPage from './pages/DeductionsPage';
-// import IncidentRefundsPage from './pages/IncidentRefundsPage';
 import IncidentsPageV2 from './pages/IncidentsPageV2';
 import CSPage from './pages/CSPage';
 import NotificationsPage from './pages/NotificationsPage';
@@ -37,6 +23,8 @@ import AuditLogsPage from './pages/AuditLogsPage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import HelperDocumentsPage from './pages/HelperDocumentsPage';
 import HelperBankAccountsPage from './pages/HelperBankAccountsPage';
+import SettlementStatsPage from './pages/SettlementStatsPage';
+import PlatformSettingsPage from './pages/PlatformSettingsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -56,6 +44,45 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Route-level permission guard.
+ * Wraps individual routes that require a specific permission string.
+ * - 'superadmin_only' restricts to superadmin role only.
+ * - Any other string is checked via hasPermission() (which also grants
+ *   access to superadmin automatically).
+ * Unauthorized users see an inline "access denied" message instead of the page.
+ */
+function PermissionRoute({
+  children,
+  requiredPermission,
+}: {
+  children: React.ReactNode;
+  requiredPermission: string;
+}) {
+  const { user, hasPermission } = useAuth();
+
+  const isSuperAdmin = user?.role === 'superadmin' || user?.role === 'SUPER_ADMIN';
+
+  const hasAccess =
+    requiredPermission === 'superadmin_only'
+      ? isSuperAdmin
+      : hasPermission(requiredPermission);
+
+  if (!hasAccess) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full py-20 gap-4">
+        <div className="text-4xl">🔒</div>
+        <h2 className="text-xl font-semibold">접근 권한이 없습니다</h2>
+        <p className="text-muted-foreground text-sm">
+          이 페이지에 접근하려면 관리자에게 권한을 요청하세요.
+        </p>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -68,34 +95,36 @@ function AppRoutes() {
               <Layout>
                 <Routes>
                   <Route path="/" element={<DashboardPage />} />
-                  <Route path="/orders" element={<OrdersPage />} />
-                  <Route path="/closings" element={<ClosingsPage />} />
-                  
+                  <Route path="/orders" element={<PermissionRoute requiredPermission="orders.view"><OrdersPage /></PermissionRoute>} />
+                  <Route path="/closings" element={<PermissionRoute requiredPermission="orders.view"><ClosingsPage /></PermissionRoute>} />
+
                   {/* 통합 결제 페이지 */}
-                  <Route path="/payments" element={<PaymentsPageV2 />} />
-                  
+                  <Route path="/payments" element={<PermissionRoute requiredPermission="orders.view"><PaymentsPageV2 /></PermissionRoute>} />
+
                   {/* 통합 정산 페이지 */}
-                  <Route path="/settlements" element={<SettlementsPageV2 />} />
-                  
+                  <Route path="/settlements" element={<PermissionRoute requiredPermission="settlements.view"><SettlementsPageV2 /></PermissionRoute>} />
+                  <Route path="/settlement-stats" element={<PermissionRoute requiredPermission="settlements.view"><SettlementStatsPage /></PermissionRoute>} />
+
                   {/* 통합 회원 페이지 */}
-                  <Route path="/members" element={<MembersPageV2 />} />
-                  <Route path="/helpers/:helperId" element={<HelperDetailPage />} />
-                  <Route path="/requesters/:requesterId" element={<RequesterDetailPage />} />
-                  
+                  <Route path="/members" element={<PermissionRoute requiredPermission="helpers.view"><MembersPageV2 /></PermissionRoute>} />
+                  <Route path="/helpers/:helperId" element={<PermissionRoute requiredPermission="helpers.view"><HelperDetailPage /></PermissionRoute>} />
+                  <Route path="/requesters/:requesterId" element={<PermissionRoute requiredPermission="helpers.view"><RequesterDetailPage /></PermissionRoute>} />
+
                   {/* 헬퍼 서류 검토 */}
-                  <Route path="/helper-documents" element={<HelperDocumentsPage />} />
-                  <Route path="/helper-bank-accounts" element={<HelperBankAccountsPage />} />
-                  
+                  <Route path="/helper-documents" element={<PermissionRoute requiredPermission="helpers.edit"><HelperDocumentsPage /></PermissionRoute>} />
+                  <Route path="/helper-bank-accounts" element={<PermissionRoute requiredPermission="helpers.edit"><HelperBankAccountsPage /></PermissionRoute>} />
+
                   {/* 통합 사고 페이지 */}
-                  <Route path="/incidents" element={<IncidentsPageV2 />} />
-                  
-                  <Route path="/rates" element={<RatesPage />} />
-                  <Route path="/refund-policy" element={<RefundPolicyPage />} />
-                  <Route path="/cs" element={<CSPage />} />
-                  <Route path="/notifications" element={<NotificationsPage />} />
-                  <Route path="/disputes" element={<DisputesPage />} />
-                  <Route path="/audit-logs" element={<AuditLogsPage />} />
-                  <Route path="/admin-users" element={<AdminUsersPage />} />
+                  <Route path="/incidents" element={<PermissionRoute requiredPermission="orders.view"><IncidentsPageV2 /></PermissionRoute>} />
+
+                  <Route path="/rates" element={<PermissionRoute requiredPermission="settings.manage"><RatesPage /></PermissionRoute>} />
+                  <Route path="/refund-policy" element={<PermissionRoute requiredPermission="settings.manage"><RefundPolicyPage /></PermissionRoute>} />
+                  <Route path="/cs" element={<PermissionRoute requiredPermission="orders.view"><CSPage /></PermissionRoute>} />
+                  <Route path="/notifications" element={<PermissionRoute requiredPermission="orders.view"><NotificationsPage /></PermissionRoute>} />
+                  <Route path="/disputes" element={<PermissionRoute requiredPermission="disputes.view"><DisputesPage /></PermissionRoute>} />
+                  <Route path="/audit-logs" element={<PermissionRoute requiredPermission="settings.view"><AuditLogsPage /></PermissionRoute>} />
+                  <Route path="/admin-users" element={<PermissionRoute requiredPermission="staff.view"><AdminUsersPage /></PermissionRoute>} />
+                  <Route path="/platform-settings" element={<PermissionRoute requiredPermission="superadmin_only"><PlatformSettingsPage /></PermissionRoute>} />
                 </Routes>
               </Layout>
             </TabProvider>
@@ -109,8 +138,10 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
-      <Toaster />
+      <ConfirmProvider>
+        <AppRoutes />
+        <Toaster />
+      </ConfirmProvider>
     </AuthProvider>
   );
 }

@@ -11,7 +11,6 @@ import { ProfileStackParamList } from "@/navigation/ProfileStackNavigator";
 import { ThemedText } from "@/components/ThemedText";
 import { useTheme } from "@/hooks/useTheme";
 import { Spacing, BorderRadius, BrandColors, Colors } from "@/constants/theme";
-import { QueryErrorState } from "@/components/QueryErrorState";
 
 type RequesterHistoryScreenProps = NativeStackScreenProps<ProfileStackParamList, 'RequesterHistory'>;
 
@@ -20,11 +19,9 @@ export default function RequesterHistoryScreen({ navigation }: RequesterHistoryS
   const queryClient = useQueryClient();
   const [selectedMonth, setSelectedMonth] = useState<Date>(new Date());
 
-  const { data, isLoading, isRefetching, refetch, isError, error } = useQuery<any[]>({
+  const { data, isLoading, isRefetching, refetch } = useQuery<any[]>({
     queryKey: ['/api/requester/orders?status=completed'],
   });
-
-  if (isError) return <QueryErrorState error={error as Error} onRetry={refetch} />;
 
   const months = useMemo(() => {
     const result = [];
@@ -55,7 +52,8 @@ export default function RequesterHistoryScreen({ navigation }: RequesterHistoryS
   const handleCardPress = useCallback((item: OrderCardDTO) => {
     const orderId = Number(item.orderId);
     if (!isNaN(orderId)) {
-      navigation.navigate('HistoryDetail', { orderId });
+      // ClosingDetail은 WorkStatusTab(ClosingStack)에 등록됨
+      (navigation.getParent()?.getParent() as any)?.navigate('WorkStatusTab', { screen: 'ClosingDetail', params: { orderId } });
     }
   }, [navigation]);
 

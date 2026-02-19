@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { RATE_LIMIT_WINDOW_SECONDS } from "../constants/auth";
 
 interface RateLimitEntry {
   count: number;
@@ -104,7 +105,7 @@ export function createRateLimiter(config: RateLimitConfig) {
 }
 
 export const authRateLimiter = createRateLimiter({
-  windowMs: 60 * 1000,
+  windowMs: RATE_LIMIT_WINDOW_SECONDS * 1000,
   maxRequests: 10,
   message: "로그인 시도가 너무 많습니다. 1분 후 다시 시도해주세요.",
 });
@@ -140,7 +141,7 @@ export const apiRateLimiter = createRateLimiter({
 });
 
 export const strictRateLimiter = createRateLimiter({
-  windowMs: 60 * 1000,
+  windowMs: RATE_LIMIT_WINDOW_SECONDS * 1000,
   maxRequests: 5,
   message: "요청이 너무 많습니다. 1분 후 다시 시도해주세요.",
 });

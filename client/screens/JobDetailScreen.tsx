@@ -3,7 +3,6 @@ import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndic
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "@/components/Icon";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { CompositeScreenProps } from "@react-navigation/native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 
@@ -11,16 +10,15 @@ import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
+import { OrderCard } from "@/components/order/OrderCard";
+import { adaptHelperRecruitmentOrder, type OrderCardDTO } from "@/adapters/orderCardAdapter";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
-import { JobsStackParamList, RootStackParamList } from "@/navigation/types";
+import { JobsStackParamList } from "@/navigation/types";
 import { apiRequest } from "@/lib/query-client";
 
 const { width: screenWidth } = Dimensions.get('window');
 
-type JobDetailScreenProps = CompositeScreenProps<
-  NativeStackScreenProps<JobsStackParamList, 'JobDetail'>,
-  NativeStackScreenProps<RootStackParamList>
->;
+type JobDetailScreenProps = NativeStackScreenProps<JobsStackParamList, 'JobDetail'>;
 
 interface Order {
   id: number;
@@ -42,6 +40,7 @@ interface Order {
   vehicleType?: string;
   scheduledDate?: string;
   scheduledDateEnd?: string;
+  arrivalTime?: string;
   campAddress?: string;
   deliveryGuideUrl?: string;
   deliveryGuide?: string;
@@ -83,8 +82,12 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
     enabled: !!order && ['closing_submitted', 'in_progress'].includes(order.status),
   });
 
-  const isAssignedHelper = order && user && 
+  const isAssignedHelper = order && user &&
     (order.matchedHelperId === user.id || order.assignedHelperId === user.id || order.helperId === user.id);
+
+  const orderCardData: OrderCardDTO | null = order
+    ? adaptHelperRecruitmentOrder(order)
+    : null;
 
   const applyMutation = useMutation({
     mutationFn: async () => {
@@ -135,11 +138,6 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
     },
   });
 
-  const formatCurrency = (amount?: number, suffix: string = '') => {
-    if (!amount) return '협의';
-    return new Intl.NumberFormat('ko-KR').format(amount) + '원' + suffix;
-  };
-
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '-';
     try {
@@ -149,32 +147,6 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    const statusMap: Record<string, string> = {
-      'awaiting_deposit': '계약금대기',
-      'open': '지원가능',
-      'scheduled': '배차완료',
-      'in_progress': '업무중',
-      'closing_submitted': '마감제출',
-      'final_amount_confirmed': '최종금액확정',
-      'balance_paid': '잔금완료',
-      'settlement_paid': '정산완료',
-      'closed': '완료',
-    };
-    return statusMap[status] || status;
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'registered': return BrandColors.helper;
-      case 'matching': return BrandColors.info;
-      case 'scheduled': return BrandColors.scheduled;
-      case 'in_progress': return BrandColors.inProgress;
-      default: return BrandColors.helper;
-    }
-  };
-
-  const isHelperVerified = user?.role === 'helper' && user?.helperVerified === true;
   const onboardingStatus = user?.onboardingStatus;
   
   const handleApply = () => {
@@ -188,7 +160,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
             '오더 신청을 위해 서류 제출이 필요합니다.\n프로필 > 서류제출에서 서류를 등록해주세요.',
             [
               { text: '취소', style: 'cancel' },
-              { text: '서류 제출하기', onPress: () => navigation.navigate('HelperOnboarding') },
+              { text: '서류 제출하기', onPress: () => navigation.getParent()?.getParent()?.navigate('HelperOnboarding' as any) },
             ]
           );
         }
@@ -211,7 +183,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
             '서류가 반려되었습니다.\n프로필 > 서류제출에서 서류를 다시 등록해주세요.',
             [
               { text: '취소', style: 'cancel' },
-              { text: '서류 재제출', onPress: () => navigation.navigate('HelperOnboarding') },
+              { text: '서류 재제출', onPress: () => navigation.getParent()?.getParent()?.navigate('HelperOnboarding' as any) },
             ]
           );
         }
@@ -219,22 +191,6 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
       }
     }
     applyMutation.mutate();
-  };
-
-  const openMap = () => {
-    if (order?.deliveryLat && order?.deliveryLng) {
-      const url = Platform.select({
-        ios: `maps://app?daddr=${order.deliveryLat},${order.deliveryLng}`,
-        android: `geo:${order.deliveryLat},${order.deliveryLng}?q=${order.deliveryLat},${order.deliveryLng}`,
-        default: `https://maps.google.com/?q=${order.deliveryLat},${order.deliveryLng}`,
-      });
-      Linking.openURL(url);
-    } else if (order?.deliveryArea || order?.deliveryAddress) {
-      const address = order.deliveryArea || order.deliveryAddress || '';
-      const encodedAddress = encodeURIComponent(address);
-      const url = `https://map.kakao.com/?q=${encodedAddress}`;
-      Linking.openURL(url);
-    }
   };
 
   const copyAddress = async (address: string) => {
@@ -288,144 +244,105 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <ScrollView
         contentContainerStyle={{
-          paddingTop: Spacing.lg,
-          paddingBottom: insets.bottom + 80,
+          paddingTop: insets.top + 56 + Spacing.md,
+          paddingBottom: insets.bottom + 120,
           paddingHorizontal: Spacing.lg,
         }}
       >
-        <View style={styles.header}>
-          {order.courierCompany ? (
-            <View style={[styles.categoryBadge, { backgroundColor: BrandColors.helperLight }]}>
-              <ThemedText style={[styles.categoryText, { color: BrandColors.helper }]}>
-                {order.courierCompany}
-              </ThemedText>
-            </View>
-          ) : null}
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) + '20' }]}>
-            <ThemedText style={[styles.statusText, { color: getStatusColor(order.status) }]}>
-              {getStatusLabel(order.status)}
-            </ThemedText>
-          </View>
-        </View>
+        {/* 상단: 오더카드 (오더공고 리스트와 동일) */}
+        {orderCardData ? (
+          <OrderCard
+            data={orderCardData}
+            context="helper_recruitment"
+          />
+        ) : null}
 
-        <Card style={styles.summaryCard}>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryItem}>
-              <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>평균수량</ThemedText>
-              <ThemedText style={[styles.summaryValue, { color: theme.text }]}>
-                {order.averageQuantity || '-'}
-              </ThemedText>
-            </View>
-            <View style={styles.summaryItem}>
-              <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>단가</ThemedText>
-              <ThemedText style={[styles.summaryValue, { color: BrandColors.helper }]}>
-                {formatCurrency(order.pricePerUnit || order.dailyRate)}
-              </ThemedText>
-            </View>
-          </View>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryItem}>
-              <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>요청날짜</ThemedText>
-              <ThemedText style={[styles.summaryValue, { color: theme.text }]}>
-                {formatDate(order.scheduledDate)}
-                {order.scheduledDateEnd ? ` ~ ${formatDate(order.scheduledDateEnd)}` : ''}
-              </ThemedText>
-            </View>
-            <View style={styles.summaryItem}>
-              <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>차종</ThemedText>
-              <ThemedText style={[styles.summaryValue, { color: theme.text }]}>
-                {order.vehicleType || '-'}
-              </ThemedText>
-            </View>
-          </View>
-        </Card>
-
-        <Card style={styles.infoCard}>
-          {order.campAddress ? (
-            <>
-              <View style={styles.infoRow}>
-                <View style={styles.infoItem}>
-                  <Icon name="home-outline" size={18} color={theme.tabIconDefault} />
-                  <View style={styles.infoContent}>
-                    <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>캠프주소</ThemedText>
-                    <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-                      {order.campAddress}
-                    </ThemedText>
-                  </View>
-                </View>
-                <Pressable 
-                  style={styles.copyButton}
-                  onPress={() => copyAddress(order.campAddress!)}
-                >
-                  <Icon name="copy-outline" size={16} color={BrandColors.helper} />
-                </Pressable>
-              </View>
-              <View style={styles.divider} />
-            </>
-          ) : null}
-
-          <View style={styles.infoRow}>
-            <View style={styles.infoItem}>
-              <Icon name="navigation" size={18} color={theme.tabIconDefault} />
-              <View style={styles.infoContent}>
-                <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>배송지</ThemedText>
-                <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-                  {order.deliveryArea || order.deliveryAddress || '미정'}
-                </ThemedText>
-              </View>
-            </View>
-            {(order.deliveryArea || order.deliveryAddress) ? (
-              <Pressable 
+        {/* 하단: 상세 정보 */}
+        {order.campAddress ? (
+          <Card style={styles.detailCard}>
+            <View style={styles.detailHeader}>
+              <Icon name="home-outline" size={16} color={theme.tabIconDefault} />
+              <ThemedText style={[styles.detailLabel, { color: theme.tabIconDefault }]}>캠프 및 터미널</ThemedText>
+              <Pressable
                 style={styles.copyButton}
-                onPress={() => copyAddress(order.deliveryArea || order.deliveryAddress || '')}
+                onPress={() => copyAddress(order.campAddress!)}
               >
-                <Icon name="copy-outline" size={16} color={BrandColors.helper} />
+                <Icon name="copy-outline" size={14} color={BrandColors.helper} />
               </Pressable>
-            ) : null}
-          </View>
+            </View>
+            <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+              {order.campAddress}
+            </ThemedText>
+          </Card>
+        ) : null}
 
-          {(order.regionMapUrl || order.mapImageUrl) ? (
-            <>
-              <View style={styles.divider} />
-              <Pressable onPress={() => setMapModalVisible(true)}>
-                <Image 
-                  source={{ uri: order.regionMapUrl || order.mapImageUrl }}
-                  style={styles.mapPreview}
-                  resizeMode="cover"
-                />
-                <View style={styles.mapOverlay}>
-                  <Icon name="arrow-expand" size={20} color="#FFFFFF" />
-                  <ThemedText style={styles.mapOverlayText}>탭하여 확대</ThemedText>
-                </View>
-              </Pressable>
-            </>
+        <Card style={styles.detailCard}>
+          <View style={styles.detailHeader}>
+            <Icon name="time-outline" size={16} color={theme.tabIconDefault} />
+            <ThemedText style={[styles.detailLabel, { color: theme.tabIconDefault }]}>입차시간</ThemedText>
+          </View>
+          <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+            {formatDate(order.scheduledDate)}
+            {order.scheduledDateEnd ? ` ~ ${formatDate(order.scheduledDateEnd)}` : ''}
+          </ThemedText>
+          {order.arrivalTime ? (
+            <ThemedText style={[styles.arrivalTimeText, { color: BrandColors.helper }]}>
+              입차 {order.arrivalTime}
+            </ThemedText>
           ) : null}
         </Card>
 
         {(order.deliveryGuide || order.deliveryGuideUrl) ? (
-          <Card style={styles.guideCard}>
-            <View style={styles.guideHeader}>
-              <Icon name="document-text-outline" size={18} color={BrandColors.helper} />
-              <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>배송 가이드</ThemedText>
+          <Card style={styles.detailCard}>
+            <View style={styles.detailHeader}>
+              <Icon name="document-text-outline" size={16} color={theme.tabIconDefault} />
+              <ThemedText style={[styles.detailLabel, { color: theme.tabIconDefault }]}>배송가이드</ThemedText>
             </View>
             {order.deliveryGuide ? (
-              <ThemedText style={[styles.guideText, { color: theme.text }]}>
+              <ThemedText style={[styles.detailValue, { color: theme.text }]}>
                 {order.deliveryGuide}
               </ThemedText>
             ) : null}
-            {order.deliveryGuideUrl && !order.deliveryGuide ? (
-              <Pressable 
-                style={styles.guideButton}
+            {order.deliveryGuideUrl ? (
+              <Pressable
+                style={styles.guideLink}
                 onPress={openDeliveryGuide}
               >
-                <Icon name="open-in-new" size={16} color={BrandColors.helper} />
-                <ThemedText style={[styles.guideButtonText, { color: BrandColors.helper }]}>
+                <Icon name="open-in-new" size={14} color={BrandColors.helper} />
+                <ThemedText style={{ color: BrandColors.helper, fontSize: 13, fontWeight: '600' }}>
                   가이드 보기
                 </ThemedText>
               </Pressable>
             ) : null}
           </Card>
         ) : null}
+
+        <Card style={styles.detailCard}>
+          <View style={styles.detailHeader}>
+            <Icon name="map-outline" size={16} color={theme.tabIconDefault} />
+            <ThemedText style={[styles.detailLabel, { color: theme.tabIconDefault }]}>배송지역지도</ThemedText>
+          </View>
+          {(order.regionMapUrl || order.mapImageUrl) ? (
+            <Pressable onPress={() => setMapModalVisible(true)}>
+              <Image
+                source={{ uri: order.regionMapUrl || order.mapImageUrl }}
+                style={styles.mapPreview}
+                resizeMode="cover"
+              />
+              <View style={styles.mapOverlay}>
+                <Icon name="arrow-expand" size={20} color="#FFFFFF" />
+                <ThemedText style={styles.mapOverlayText}>탭하여 확대</ThemedText>
+              </View>
+            </Pressable>
+          ) : (
+            <View style={styles.mapEmpty}>
+              <Icon name="image-outline" size={32} color={theme.tabIconDefault} />
+              <ThemedText style={[styles.mapEmptyText, { color: theme.tabIconDefault }]}>
+                배송지도 없음
+              </ThemedText>
+            </View>
+          )}
+        </Card>
 
         {order.description ? (
           <Card style={styles.descriptionCard}>
@@ -468,7 +385,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
         ) : null}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md, backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, Spacing.xl) + Spacing.lg, backgroundColor: theme.backgroundRoot }]}>
         {order.status === 'scheduled' && isAssignedHelper ? (
           <View style={styles.footerRow}>
             <Pressable
@@ -477,7 +394,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
                 styles.qrButton,
                 { backgroundColor: BrandColors.helper, opacity: pressed ? 0.8 : 1 },
               ]}
-              onPress={() => navigation.navigate('QRScanner', { orderId: String(order.id), type: 'checkin' })}
+              onPress={() => navigation.getParent()?.getParent()?.navigate('QRScanner' as any, { orderId: String(order.id), type: 'start_work' })}
             >
               <Icon name="camera-outline" size={20} color="#FFFFFF" />
               <ThemedText style={styles.applyButtonText}>QR 체크인</ThemedText>
@@ -605,125 +522,38 @@ const styles = StyleSheet.create({
     ...Typography.body,
     fontWeight: '600',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginBottom: Spacing.lg,
-  },
-  categoryBadge: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.xs,
-  },
-  categoryText: {
-    ...Typography.small,
-    fontWeight: '600',
-  },
-  statusBadge: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.xs,
-  },
-  statusText: {
-    ...Typography.small,
-    fontWeight: '600',
-  },
-  summaryCard: {
+  detailCard: {
     padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-    gap: Spacing.md,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    gap: Spacing.lg,
-  },
-  summaryItem: {
-    flex: 1,
-  },
-  summaryLabel: {
-    ...Typography.small,
-    marginBottom: 2,
-  },
-  summaryValue: {
-    ...Typography.body,
-    fontWeight: '600',
-  },
-  infoCard: {
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  infoItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.md,
-    flex: 1,
-  },
-  copyButton: {
-    padding: Spacing.sm,
-    marginLeft: Spacing.sm,
-  },
-  infoContent: {
-    flex: 1,
-  },
-  infoLabel: {
-    ...Typography.small,
-    marginBottom: 2,
-  },
-  infoValue: {
-    ...Typography.body,
-    fontWeight: '500',
-  },
-  mapButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.xs,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  mapButtonText: {
-    ...Typography.body,
-    fontWeight: '600',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: '#E0E0E0',
-    marginVertical: Spacing.md,
-  },
-  guideCard: {
-    padding: Spacing.lg,
-    marginBottom: Spacing.lg,
-  },
-  guideHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
     marginBottom: Spacing.md,
   },
-  guideText: {
-    ...Typography.body,
-    lineHeight: 24,
-  },
-  guideButton: {
+  detailHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: Spacing.sm,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.xs,
-    borderWidth: 1,
-    borderColor: BrandColors.helper,
+    marginBottom: Spacing.sm,
   },
-  guideButtonText: {
-    ...Typography.body,
+  detailLabel: {
+    fontSize: 13,
     fontWeight: '600',
+    flex: 1,
+  },
+  detailValue: {
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  arrivalTimeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: Spacing.xs,
+  },
+  guideLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginTop: Spacing.sm,
+  },
+  copyButton: {
+    padding: Spacing.xs,
   },
   descriptionCard: {
     padding: Spacing.lg,
@@ -798,6 +628,19 @@ const styles = StyleSheet.create({
     height: 180,
     borderRadius: BorderRadius.sm,
     backgroundColor: '#F0F0F0',
+  },
+  mapEmpty: {
+    width: '100%',
+    height: 120,
+    borderRadius: BorderRadius.sm,
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  mapEmptyText: {
+    fontSize: 13,
+    fontWeight: '500',
   },
   mapOverlay: {
     position: 'absolute',

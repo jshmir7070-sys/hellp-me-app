@@ -41,6 +41,7 @@ export async function migrateTokensToSecureStore(): Promise<void> {
 
     // 마이그레이션 완료 플래그
     await AsyncStorage.setItem(MIGRATION_KEY, 'true');
+    console.log('[SecureStore] Token migration completed');
   } catch (error) {
     console.error('[SecureStore] Migration error:', error);
     // 마이그레이션 실패 시 기존 AsyncStorage 토큰으로 계속 동작

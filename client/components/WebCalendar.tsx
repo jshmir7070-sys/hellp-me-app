@@ -11,13 +11,12 @@ interface WebCalendarProps {
   onSelect: (date: Date) => void;
   selectedDate?: Date;
   title?: string;
-  minimumDate?: Date;
 }
 
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
 const MONTHS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 
-export function WebCalendar({ visible, onClose, onSelect, selectedDate, title = '날짜 선택', minimumDate }: WebCalendarProps) {
+export function WebCalendar({ visible, onClose, onSelect, selectedDate, title = '날짜 선택' }: WebCalendarProps) {
   const { theme, isDark } = useTheme();
   const [currentDate, setCurrentDate] = useState(selectedDate || new Date());
   const [viewDate, setViewDate] = useState(new Date(currentDate.getFullYear(), currentDate.getMonth(), 1));
@@ -76,11 +75,7 @@ export function WebCalendar({ visible, onClose, onSelect, selectedDate, title = 
         selectedDate.getMonth() === month && 
         selectedDate.getDate() === day;
 
-      const cellDate = new Date(year, month, day);
-      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const minDate = minimumDate ? new Date(minimumDate.getFullYear(), minimumDate.getMonth(), minimumDate.getDate()) : todayStart;
-      const effectiveMin = minDate > todayStart ? minDate : todayStart;
-      const isPast = cellDate < effectiveMin;
+      const isPast = new Date(year, month, day) < new Date(today.getFullYear(), today.getMonth(), today.getDate());
       
       days.push(
         <Pressable

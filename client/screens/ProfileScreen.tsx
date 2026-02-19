@@ -7,7 +7,6 @@ import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from 'expo-image-picker';
-import { File } from 'expo-file-system';
 
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
@@ -38,6 +37,7 @@ interface UserProfile {
   phone?: string;
   role: string;
   profileImage?: string;
+  profileImageUrl?: string; // Add this field to match backend response
   rating?: number;
   completedJobs?: number;
   teamName?: string;
@@ -93,10 +93,15 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   const handlePickFromGallery = async () => {
     setShowImageOptions(false);
     try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('권한 필요', '갤러리 접근 권한이 필요합니다');
+        return;
+      }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
+        allowsEditing: false,
         quality: 0.8,
       });
 
@@ -111,7 +116,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
   const handleTakePhoto = async () => {
     setShowImageOptions(false);
-    
+
     if (Platform.OS === 'web') {
       Alert.alert('알림', '웹에서는 카메라를 사용할 수 없습니다. Expo Go 앱에서 사용해주세요.');
       return;
@@ -125,8 +130,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
       }
 
       const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
+        allowsEditing: false,
         quality: 0.8,
       });
 
@@ -144,14 +148,20 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     try {
       const token = await getToken();
       const formData = new FormData();
-      
+
       if (Platform.OS === 'web') {
         const response = await fetch(uri);
         const blob = await response.blob();
         formData.append('file', blob, 'profile.jpg');
       } else {
-        const file = new File(uri);
-        formData.append('file', file as any);
+        const filename = uri.split('/').pop() || 'profile.jpg';
+        const match = /\.(\w+)$/.exec(filename);
+        const mimeType = match ? `image/${match[1].toLowerCase()}` : 'image/jpeg';
+        formData.append('file', {
+          uri,
+          name: filename,
+          type: mimeType,
+        } as any);
       }
 
       const uploadResponse = await fetch(new URL('/api/upload/profile-image', getApiUrl()).toString(), {
@@ -232,7 +242,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
       scrollIndicatorInsets={{ bottom: insets.bottom }}
     >
       <Card style={styles.profileCard}>
-        <Pressable 
+        <Pressable
           onPress={handleAvatarPress}
           disabled={isUploadingImage}
           style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
@@ -244,17 +254,21 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               </View>
             ) : (
               <Avatar
-                uri={(() => {
-                  const img = profile?.profileImage || user?.profileImageUrl;
-                  if (!img) return undefined;
-                  if (img.startsWith('avatar:') || img.startsWith('http')) return img;
-                  return `${getApiUrl()}${img}`;
-                })()}
+                uri={(profile?.profileImageUrl || profile?.profileImage) ?
+                  ((profile?.profileImageUrl || profile?.profileImage)?.startsWith('avatar:') ?
+                    (profile?.profileImageUrl || profile?.profileImage) :
+                    (profile?.profileImageUrl || profile?.profileImage)?.startsWith('http') ?
+                      (profile?.profileImageUrl || profile?.profileImage) :
+                      `${getApiUrl()}${profile?.profileImageUrl || profile?.profileImage}`)
+                  : undefined}
                 size={80}
                 isHelper={isHelper}
                 style={styles.avatarContainer}
               />
             )}
+            <View style={[styles.cameraIcon, { backgroundColor: primaryColor }]}>
+              <Icon name="camera-outline" size={14} color="#fff" />
+            </View>
           </View>
         </Pressable>
         <ThemedText style={[styles.userName, { color: theme.text }]}>
@@ -273,7 +287,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             {profile.phone}
           </ThemedText>
         ) : null}
-        
+
         {isHelper && (profile?.rating !== undefined || profile?.completedJobs !== undefined) ? (
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
@@ -292,13 +306,13 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
           </View>
         ) : null}
 
-        </Card>
+      </Card>
 
       {isHelper ? (
         <>
           <View style={styles.menuSection}>
             <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>서류 관리</ThemedText>
-            
+
             <MenuItem
               icon="document-text-outline"
               label="서류 제출"
@@ -310,7 +324,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
           <View style={styles.menuSection}>
             <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>QR 체크인</ThemedText>
-            
+
             <MenuItem
               icon="camera-outline"
               label="요청자 QR 스캔"
@@ -322,7 +336,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
           <View style={styles.menuSection}>
             <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>팀 관리</ThemedText>
-            
+
             {team ? (
               <Card style={styles.teamCard}>
                 <View style={styles.teamInfo}>
@@ -336,7 +350,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                     </ThemedText>
                   </View>
                 </View>
-                <Pressable 
+                <Pressable
                   style={styles.teamAction}
                   onPress={() => navigation.navigate('TeamManagement')}
                 >
@@ -357,7 +371,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
           <View style={styles.menuSection}>
             <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>정산</ThemedText>
-            
+
             <MenuItem
               icon="card-outline"
               label="정산 계좌"
@@ -369,7 +383,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
           <View style={styles.menuSection}>
             <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>이력</ThemedText>
-            
+
             <MenuItem
               icon="document-text-outline"
               label="수행 이력"
@@ -384,10 +398,17 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
             <MenuItem
               icon="warning-outline"
-              label="이의제기"
-              description="접수, 내역 확인 및 답변 관리"
+              label="이의제기 접수"
+              description="정산 오류, 수량 차이 등 접수"
               theme={theme}
-              onPress={() => navigation.navigate('Disputes')}
+              onPress={() => navigation.navigate('HelperDisputeSubmit')}
+            />
+            <MenuItem
+              icon="list-outline"
+              label="이의제기 내역"
+              description="접수한 이의제기 현황 확인"
+              theme={theme}
+              onPress={() => navigation.navigate('HelperDisputeList')}
             />
             <MenuItem
               icon="alert-circle-outline"
@@ -403,7 +424,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
         <>
           <View style={styles.menuSection}>
             <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>사업자 정보</ThemedText>
-            
+
             <MenuItem
               icon="business-outline"
               label="사업자정보 등록"
@@ -417,7 +438,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
           <View style={styles.menuSection}>
             <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>QR 체크인</ThemedText>
-            
+
             <MenuItem
               icon="grid-outline"
               label="내 QR 보기"
@@ -429,7 +450,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
           <View style={styles.menuSection}>
             <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>결제</ThemedText>
-            
+
             <MenuItem
               icon="card-outline"
               label="결제 수단"
@@ -446,23 +467,12 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             />
           </View>
 
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>이력</ThemedText>
-            
-            <MenuItem
-              icon="document-text-outline"
-              label="사용 이력"
-              description="이력/리뷰 탭에서 확인하세요"
-              theme={theme}
-              onPress={() => navigation.navigate('RequesterHistory')}
-            />
-          </View>
         </>
       )}
 
       <View style={styles.menuSection}>
         <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>설정</ThemedText>
-        
+
         <MenuItem
           icon="settings-outline"
           label="앱 설정"
@@ -473,7 +483,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
       <View style={styles.menuSection}>
         <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>지원</ThemedText>
-        
+
         <MenuItem
           icon="help-circle-outline"
           label="사용 가이드"
@@ -524,7 +534,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
         animationType="fade"
         onRequestClose={() => setShowImageOptions(false)}
       >
-        <Pressable 
+        <Pressable
           style={styles.modalOverlay}
           onPress={() => setShowImageOptions(false)}
         >
@@ -578,7 +588,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             </Pressable>
 
             <View style={[styles.actionSheetDivider, { backgroundColor: theme.tabIconDefault + '30' }]} />
-            
+
             <Pressable
               style={({ pressed }) => [
                 styles.actionSheetOption,
@@ -611,7 +621,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
             <View style={styles.avatarGrid}>
               {AVATAR_OPTIONS.map((avatar) => {
-                const isSelected = profile?.profileImage === avatar.id;
+                const isSelected = (profile?.profileImageUrl || profile?.profileImage) === avatar.id;
                 return (
                   <Pressable
                     key={avatar.id}
@@ -654,28 +664,28 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   );
 }
 
-function MenuItem({ 
-  icon, 
-  label, 
+function MenuItem({
+  icon,
+  label,
   description,
-  theme, 
+  theme,
   badge,
   badgeColor,
-  onPress 
-}: { 
-  icon: string; 
-  label: string; 
+  onPress
+}: {
+  icon: string;
+  label: string;
   description?: string;
-  theme: any; 
+  theme: any;
   badge?: string;
   badgeColor?: string;
-  onPress: () => void 
+  onPress: () => void
 }) {
   return (
     <Pressable
       style={({ pressed }) => [
         styles.menuItem,
-        { 
+        {
           backgroundColor: theme.backgroundDefault,
           opacity: pressed ? 0.7 : 1,
         },

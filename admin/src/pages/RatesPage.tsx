@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminFetch } from '@/lib/api';
+import { useConfirm } from '@/components/common/ConfirmDialog';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -72,6 +73,7 @@ interface TeamWithLeader {
 }
 
 export default function RatesPage() {
+  const confirm = useConfirm();
   const [mainTab, setMainTab] = useState<MainTabType>('rates');
   const [activeCategory, setActiveCategory] = useState<CategoryType>('parcel');
   const [editingRows, setEditingRows] = useState<Record<number, EditableFields>>({});
@@ -88,8 +90,8 @@ export default function RatesPage() {
     urgentSurchargeRate: 15,
     isActive: true,
   });
-  const [otherSettings, setOtherSettings] = useState({ destinationPrice: '', boxPrice: '', minDailyFee: '' });
-  const [coldSettings, setColdSettings] = useState({ minDailyFee: '' });
+  const [otherSettings, setOtherSettings] = useState({ destinationPrice: '', boxPrice: '', minDailyFee: '', commissionRate: '', urgentCommissionRate: '' });
+  const [coldSettings, setColdSettings] = useState({ minDailyFee: '', commissionRate: '', urgentCommissionRate: '' });
   const [depositSettings, setDepositSettings] = useState({
     depositRate: '10',
   });
@@ -189,14 +191,22 @@ export default function RatesPage() {
       const destPrice = systemSettings.find(s => s.settingKey === 'other_destination_price');
       const boxPrice = systemSettings.find(s => s.settingKey === 'other_box_price');
       const otherMinFee = systemSettings.find(s => s.settingKey === 'other_min_daily_fee');
+      const otherCommission = systemSettings.find(s => s.settingKey === 'other_commission_rate');
+      const otherUrgentCommission = systemSettings.find(s => s.settingKey === 'other_urgent_commission_rate');
       const coldMinFee = systemSettings.find(s => s.settingKey === 'cold_min_daily_fee');
+      const coldCommission = systemSettings.find(s => s.settingKey === 'cold_commission_rate');
+      const coldUrgentCommission = systemSettings.find(s => s.settingKey === 'cold_urgent_commission_rate');
       setOtherSettings({
         destinationPrice: destPrice?.settingValue || '1800',
         boxPrice: boxPrice?.settingValue || '1500',
         minDailyFee: otherMinFee?.settingValue || '50000',
+        commissionRate: otherCommission?.settingValue || '10',
+        urgentCommissionRate: otherUrgentCommission?.settingValue || '12',
       });
       setColdSettings({
         minDailyFee: coldMinFee?.settingValue || '100000',
+        commissionRate: coldCommission?.settingValue || '10',
+        urgentCommissionRate: coldUrgentCommission?.settingValue || '12',
       });
       const depRate = systemSettings.find(s => s.settingKey === 'deposit_rate');
       setDepositSettings({
@@ -210,7 +220,7 @@ export default function RatesPage() {
       const res = await adminFetch('/api/admin/settings/system', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settingKey: key, settingValue: value }),
+        body: JSON.stringify({ key, value }),
       });
       if (!res.ok) throw new Error('Failed to save');
       return res.json();
@@ -221,34 +231,40 @@ export default function RatesPage() {
   });
 
   const saveOtherSettings = async () => {
-    if (!window.confirm('기타택배 설정을 저장하시겠습니까?')) return;
+    if (!await confirm({ title: '설정 저장', description: '기타택배 설정을 저장하시겠습니까?' })) return;
     try {
       await Promise.all([
         saveSystemSettingMutation.mutateAsync({ key: 'other_destination_price', value: otherSettings.destinationPrice }),
         saveSystemSettingMutation.mutateAsync({ key: 'other_box_price', value: otherSettings.boxPrice }),
         saveSystemSettingMutation.mutateAsync({ key: 'other_min_daily_fee', value: otherSettings.minDailyFee }),
+        saveSystemSettingMutation.mutateAsync({ key: 'other_commission_rate', value: otherSettings.commissionRate }),
+        saveSystemSettingMutation.mutateAsync({ key: 'other_urgent_commission_rate', value: otherSettings.urgentCommissionRate }),
       ]);
-      window.alert('기타택배 설정이 저장되었습니다.');
+      toast({ title: '기타택배 설정이 저장되었습니다.' });
     } catch {
       toast({ title: '저장 실패', variant: 'destructive' });
     }
   };
 
   const saveColdSettings = async () => {
-    if (!window.confirm('냉탑전용 설정을 저장하시겠습니까?')) return;
+    if (!await confirm({ title: '설정 저장', description: '냉탑전용 설정을 저장하시겠습니까?' })) return;
     try {
-      await saveSystemSettingMutation.mutateAsync({ key: 'cold_min_daily_fee', value: coldSettings.minDailyFee });
-      window.alert('냉탑전용 설정이 저장되었습니다.');
+      await Promise.all([
+        saveSystemSettingMutation.mutateAsync({ key: 'cold_min_daily_fee', value: coldSettings.minDailyFee }),
+        saveSystemSettingMutation.mutateAsync({ key: 'cold_commission_rate', value: coldSettings.commissionRate }),
+        saveSystemSettingMutation.mutateAsync({ key: 'cold_urgent_commission_rate', value: coldSettings.urgentCommissionRate }),
+      ]);
+      toast({ title: '냉탑전용 설정이 저장되었습니다.' });
     } catch {
       toast({ title: '저장 실패', variant: 'destructive' });
     }
   };
 
   const saveDepositSettings = async () => {
-    if (!window.confirm('계약금 설정을 저장하시겠습니까?')) return;
+    if (!await confirm({ title: '설정 저장', description: '계약금 설정을 저장하시겠습니까?' })) return;
     try {
       await saveSystemSettingMutation.mutateAsync({ key: 'deposit_rate', value: depositSettings.depositRate });
-      window.alert('계약금 설정이 저장되었습니다.');
+      toast({ title: '계약금 설정이 저장되었습니다.' });
     } catch {
       toast({ title: '저장 실패', variant: 'destructive' });
     }
@@ -277,7 +293,7 @@ export default function RatesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/settings/couriers'] });
-      window.alert('저장하였습니다.');
+      toast({ title: '저장하였습니다.' });
     },
     onError: (err: Error) => {
       toast({ title: '저장 실패', description: err.message, variant: 'destructive' });
@@ -349,10 +365,10 @@ export default function RatesPage() {
 
   const roundTo100 = (value: number): number => Math.round(value / 100) * 100;
 
-  const saveEdit = (id: number) => {
+  const saveEdit = async (id: number) => {
     const changes = editingRows[id];
     if (changes) {
-      if (!window.confirm('변경사항을 저장하시겠습니까?')) return;
+      if (!await confirm({ title: '변경사항 저장', description: '변경사항을 저장하시겠습니까?' })) return;
       updateMutation.mutate({ id, data: changes }, {
         onSuccess: () => {
           setEditingRows(prev => {
@@ -1026,8 +1042,13 @@ export default function RatesPage() {
                                 size="sm" 
                                 variant="ghost" 
                                 className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                                onClick={() => {
-                                  if (confirm(`"${c.courierName}" 삭제?`)) {
+                                onClick={async () => {
+                                  const ok = await confirm({
+                                    title: '삭제 확인',
+                                    description: `"${c.courierName}" 삭제하시겠습니까?`,
+                                    variant: 'destructive',
+                                  });
+                                  if (ok) {
                                     deleteMutation.mutate(c.id);
                                   }
                                 }}
@@ -1069,41 +1090,67 @@ export default function RatesPage() {
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label className="text-sm font-medium">착지단가 (원)</label>
-                  <Input
-                    type="number"
-                    value={otherSettings.destinationPrice}
-                    onChange={(e) => setOtherSettings({ ...otherSettings, destinationPrice: e.target.value })}
-                    placeholder="예: 1800"
-                    className="mt-2"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">착지 기준 단가</p>
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div>
+                    <label className="text-sm font-medium">착지단가 (원)</label>
+                    <Input
+                      type="number"
+                      value={otherSettings.destinationPrice}
+                      onChange={(e) => setOtherSettings({ ...otherSettings, destinationPrice: e.target.value })}
+                      placeholder="예: 1800"
+                      className="mt-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">착지 기준 단가</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">박스단가 (원)</label>
+                    <Input
+                      type="number"
+                      value={otherSettings.boxPrice}
+                      onChange={(e) => setOtherSettings({ ...otherSettings, boxPrice: e.target.value })}
+                      placeholder="예: 1500"
+                      className="mt-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">박스당 단가</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">일최저운임 (원)</label>
+                    <Input
+                      type="number"
+                      value={otherSettings.minDailyFee}
+                      onChange={(e) => setOtherSettings({ ...otherSettings, minDailyFee: e.target.value })}
+                      placeholder="예: 50000"
+                      className="mt-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">하루 최저 운임</p>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">박스단가 (원)</label>
-                  <Input
-                    type="number"
-                    value={otherSettings.boxPrice}
-                    onChange={(e) => setOtherSettings({ ...otherSettings, boxPrice: e.target.value })}
-                    placeholder="예: 1500"
-                    className="mt-2"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">박스당 단가</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4 pt-4 border-t">
+                  <div>
+                    <label className="text-sm font-medium">수수료율 (%)</label>
+                    <Input
+                      type="number"
+                      value={otherSettings.commissionRate}
+                      onChange={(e) => setOtherSettings({ ...otherSettings, commissionRate: e.target.value })}
+                      placeholder="예: 10"
+                      className="mt-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">일반 오더 수수료율</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">긴급 수수료율 (%)</label>
+                    <Input
+                      type="number"
+                      value={otherSettings.urgentCommissionRate}
+                      onChange={(e) => setOtherSettings({ ...otherSettings, urgentCommissionRate: e.target.value })}
+                      placeholder="예: 12"
+                      className="mt-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">긴급 오더 수수료율</p>
+                  </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">일최저운임 (원)</label>
-                  <Input
-                    type="number"
-                    value={otherSettings.minDailyFee}
-                    onChange={(e) => setOtherSettings({ ...otherSettings, minDailyFee: e.target.value })}
-                    placeholder="예: 50000"
-                    className="mt-2"
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">하루 최저 운임</p>
-                </div>
-              </div>
+              </>
             )}
             <div className="mt-6 flex justify-end">
               <Button onClick={saveOtherSettings} disabled={saveSystemSettingMutation.isPending}>
@@ -1128,16 +1175,40 @@ export default function RatesPage() {
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
               </div>
             ) : (
-              <div className="max-w-md">
-                <label className="text-sm font-medium">일최저단가 (원)</label>
-                <Input
-                  type="number"
-                  value={coldSettings.minDailyFee}
-                  onChange={(e) => setColdSettings({ ...coldSettings, minDailyFee: e.target.value })}
-                  placeholder="예: 100000"
-                  className="mt-2"
-                />
-                <p className="text-xs text-muted-foreground mt-1">하루 최저 운임</p>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="text-sm font-medium">일최저단가 (원)</label>
+                  <Input
+                    type="number"
+                    value={coldSettings.minDailyFee}
+                    onChange={(e) => setColdSettings({ ...coldSettings, minDailyFee: e.target.value })}
+                    placeholder="예: 100000"
+                    className="mt-2"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">하루 최저 운임</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">수수료율 (%)</label>
+                  <Input
+                    type="number"
+                    value={coldSettings.commissionRate}
+                    onChange={(e) => setColdSettings({ ...coldSettings, commissionRate: e.target.value })}
+                    placeholder="예: 10"
+                    className="mt-2"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">일반 오더 수수료율</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">긴급 수수료율 (%)</label>
+                  <Input
+                    type="number"
+                    value={coldSettings.urgentCommissionRate}
+                    onChange={(e) => setColdSettings({ ...coldSettings, urgentCommissionRate: e.target.value })}
+                    placeholder="예: 12"
+                    className="mt-2"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">긴급 오더 수수료율</p>
+                </div>
               </div>
             )}
             <div className="mt-6 flex justify-end">

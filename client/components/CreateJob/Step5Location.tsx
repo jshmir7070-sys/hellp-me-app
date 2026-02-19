@@ -20,7 +20,6 @@ export default function Step5Location({
   onBack,
   theme,
   isDark,
-  bottomPadding,
 }: Step5Props) {
   
   const isValid = 
@@ -34,10 +33,10 @@ export default function Step5Location({
 
   return (
     <View style={styles.container}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
-            4단계: 배송지역 · 캠프/터미널 주소
+            5단계: 배송 지역
           </ThemedText>
           <ThemedText style={[styles.stepDescription, { color: Colors.light.tabIconDefault }]}>
             {activeTab === "냉탑전용" ? "상차지 정보를 입력해주세요" : "배송 지역을 선택해주세요"}
@@ -48,51 +47,51 @@ export default function Step5Location({
           <>
             <View style={styles.section}>
               <ThemedText style={[styles.label, { color: theme.text }]}>
-                지역 선택 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
+                배송지역 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
               </ThemedText>
-              
-              <Pressable
-                style={[
-                  styles.selectButton,
-                  {
-                    backgroundColor: theme.backgroundDefault,
-                    borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
-                  },
-                ]}
-                onPress={() => {
-                  const regionLargeOptions = Object.keys(regionData);
-                  onOpenSelectModal("대분류", regionLargeOptions, (value) => {
-                    if (activeTab === "택배사") {
-                      setCourierForm({ ...courierForm, regionLarge: value, regionMedium: "", regionSmall: "" });
-                    } else {
-                      setOtherCourierForm({ ...otherCourierForm, regionLarge: value, regionMedium: "", regionSmall: "" });
-                    }
-                  });
-                }}
-              >
-                <ThemedText style={[
-                  styles.selectButtonText,
-                  { color: (activeTab === "택배사" ? courierForm.regionLarge : otherCourierForm.regionLarge) ? theme.text : Colors.light.tabIconDefault }
-                ]}>
-                  {(activeTab === "택배사" ? courierForm.regionLarge : otherCourierForm.regionLarge) || "대분류 선택"}
-                </ThemedText>
-                <Icon name="chevron-down-outline" size={20} color={theme.text} />
-              </Pressable>
-            </View>
-
-            {(activeTab === "택배사" ? courierForm.regionLarge : otherCourierForm.regionLarge) && (
-              <View style={styles.section}>
+              <View style={styles.regionRow}>
+                {/* 대분류 */}
                 <Pressable
                   style={[
-                    styles.selectButton,
+                    styles.regionButton,
                     {
                       backgroundColor: theme.backgroundDefault,
                       borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
                     },
                   ]}
                   onPress={() => {
+                    const regionLargeOptions = Object.keys(regionData);
+                    onOpenSelectModal("대분류", regionLargeOptions, (value) => {
+                      if (activeTab === "택배사") {
+                        setCourierForm({ ...courierForm, regionLarge: value, regionMedium: "", regionSmall: "" });
+                      } else {
+                        setOtherCourierForm({ ...otherCourierForm, regionLarge: value, regionMedium: "", regionSmall: "" });
+                      }
+                    });
+                  }}
+                >
+                  <ThemedText style={[
+                    styles.regionButtonText,
+                    { color: (activeTab === "택배사" ? courierForm.regionLarge : otherCourierForm.regionLarge) ? theme.text : Colors.light.tabIconDefault }
+                  ]}>
+                    {(activeTab === "택배사" ? courierForm.regionLarge : otherCourierForm.regionLarge) || "대분류"}
+                  </ThemedText>
+                </Pressable>
+
+                {/* 중분류 */}
+                <Pressable
+                  style={[
+                    styles.regionButton,
+                    {
+                      backgroundColor: theme.backgroundDefault,
+                      borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                      opacity: (activeTab === "택배사" ? courierForm.regionLarge : otherCourierForm.regionLarge) ? 1 : 0.5,
+                    },
+                  ]}
+                  onPress={() => {
                     const currentRegionLarge = activeTab === "택배사" ? courierForm.regionLarge : otherCourierForm.regionLarge;
-                    const regionMediumOptions = currentRegionLarge ? Object.keys(regionData[currentRegionLarge] || {}) : [];
+                    if (!currentRegionLarge) return;
+                    const regionMediumOptions = Object.keys(regionData[currentRegionLarge] || {});
                     onOpenSelectModal("중분류", regionMediumOptions, (value) => {
                       if (activeTab === "택배사") {
                         setCourierForm({ ...courierForm, regionMedium: value, regionSmall: "" });
@@ -103,36 +102,29 @@ export default function Step5Location({
                   }}
                 >
                   <ThemedText style={[
-                    styles.selectButtonText,
+                    styles.regionButtonText,
                     { color: (activeTab === "택배사" ? courierForm.regionMedium : otherCourierForm.regionMedium) ? theme.text : Colors.light.tabIconDefault }
                   ]}>
-                    {(activeTab === "택배사" ? courierForm.regionMedium : otherCourierForm.regionMedium) || "중분류 선택"}
+                    {(activeTab === "택배사" ? courierForm.regionMedium : otherCourierForm.regionMedium) || "중분류"}
                   </ThemedText>
-                  <Icon name="chevron-down-outline" size={20} color={theme.text} />
                 </Pressable>
-              </View>
-            )}
 
-            {(activeTab === "택배사" ? courierForm.regionMedium : otherCourierForm.regionMedium) && (
-              <View style={styles.section}>
-                <ThemedText style={[styles.label, { color: theme.text }]}>
-                  소분류 (법정동)
-                </ThemedText>
+                {/* 소분류 */}
                 <Pressable
                   style={[
-                    styles.selectButton,
+                    styles.regionButton,
                     {
                       backgroundColor: theme.backgroundDefault,
                       borderColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0',
+                      opacity: (activeTab === "택배사" ? courierForm.regionMedium : otherCourierForm.regionMedium) ? 1 : 0.5,
                     },
                   ]}
                   onPress={() => {
                     const currentRegionLarge = activeTab === "택배사" ? courierForm.regionLarge : otherCourierForm.regionLarge;
                     const currentRegionMedium = activeTab === "택배사" ? courierForm.regionMedium : otherCourierForm.regionMedium;
-                    const regionSmallOptions = (currentRegionLarge && currentRegionMedium)
-                      ? (regionData[currentRegionLarge]?.[currentRegionMedium] || [])
-                      : [];
-                    onOpenSelectModal("소분류(법정동)", regionSmallOptions, (value) => {
+                    if (!currentRegionMedium) return;
+                    const regionSmallOptions = regionData[currentRegionLarge]?.[currentRegionMedium] || [];
+                    onOpenSelectModal("소분류", regionSmallOptions, (value) => {
                       if (activeTab === "택배사") {
                         setCourierForm({ ...courierForm, regionSmall: value });
                       } else {
@@ -142,19 +134,21 @@ export default function Step5Location({
                   }}
                 >
                   <ThemedText style={[
-                    styles.selectButtonText,
+                    styles.regionButtonText,
                     { color: (activeTab === "택배사" ? courierForm.regionSmall : otherCourierForm.regionSmall) ? theme.text : Colors.light.tabIconDefault }
                   ]}>
-                    {(activeTab === "택배사" ? courierForm.regionSmall : otherCourierForm.regionSmall) || "법정동 선택"}
+                    {(activeTab === "택배사" ? courierForm.regionSmall : otherCourierForm.regionSmall) || "소분류"}
                   </ThemedText>
-                  <Icon name="chevron-down-outline" size={20} color={theme.text} />
                 </Pressable>
               </View>
-            )}
+              <ThemedText style={[styles.hint, { color: Colors.light.tabIconDefault }]}>
+                예: 경기도 성남시 분당구
+              </ThemedText>
+            </View>
 
             <View style={styles.section}>
               <ThemedText style={[styles.label, { color: theme.text }]}>
-                캠프 및 터미널 주소 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
+                캠프 주소 <ThemedText style={{ color: BrandColors.error }}>*</ThemedText>
               </ThemedText>
               {activeTab === "택배사" ? (
                 <AddressInput
@@ -171,7 +165,7 @@ export default function Step5Location({
 
             <View style={styles.section}>
               <ThemedText style={[styles.label, { color: theme.text }]}>
-                캠프 및 터미널 주소 상세
+                캠프 주소 상세
               </ThemedText>
               <TextInput
                 style={[
@@ -312,7 +306,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.lg,
-    paddingBottom: Spacing.lg,
+    paddingBottom: 100,
   },
   section: {
     marginBottom: Spacing.xl,
@@ -340,6 +334,26 @@ const styles = StyleSheet.create({
   },
   selectButtonText: {
     ...Typography.body,
+  },
+  regionRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+  },
+  regionButton: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  regionButtonText: {
+    ...Typography.small,
+  },
+  hint: {
+    ...Typography.small,
+    fontSize: 12,
+    marginTop: Spacing.xs,
   },
   input: {
     paddingVertical: Spacing.md,
@@ -371,6 +385,10 @@ const styles = StyleSheet.create({
     ...Typography.body,
   },
   footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     padding: Spacing.lg,
     flexDirection: 'row',
     gap: Spacing.md,

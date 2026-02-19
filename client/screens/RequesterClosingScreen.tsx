@@ -2,7 +2,6 @@ import React, { useCallback } from "react";
 import { View, StyleSheet, Alert, Platform } from "react-native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { CompositeScreenProps } from "@react-navigation/native";
 
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
@@ -11,31 +10,49 @@ import { OrderListPage } from "@/components/order/OrderListPage";
 import { adaptRequesterOrder, type OrderCardDTO } from "@/adapters/orderCardAdapter";
 import { Spacing, Typography, BrandColors } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
-import { QueryErrorState } from "@/components/QueryErrorState";
-import { ClosingStackParamList } from "@/navigation/ClosingStackNavigator";
-import { RootStackParamList } from "@/navigation/types";
-
-type RequesterClosingScreenProps = CompositeScreenProps<
-  NativeStackScreenProps<ClosingStackParamList, 'RequesterClosing'>,
-  NativeStackScreenProps<RootStackParamList>
->;
+type RequesterClosingScreenProps = NativeStackScreenProps<any, 'RequesterClosing'>;
 
 export default function RequesterClosingScreen({ navigation }: RequesterClosingScreenProps) {
   const { theme } = useTheme();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, isRefetching, refetch, isError, error } = useQuery<any[]>({
-    queryKey: ['/api/requester/orders'],
+  // 마감 화면: completed 필터로 숨겨진 마감 오더도 포함 + 업무중 오더도 가져오기
+  const { data: completedData, isLoading: isLoadingCompleted, isRefetching: isRefetchingCompleted, refetch: refetchCompleted } = useQuery<any[]>({
+    queryKey: ['/api/requester/orders', 'completed'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/requester/orders?status=completed');
+      if (!res.ok) throw new Error('Failed to fetch completed orders');
+      return res.json();
+    },
   });
 
-  if (isError) return <QueryErrorState error={error as Error} onRetry={refetch} />;
+  const { data: activeData, isLoading: isLoadingActive, isRefetching: isRefetchingActive, refetch: refetchActive } = useQuery<any[]>({
+    queryKey: ['/api/requester/orders', 'in_progress'],
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/requester/orders?status=in_progress');
+      if (!res.ok) throw new Error('Failed to fetch active orders');
+      return res.json();
+    },
+  });
+
+  const isLoading = isLoadingCompleted || isLoadingActive;
+  const isRefetching = isRefetchingCompleted || isRefetchingActive;
+  const refetch = useCallback(() => {
+    refetchCompleted();
+    refetchActive();
+  }, [refetchCompleted, refetchActive]);
 
   const closingOrders = React.useMemo(() => {
-    if (!data) return [];
-    return data.filter(order => 
-      ['closing_submitted', 'in_progress', 'scheduled', 'final_amount_confirmed', 'balance_paid', 'settlement_paid', 'closed'].includes(order.status?.toLowerCase() || '')
-    );
-  }, [data]);
+    const combined = [...(completedData || []), ...(activeData || [])];
+    // 중복 제거 (orderId 기준)
+    const seen = new Set<string>();
+    return combined.filter(order => {
+      const key = String(order.orderId || order.id);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return ['closing_submitted', 'in_progress', 'scheduled', 'final_amount_confirmed', 'balance_paid', 'settlement_paid', 'closed'].includes(order.status?.toLowerCase() || '');
+    });
+  }, [completedData, activeData]);
 
   const confirmMutation = useMutation({
     mutationFn: async (orderId: number) => {
@@ -68,7 +85,7 @@ export default function RequesterClosingScreen({ navigation }: RequesterClosingS
       if (hasClosingDetail) {
         navigation.navigate('ClosingDetail', { orderId });
       } else {
-        navigation.navigate('Main', { screen: 'WorkStatusTab', params: { screen: 'ClosingDetail', params: { orderId } } });
+        navigation.navigate('Main' as any, { screen: 'WorkStatusTab', params: { screen: 'ClosingDetail', params: { orderId } } });
       }
     }
   }, [navigation]);

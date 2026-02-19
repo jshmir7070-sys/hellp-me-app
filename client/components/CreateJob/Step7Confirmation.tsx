@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Pressable, StyleSheet, ScrollView } from "react-native";
+import { View, Pressable, StyleSheet, ScrollView, ActivityIndicator, Image } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { Icon } from "@/components/Icon";
 import { Colors, Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
@@ -13,13 +13,12 @@ export default function Step7Confirmation({
   setCourierForm,
   setOtherCourierForm,
   setColdTruckForm,
+  imageUri,
   onSubmit,
   isSubmitting,
-  onNext,
   onBack,
   theme,
   isDark,
-  bottomPadding,
 }: Step7Props) {
   
   const isAgreed = 
@@ -38,7 +37,48 @@ export default function Step7Confirmation({
     </View>
   );
 
+  /** 배송 가이드에 실제 입력값이 있는지 체크 (라벨만 있으면 빈 것으로 판단) */
+  const hasGuideContent = (guide: string) => {
+    if (!guide) return false;
+    // 라벨 텍스트 제거 후 실제 내용이 있는지 확인
+    const stripped = guide
+      .replace(/라우터 및 분류번호:\s*/g, '')
+      .replace(/지역 난이도:\s*/g, '')
+      .replace(/배송지정보:\s*/g, '')
+      .trim();
+    return stripped.length > 0;
+  };
+
+  /** 배송 가이드를 보기 좋게 렌더링 */
+  const renderGuideRow = (guide: string) => (
+    <View style={styles.guideRow}>
+      <ThemedText style={[styles.infoLabel, { color: Colors.light.tabIconDefault }]}>
+        배송 가이드
+      </ThemedText>
+      <ThemedText style={[styles.guideValue, { color: theme.text }]}>
+        {guide}
+      </ThemedText>
+    </View>
+  );
+
+  const renderImagePreview = () => (
+    <View style={styles.imagePreviewSection}>
+      <View style={styles.imagePreviewLabelRow}>
+        <Icon name="image-outline" size={16} color={Colors.light.tabIconDefault} />
+        <ThemedText style={[styles.infoLabel, { color: Colors.light.tabIconDefault }]}>
+          배송지 사진
+        </ThemedText>
+      </View>
+      <Image source={{ uri: imageUri! }} style={styles.imagePreview} resizeMode="cover" />
+    </View>
+  );
+
   const renderSummary = () => {
+    const formatArrivalTime = (hour: string, minute: string) => {
+      if (hour && minute) return `${hour}:${minute}`;
+      return '';
+    };
+
     if (activeTab === "택배사") {
       return (
         <>
@@ -47,12 +87,14 @@ export default function Step7Confirmation({
           {renderInfoRow("단가", `${courierForm.unitPrice}원`)}
           {renderInfoRow("배송 시작일", courierForm.requestDate)}
           {renderInfoRow("배송 종료일", courierForm.requestDateEnd)}
+          {formatArrivalTime(courierForm.arrivalHour, courierForm.arrivalMinute) &&
+            renderInfoRow("입차시간", formatArrivalTime(courierForm.arrivalHour, courierForm.arrivalMinute))}
           {renderInfoRow("차량 타입", courierForm.vehicleType)}
           {renderInfoRow("담당자 연락처", courierForm.managerContact)}
-          {renderInfoRow("지역", `${courierForm.regionLarge} > ${courierForm.regionMedium}${courierForm.regionSmall ? ` > ${courierForm.regionSmall}` : ''}`)}
-          {renderInfoRow("캠프 및 터미널 주소", courierForm.campAddress)}
-          {courierForm.campAddressDetail && renderInfoRow("캠프 및 터미널 주소 상세", courierForm.campAddressDetail)}
-          {courierForm.deliveryGuide && renderInfoRow("배송 가이드", courierForm.deliveryGuide)}
+          {renderInfoRow("지역", `${courierForm.regionLarge} > ${courierForm.regionMedium}`)}
+          {renderInfoRow("캠프 주소", courierForm.campAddress)}
+          {courierForm.campAddressDetail && renderInfoRow("캠프 주소 상세", courierForm.campAddressDetail)}
+          {hasGuideContent(courierForm.deliveryGuide) && renderGuideRow(courierForm.deliveryGuide)}
           {renderInfoRow("긴급 오더", courierForm.isUrgent)}
         </>
       );
@@ -60,16 +102,19 @@ export default function Step7Confirmation({
       return (
         <>
           {renderInfoRow("업체명", otherCourierForm.companyName)}
-          {renderInfoRow("박스 수량", otherCourierForm.boxCount)}
-          {renderInfoRow("단가", `${otherCourierForm.unitPrice}원`)}
+          {renderInfoRow("가격 유형", otherCourierForm.isPerDrop ? "착지당" : "박스당")}
+          {renderInfoRow(otherCourierForm.isPerDrop ? "착지 수량" : "박스 수량", otherCourierForm.boxCount)}
+          {renderInfoRow("단가", `${parseInt(otherCourierForm.unitPrice).toLocaleString()}원`)}
           {renderInfoRow("배송 시작일", otherCourierForm.requestDate)}
           {renderInfoRow("배송 종료일", otherCourierForm.requestDateEnd)}
+          {formatArrivalTime(otherCourierForm.arrivalHour, otherCourierForm.arrivalMinute) &&
+            renderInfoRow("입차시간", formatArrivalTime(otherCourierForm.arrivalHour, otherCourierForm.arrivalMinute))}
           {renderInfoRow("차량 타입", otherCourierForm.vehicleType)}
           {renderInfoRow("연락처", otherCourierForm.contact)}
-          {renderInfoRow("지역", `${otherCourierForm.regionLarge} > ${otherCourierForm.regionMedium}${otherCourierForm.regionSmall ? ` > ${otherCourierForm.regionSmall}` : ''}`)}
-          {renderInfoRow("캠프 및 터미널 주소", otherCourierForm.campAddress)}
-          {otherCourierForm.campAddressDetail && renderInfoRow("캠프 및 터미널 주소 상세", otherCourierForm.campAddressDetail)}
-          {otherCourierForm.deliveryGuide && renderInfoRow("배송 가이드", otherCourierForm.deliveryGuide)}
+          {renderInfoRow("지역", `${otherCourierForm.regionLarge} > ${otherCourierForm.regionMedium}`)}
+          {renderInfoRow("캠프 주소", otherCourierForm.campAddress)}
+          {otherCourierForm.campAddressDetail && renderInfoRow("캠프 주소 상세", otherCourierForm.campAddressDetail)}
+          {hasGuideContent(otherCourierForm.deliveryGuide) && renderGuideRow(otherCourierForm.deliveryGuide)}
           {renderInfoRow("긴급 오더", otherCourierForm.isUrgent)}
         </>
       );
@@ -81,6 +126,8 @@ export default function Step7Confirmation({
           {renderInfoRow("권장 수수료", `${coldTruckForm.recommendedFee}원`)}
           {renderInfoRow("배송 시작일", coldTruckForm.requestDate)}
           {renderInfoRow("배송 종료일", coldTruckForm.requestDateEnd)}
+          {formatArrivalTime(coldTruckForm.arrivalHour, coldTruckForm.arrivalMinute) &&
+            renderInfoRow("입차시간", formatArrivalTime(coldTruckForm.arrivalHour, coldTruckForm.arrivalMinute))}
           {renderInfoRow("차량 타입", coldTruckForm.vehicleType)}
           {renderInfoRow("연락처", coldTruckForm.contact)}
           {renderInfoRow("상차지", coldTruckForm.loadingPoint)}
@@ -101,7 +148,7 @@ export default function Step7Confirmation({
           )}
           {renderInfoRow("타코미터 보유", coldTruckForm.hasTachometer)}
           {renderInfoRow("칸막이 보유", coldTruckForm.hasPartition)}
-          {coldTruckForm.deliveryGuide && renderInfoRow("배송 가이드", coldTruckForm.deliveryGuide)}
+          {hasGuideContent(coldTruckForm.deliveryGuide) && renderGuideRow(coldTruckForm.deliveryGuide)}
           {renderInfoRow("긴급 오더", coldTruckForm.isUrgent)}
         </>
       );
@@ -110,13 +157,13 @@ export default function Step7Confirmation({
 
   return (
     <View style={styles.container}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.section}>
           <ThemedText style={[styles.stepTitle, { color: theme.text }]}>
-            6단계: 오더확인 · 계약금확인 · 동의
+            7단계: 최종 확인
           </ThemedText>
           <ThemedText style={[styles.stepDescription, { color: Colors.light.tabIconDefault }]}>
-            입력하신 정보와 계약금을 확인 후 동의해주세요
+            입력하신 정보를 확인해주세요
           </ThemedText>
         </View>
 
@@ -129,6 +176,8 @@ export default function Step7Confirmation({
           </View>
           {renderSummary()}
         </View>
+
+        {imageUri ? renderImagePreview() : null}
 
         <View style={styles.consentSection}>
           <Pressable 
@@ -162,7 +211,7 @@ export default function Step7Confirmation({
           <Icon name="information-circle-outline" size={20} color={BrandColors.requester} />
           <View style={styles.infoTextContainer}>
             <ThemedText style={[styles.infoText, { color: theme.text }]}>
-              동의 후 다음 단계에서 계약서 작성 → 서명 → 본인인증이 진행됩니다
+              오더 등록 후 계약서 작성 → 서명 → 본인인증 단계가 진행됩니다
             </ThemedText>
           </View>
         </View>
@@ -172,6 +221,7 @@ export default function Step7Confirmation({
         <Pressable
           style={[styles.button, styles.buttonSecondary, { borderColor: BrandColors.requester }]}
           onPress={onBack}
+          disabled={isSubmitting}
         >
           <ThemedText style={[styles.buttonText, { color: BrandColors.requester }]}>이전</ThemedText>
         </Pressable>
@@ -179,12 +229,16 @@ export default function Step7Confirmation({
           style={[
             styles.button,
             styles.buttonPrimary,
-            { backgroundColor: BrandColors.requester, opacity: isAgreed ? 1 : 0.6 },
+            { backgroundColor: BrandColors.requester, opacity: isAgreed && !isSubmitting ? 1 : 0.6 },
           ]}
-          onPress={() => { if (isAgreed) onNext(); }}
-          disabled={!isAgreed}
+          onPress={onSubmit}
+          disabled={!isAgreed || isSubmitting}
         >
-          <ThemedText style={[styles.buttonText, { color: '#FFFFFF' }]}>다음</ThemedText>
+          {isSubmitting ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <ThemedText style={[styles.buttonText, { color: '#FFFFFF' }]}>요청</ThemedText>
+          )}
         </Pressable>
       </View>
     </View>
@@ -197,7 +251,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: Spacing.lg,
-    paddingBottom: Spacing.lg,
+    paddingBottom: 100,
   },
   section: {
     marginBottom: Spacing.xl,
@@ -246,6 +300,31 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'flex-end',
   },
+  guideRow: {
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.light.backgroundSecondary,
+  },
+  guideValue: {
+    ...Typography.body,
+    marginTop: Spacing.xs,
+    lineHeight: 22,
+  },
+  imagePreviewSection: {
+    marginBottom: Spacing.xl,
+  },
+  imagePreviewLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  imagePreview: {
+    width: '100%',
+    height: 180,
+    borderRadius: BorderRadius.md,
+  },
   consentSection: {
     marginBottom: Spacing.xl,
   },
@@ -279,6 +358,10 @@ const styles = StyleSheet.create({
     ...Typography.caption,
   },
   footer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     padding: Spacing.lg,
     flexDirection: 'row',
     gap: Spacing.md,

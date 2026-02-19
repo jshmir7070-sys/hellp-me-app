@@ -5,12 +5,14 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
+import { getToken } from '@/utils/secure-token-storage';
+
 import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { Spacing, BorderRadius, BrandColors, Colors } from '@/constants/theme';
-import { apiRequest, apiUpload } from '@/lib/query-client';
+import { getApiUrl } from '@/lib/query-client';
 
 type HelperOnboardingScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -82,7 +84,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
   const pickImage = async (docType: DocumentType) => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 0.8,
     });
 
@@ -105,7 +107,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
     }
 
     const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 0.8,
     });
 
@@ -141,11 +143,12 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
     }));
 
     try {
+      const token = await getToken();
       const formData = new FormData();
-
+      
       const uriParts = uri.split('.');
       const fileType = uriParts[uriParts.length - 1] || 'jpg';
-
+      
       if (Platform.OS === 'web') {
         const blobResponse = await fetch(uri);
         const blob = await blobResponse.blob();
@@ -159,12 +162,27 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
       }
       formData.append('type', docType);
 
-      const response = await apiUpload('/api/helpers/credential/upload', formData);
-      const result = await response.json();
-      setDocuments(prev => ({
-        ...prev,
-        [docType]: { ...prev[docType], uploaded: true, url: result.url, uploading: false },
-      }));
+      const response = await fetch(
+        new URL('/api/helpers/credential/upload', getApiUrl()).toString(),
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+          body: formData,
+        }
+      );
+
+      if (response.ok) {
+        const result = await response.json();
+        setDocuments(prev => ({
+          ...prev,
+          [docType]: { ...prev[docType], uploaded: true, url: result.url, uploading: false },
+        }));
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || '업로드 실패');
+      }
     } catch (error: any) {
       console.error('Upload error:', error);
       setDocuments(prev => ({
@@ -227,27 +245,71 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
     setIsSubmitting(true);
 
     try {
-      await apiRequest('POST', '/api/helpers/me/business', {
-        businessNumber: businessInfo.businessNumber,
-        businessName: businessInfo.businessName,
-        representativeName: businessInfo.representativeName,
-        address: businessInfo.businessAddress,
-        businessType: businessInfo.businessType,
-        businessCategory: businessInfo.businessCategory,
-        email: businessInfo.email,
-        businessImageUrl: documents.businessCert.url,
-      });
+      const token = await getToken();
 
-      await apiRequest('POST', '/api/helpers/me/license', {
-        driverLicenseImageUrl: documents.driverLicense.url,
-        cargoLicenseImageUrl: documents.cargoLicense.url,
-      });
+      const businessResponse = await fetch(
+        new URL('/api/helpers/me/business', getApiUrl()).toString(),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            businessNumber: businessInfo.businessNumber,
+            businessName: businessInfo.businessName,
+            representativeName: businessInfo.representativeName,
+            address: businessInfo.businessAddress,
+            businessType: businessInfo.businessType,
+            businessCategory: businessInfo.businessCategory,
+            email: businessInfo.email,
+            businessImageUrl: documents.businessCert.url,
+          }),
+        }
+      );
 
-      await apiRequest('POST', '/api/helpers/me/vehicle', {
-        vehicleType: vehicleInfo.vehicleType,
-        plateNumber: getFullPlateNumber(),
-        vehicleImageUrl: documents.vehicleCert.url,
-      });
+      if (!businessResponse.ok) {
+        throw new Error('사업자 정보 저장 실패');
+      }
+
+      const licenseResponse = await fetch(
+        new URL('/api/helpers/me/license', getApiUrl()).toString(),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            driverLicenseImageUrl: documents.driverLicense.url,
+            cargoLicenseImageUrl: documents.cargoLicense.url,
+          }),
+        }
+      );
+
+      if (!licenseResponse.ok) {
+        throw new Error('면허증 정보 저장 실패');
+      }
+
+      const vehicleResponse = await fetch(
+        new URL('/api/helpers/me/vehicle', getApiUrl()).toString(),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            vehicleType: vehicleInfo.vehicleType,
+            plateNumber: getFullPlateNumber(),
+            vehicleImageUrl: documents.vehicleCert.url,
+          }),
+        }
+      );
+
+      if (!vehicleResponse.ok) {
+        throw new Error('차량 정보 저장 실패');
+      }
 
       navigation.navigate('ContractSigning');
     } catch (error: any) {
@@ -325,7 +387,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
         contentContainerStyle={[
           styles.content, 
           { 
-            paddingTop: headerHeight + Spacing.lg,
+            paddingTop: headerHeight + Spacing.md,
             paddingBottom: insets.bottom + 100,
           }
         ]}

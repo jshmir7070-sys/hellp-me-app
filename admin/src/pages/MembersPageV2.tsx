@@ -138,44 +138,25 @@ export default function MembersPageV2() {
   const filteredHelpers = helpers;
   const filteredRequesters = requesters;
 
-  // ============ 통계 계산 (전체 통계 조회 필요) ============
+  // ============ 통계 계산 (전용 stats API 사용) ============
 
-  const { data: allHelpers = [] } = useQuery<Helper[]>({
-    queryKey: ['helpers-all'],
-    queryFn: async () => {
-      const result = await apiRequest<{ data: Helper[] }>('/helpers?limit=9999');
-      return result.data || [];
-    },
+  const { data: memberStats } = useQuery<{
+    helpers: { total: number; pending: number; active: number; suspended: number };
+    requesters: { total: number; pending: number; active: number; suspended: number };
+  }>({
+    queryKey: ['members-stats'],
+    queryFn: () => apiRequest('/members/stats'),
   });
 
-  const { data: allRequesters = [] } = useQuery<Requester[]>({
-    queryKey: ['requesters-all'],
-    queryFn: async () => {
-      const result = await apiRequest<{ data: Requester[] }>('/requesters?limit=9999');
-      return result.data || [];
-    },
-  });
-
-  const helperStats = {
-    total: allHelpers.filter(h => h.status !== 'pending').length,
-    pending: allHelpers.filter(h => h.status === 'pending').length,
-    active: allHelpers.filter(h => h.status === 'active').length,
-    suspended: allHelpers.filter(h => h.status === 'suspended').length,
-  };
-
-  const requesterStats = {
-    total: allRequesters.filter(r => r.status !== 'pending').length,
-    pending: allRequesters.filter(r => r.status === 'pending').length,
-    active: allRequesters.filter(r => r.status === 'active').length,
-    suspended: allRequesters.filter(r => r.status === 'suspended').length,
-  };
+  const helperStats = memberStats?.helpers || { total: 0, pending: 0, active: 0, suspended: 0 };
+  const requesterStats = memberStats?.requesters || { total: 0, pending: 0, active: 0, suspended: 0 };
 
   // ============ 액션 핸들러 ============
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ['helpers'] });
     queryClient.invalidateQueries({ queryKey: ['requesters'] });
-    toast({ title: '데이터를 새로고침했습니다.' });
+    toast({ title: '데이터를 새로고침했습니다.', variant: 'success' });
   };
 
   const handleDownloadExcel = () => {
@@ -212,7 +193,7 @@ export default function MembersPageV2() {
     }
 
     if (data.length === 0) {
-      toast({ title: '다운로드할 데이터가 없습니다.', variant: 'destructive' });
+      toast({ title: '다운로드할 데이터가 없습니다.', variant: 'warning' });
       return;
     }
 
@@ -228,7 +209,7 @@ export default function MembersPageV2() {
     link.download = filename;
     link.click();
     URL.revokeObjectURL(url);
-    toast({ title: 'Excel 다운로드 완료' });
+    toast({ title: 'Excel 다운로드 완료', variant: 'success' });
   };
 
   // 승인/거절 mutation
@@ -239,7 +220,7 @@ export default function MembersPageV2() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [variables.type === 'helper' ? 'helpers' : 'requesters'] });
-      toast({ title: '승인이 완료되었습니다.' });
+      toast({ title: '승인이 완료되었습니다.', variant: 'success' });
     },
   });
 
@@ -250,7 +231,7 @@ export default function MembersPageV2() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [variables.type === 'helper' ? 'helpers' : 'requesters'] });
-      toast({ title: '거절이 완료되었습니다.' });
+      toast({ title: '거절이 완료되었습니다.', variant: 'success' });
     },
   });
 

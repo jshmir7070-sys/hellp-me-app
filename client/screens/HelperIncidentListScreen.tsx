@@ -139,7 +139,7 @@ export default function HelperIncidentListScreen() {
         data={incidents || []}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderItem}
-        contentContainerStyle={[styles.listContent, { paddingTop: headerHeight + Spacing.md, flexGrow: 1 }]}
+        contentContainerStyle={[styles.listContent, { paddingTop: headerHeight + Spacing.md }]}
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
         }
@@ -228,9 +228,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   emptyContainer: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
+    paddingVertical: Spacing['5xl'],
   },
   emptyTitle: {
     ...Typography.h4,

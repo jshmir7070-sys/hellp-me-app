@@ -35,6 +35,7 @@ export const CAN_CHECKIN_STATUSES: ReadonlySet<OrderStatus> = new Set([
 
 export const CAN_SUBMIT_CLOSING_STATUSES: ReadonlySet<OrderStatus> = new Set([
   ORDER_STATUS.IN_PROGRESS,
+  ORDER_STATUS.SCHEDULED,
 ]);
 
 export const CAN_APPROVE_CLOSING_STATUSES: ReadonlySet<OrderStatus> = new Set([

@@ -2,10 +2,10 @@
 echo Starting Hellp Me Backend Server...
 echo.
 
-REM Set environment variables
-set DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/hellpme
-set SESSION_SECRET=localsessionsecret123
-set JWT_SECRET=localjwtsecret456
+REM Set environment variables (must match .env file)
+set DATABASE_URL=postgresql://postgres:jsh%%21%%2115988@localhost:5432/hellpme
+set SESSION_SECRET=NVi+Xvin30/E8Tmiqm6ga5zFEx7iGgL4IHUjh1OZ+hA=
+set JWT_SECRET=ENVCAdhnEo6a9REO7k9glWgrogDNB3nTcPJeG/wREBM=
 set NODE_ENV=development
 
 echo DATABASE_URL is set

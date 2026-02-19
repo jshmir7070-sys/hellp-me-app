@@ -20,7 +20,7 @@ export interface SettlementResult {
   returnedCount: number;
   etcCount: number;
   totalBillableCount: number;
-  
+
   // 금액 계산
   deliveryReturnAmount: number;  // (배송+반품) × 단가
   etcAmount: number;              // 기타 × 기타단가
@@ -28,7 +28,7 @@ export interface SettlementResult {
   supplyAmount: number;           // 공급가 (VAT 제외)
   vatAmount: number;              // VAT (10%)
   totalAmount: number;            // 총액 (공급가 + VAT)
-  
+
   // 결제 정보
   depositAmount: number;          // 계약금 (총액의 20%)
   balanceAmount: number;          // 잔금 (총액 - 계약금)
@@ -75,7 +75,7 @@ export function calculateSettlement(data: ClosingData, depositRate: number = 20)
   // 계약금/잔금 (depositRate는 % 단위)
   const depositAmount = Math.floor(totalAmount * (depositRate / 100));
   const balanceAmount = totalAmount - depositAmount;
-  
+
   return {
     deliveredCount,
     returnedCount,
@@ -105,10 +105,10 @@ export function calculateHelperPayout(
   damageDeduction: number = 0
 ): HelperPayoutResult {
   const settlement = calculateSettlement(data);
-  
+
   const platformFee = Math.round(settlement.totalAmount * (platformFeeRate / 100));
-  const driverPayout = settlement.totalAmount - platformFee - damageDeduction;
-  
+  const driverPayout = Math.max(0, settlement.totalAmount - platformFee - damageDeduction);
+
   return {
     ...settlement,
     platformFeeRate,
@@ -123,7 +123,7 @@ export function calculateHelperPayout(
  */
 export function parseClosingReport(closingReport: any, order: any): ClosingData {
   let extraCosts: Array<{ code?: string; name?: string; amount: number; memo?: string }> = [];
-  
+
   if (closingReport.extraCostsJson) {
     try {
       const parsed = JSON.parse(closingReport.extraCostsJson);
@@ -132,7 +132,7 @@ export function parseClosingReport(closingReport: any, order: any): ClosingData 
       }
     } catch { /* ignore */ }
   }
-  
+
   return {
     deliveredCount: closingReport.deliveredCount || 0,
     returnedCount: closingReport.returnedCount || 0,
@@ -141,4 +141,12 @@ export function parseClosingReport(closingReport: any, order: any): ClosingData 
     etcPricePerUnit: closingReport.etcPricePerUnit != null ? closingReport.etcPricePerUnit : 1800,
     extraCosts,
   };
+}
+
+/**
+ * 공급가액에 대한 VAT 계산 (10%)
+ * 단일 소스 관리 (SSOT)
+ */
+export function calculateVat(supplyAmount: number): number {
+  return Math.round(supplyAmount * 0.1);
 }

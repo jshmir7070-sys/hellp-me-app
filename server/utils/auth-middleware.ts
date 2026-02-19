@@ -1,24 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import { storage } from "../storage";
-
-const isProduction = process.env.NODE_ENV === "production";
-
-// JWT_SECRET: 프로덕션에서는 반드시 환경변수로 설정 필요
-// 개발환경에서도 .env 파일에 JWT_SECRET 설정을 권장
-const JWT_SECRET = process.env.JWT_SECRET || "";
-if (!JWT_SECRET) {
-  if (isProduction) {
-    throw new Error("JWT_SECRET must be set in production environment");
-  } else {
-    // 개발환경: 랜덤 시크릿 자동 생성 (서버 재시작 시 기존 토큰 무효화됨)
-    const crypto = require("crypto");
-    const devSecret = crypto.randomBytes(32).toString("hex");
-    console.warn("[AUTH] JWT_SECRET not set. Generated random dev secret. Set JWT_SECRET in .env for persistent sessions.");
-    (globalThis as any).__JWT_SECRET_DEV = devSecret;
-  }
-}
-const EFFECTIVE_JWT_SECRET = JWT_SECRET || (globalThis as any).__JWT_SECRET_DEV;
+import { EFFECTIVE_JWT_SECRET } from "../config/jwt";
 
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -46,7 +29,7 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
     }
     req.user = user;
     next();
-  } catch (err) {
+  } catch (err: any) {
     res.status(401).json({ message: "Unauthorized" });
   }
 }
@@ -76,7 +59,7 @@ export async function adminAuth(req: AuthenticatedRequest, res: Response, next: 
     req.adminUser = user;
     req.user = user; // 호환성: 기존 라우트가 req.user 사용
     next();
-  } catch (err) {
+  } catch (err: any) {
     res.status(401).json({ message: "Unauthorized" });
   }
 }

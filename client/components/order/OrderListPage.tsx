@@ -31,7 +31,7 @@ interface OrderListPageProps {
   onRefresh?: () => void;
   onCardPress?: (item: OrderCardDTO) => void;
   onCardAction?: (action: string, item: OrderCardDTO) => void;
-  emptyIcon?: keyof typeof Ionicons.glyphMap;
+  emptyIcon?: string;
   emptyTitle?: string;
   emptySubtitle?: string;
   ListHeaderComponent?: React.ReactElement;
@@ -51,7 +51,7 @@ const contextToCardContext: Record<PageContext, CardContext> = {
   review_list: "review_list",
 };
 
-const contextToEmptyConfig: Record<PageContext, { icon: keyof typeof Ionicons.glyphMap; title: string; subtitle: string }> = {
+const contextToEmptyConfig: Record<PageContext, { icon: string; title: string; subtitle: string }> = {
   requester_home: { icon: "inbox-outline", title: "등록된 오더가 없습니다", subtitle: "새 오더를 등록해보세요" },
   requester_history: { icon: "time-outline", title: "사용 이력이 없습니다", subtitle: "완료된 오더가 여기에 표시됩니다" },
   requester_closing: { icon: "document-text-outline", title: "마감 대기 중인 오더가 없습니다", subtitle: "헬퍼가 마감자료를 제출하면 여기에 표시됩니다" },

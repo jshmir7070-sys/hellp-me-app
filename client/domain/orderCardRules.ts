@@ -151,46 +151,219 @@ export function getStatusLabel(
   return getHelperStatusLabel(orderStatus, closingReviewStatus, balancePaymentStatus, settlementStatus, hasApplied, applicantCount);
 }
 
+// ─── 요청자 오더 카드 버튼 ───
 export function getRequesterButtons(
-  _orderStatus: OrderStatus,
-  _closingReviewStatus?: ClosingReviewStatus,
-  _downPaymentStatus?: PaymentStatusType,
-  _balancePaymentStatus?: PaymentStatusType,
-  _hasReview?: boolean
+  orderStatus: OrderStatus,
+  closingReviewStatus?: ClosingReviewStatus,
+  downPaymentStatus?: PaymentStatusType,
+  balancePaymentStatus?: PaymentStatusType,
+  hasReview?: boolean
 ): ActionButton[] {
-  return [];
+  const buttons: ActionButton[] = [];
+
+  switch (orderStatus) {
+    case "PENDING_APPROVAL":
+    case "AWAITING_DEPOSIT":
+      if (downPaymentStatus !== "PAID") {
+        buttons.push({ label: "선금 결제", action: "PAY_DOWN", variant: "primary" });
+      }
+      buttons.push({ label: "오더 수정", action: "EDIT_ORDER", variant: "outline" });
+      break;
+
+    case "OPEN":
+      buttons.push({ label: "지원자 확인", action: "VIEW_APPLICANTS", variant: "primary" });
+      buttons.push({ label: "오더 수정", action: "EDIT_ORDER", variant: "outline" });
+      break;
+
+    case "ASSIGNED":
+      buttons.push({ label: "상세보기", action: "VIEW_DETAIL", variant: "primary" });
+      break;
+
+    case "IN_PROGRESS":
+      buttons.push({ label: "상세보기", action: "VIEW_DETAIL", variant: "primary" });
+      break;
+
+    case "CLOSING_SUBMITTED":
+      if (closingReviewStatus === "PENDING") {
+        buttons.push({ label: "마감 검수", action: "REVIEW_CLOSING", variant: "primary" });
+      } else if (closingReviewStatus === "REJECTED") {
+        buttons.push({ label: "마감 확인", action: "VIEW_CLOSING", variant: "outline" });
+      } else if (closingReviewStatus === "APPROVED") {
+        buttons.push({ label: "마감 확인", action: "VIEW_CLOSING", variant: "outline" });
+      }
+      break;
+
+    case "FINAL_AMOUNT_CONFIRMED":
+      if (balancePaymentStatus === "PENDING") {
+        buttons.push({ label: "잔금 결제", action: "PAY_BALANCE", variant: "primary" });
+      }
+      buttons.push({ label: "상세보기", action: "VIEW_DETAIL", variant: "outline" });
+      break;
+
+    case "BALANCE_PAID":
+    case "SETTLEMENT_PAID":
+      if (!hasReview) {
+        buttons.push({ label: "리뷰 작성", action: "WRITE_REVIEW", variant: "primary" });
+      }
+      buttons.push({ label: "상세보기", action: "VIEW_DETAIL", variant: "outline" });
+      break;
+  }
+
+  return buttons;
 }
 
+// ─── 헬퍼 모집공고 버튼 ───
 export function getHelperRecruitmentButtons(
-  _hasApplied: boolean
+  hasApplied: boolean
 ): ActionButton[] {
-  return [];
+  if (hasApplied) {
+    return [
+      { label: "지원완료", action: "VIEW_DETAIL", variant: "outline", disabled: true },
+    ];
+  }
+  return [
+    { label: "지원하기", action: "APPLY", variant: "primary" },
+    { label: "상세보기", action: "VIEW_DETAIL", variant: "outline" },
+  ];
 }
 
 export type ApplicationStatus = "pending" | "accepted" | "rejected";
 
+// ─── 헬퍼 지원 목록 버튼 ───
 export function getHelperApplicationButtons(
-  _applicationStatus?: ApplicationStatus
+  applicationStatus?: ApplicationStatus
 ): ActionButton[] {
-  return [];
+  switch (applicationStatus) {
+    case "pending":
+      return [
+        { label: "지원취소", action: "CANCEL_APPLICATION", variant: "destructive" },
+        { label: "상세보기", action: "VIEW_DETAIL", variant: "outline" },
+      ];
+    case "accepted":
+      return [
+        { label: "상세보기", action: "VIEW_DETAIL", variant: "primary" },
+      ];
+    case "rejected":
+      return [
+        { label: "상세보기", action: "VIEW_DETAIL", variant: "outline" },
+      ];
+    default:
+      return [
+        { label: "상세보기", action: "VIEW_DETAIL", variant: "outline" },
+      ];
+  }
 }
 
+// ─── 헬퍼 내 오더 버튼 (핵심: 업무중 → 마감 제출) ───
 export function getHelperMyOrderButtons(
-  _orderStatus: OrderStatus,
-  _closingReviewStatus?: ClosingReviewStatus,
-  _settlementStatus?: SettlementStatus
+  orderStatus: OrderStatus,
+  closingReviewStatus?: ClosingReviewStatus,
+  settlementStatus?: SettlementStatus
 ): ActionButton[] {
-  return [];
+  const buttons: ActionButton[] = [];
+
+  switch (orderStatus) {
+    case "ASSIGNED":
+      buttons.push({ label: "상세보기", action: "VIEW_DETAIL", variant: "primary" });
+      break;
+
+    case "IN_PROGRESS":
+      buttons.push({ label: "마감 제출", action: "SUBMIT_CLOSING", variant: "primary" });
+      buttons.push({ label: "상세보기", action: "VIEW_DETAIL", variant: "outline" });
+      break;
+
+    case "CLOSING_SUBMITTED":
+      if (closingReviewStatus === "REJECTED") {
+        buttons.push({ label: "마감 재제출", action: "SUBMIT_CLOSING", variant: "primary" });
+      } else {
+        buttons.push({ label: "마감 확인", action: "VIEW_CLOSING", variant: "outline" });
+      }
+      break;
+
+    case "FINAL_AMOUNT_CONFIRMED":
+      buttons.push({ label: "상세보기", action: "VIEW_DETAIL", variant: "outline" });
+      break;
+
+    case "BALANCE_PAID":
+      if (settlementStatus === "PENDING" || settlementStatus === "CONFIRMED") {
+        buttons.push({ label: "정산 대기중", action: "VIEW_DETAIL", variant: "outline", disabled: true });
+      } else if (settlementStatus === "PAID") {
+        buttons.push({ label: "정산 확인", action: "VIEW_DETAIL", variant: "outline" });
+      } else {
+        buttons.push({ label: "상세보기", action: "VIEW_DETAIL", variant: "outline" });
+      }
+      break;
+
+    case "SETTLEMENT_PAID":
+      buttons.push({ label: "정산 확인", action: "VIEW_DETAIL", variant: "outline" });
+      break;
+  }
+
+  return buttons;
 }
 
+// ─── 정산 목록 버튼 ───
 export function getSettlementListButtons(
-  _settlementStatus?: SettlementStatus
+  settlementStatus?: SettlementStatus
 ): ActionButton[] {
-  return [];
+  switch (settlementStatus) {
+    case "PAID":
+      return [{ label: "정산 확인", action: "VIEW_DETAIL", variant: "outline" }];
+    case "CONFIRMED":
+      return [{ label: "정산 대기중", action: "VIEW_DETAIL", variant: "outline", disabled: true }];
+    case "HOLD":
+      return [{ label: "이의제기", action: "REPORT_DISPUTE", variant: "destructive" }];
+    default:
+      return [{ label: "상세보기", action: "VIEW_DETAIL", variant: "outline" }];
+  }
 }
 
-export function getReviewListButtons(
-  _hasReview: boolean
+// ─── 요청자 마감 확인 버튼 ───
+export function getRequesterClosingButtons(
+  orderStatus: OrderStatus,
+  closingReviewStatus?: ClosingReviewStatus,
+  balancePaymentStatus?: PaymentStatusType
 ): ActionButton[] {
-  return [];
+  const buttons: ActionButton[] = [];
+
+  switch (orderStatus) {
+    case "IN_PROGRESS":
+    case "ASSIGNED":
+      buttons.push({ label: "업무 진행중", action: "VIEW_DETAIL", variant: "outline", disabled: true });
+      break;
+
+    case "CLOSING_SUBMITTED":
+      if (!closingReviewStatus || closingReviewStatus === "PENDING") {
+        buttons.push({ label: "마감 확인", action: "review_closing", variant: "primary" });
+      } else if (closingReviewStatus === "APPROVED") {
+        buttons.push({ label: "확인 완료", action: "view_detail", variant: "outline" });
+      } else if (closingReviewStatus === "REJECTED") {
+        buttons.push({ label: "반려됨 (재제출 대기)", action: "view_detail", variant: "outline", disabled: true });
+      }
+      break;
+
+    case "FINAL_AMOUNT_CONFIRMED":
+      if (balancePaymentStatus === "PENDING") {
+        buttons.push({ label: "잔금 결제", action: "pay_balance", variant: "primary" });
+      }
+      buttons.push({ label: "상세보기", action: "view_detail", variant: "outline" });
+      break;
+
+    case "BALANCE_PAID":
+    case "SETTLEMENT_PAID":
+      buttons.push({ label: "정산 완료", action: "view_detail", variant: "outline" });
+      break;
+  }
+
+  return buttons;
+}
+
+// ─── 리뷰 목록 버튼 ───
+export function getReviewListButtons(
+  hasReview: boolean
+): ActionButton[] {
+  if (!hasReview) {
+    return [{ label: "리뷰 작성", action: "WRITE_REVIEW", variant: "primary" }];
+  }
+  return [{ label: "리뷰 보기", action: "VIEW_REVIEW", variant: "outline" }];
 }

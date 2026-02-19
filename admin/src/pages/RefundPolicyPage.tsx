@@ -35,7 +35,7 @@ export default function RefundPolicyPage() {
     queryKey: ['refund-policies'],
     queryFn: async () => {
       try {
-        const data = await apiRequest<RefundPolicy[]>('/refund-policies');
+        const data = await apiRequest<RefundPolicy[]>('/settings/refund-policies');
         return data;
       } catch {
         return [];
@@ -64,8 +64,8 @@ export default function RefundPolicyPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (policies: { before: typeof beforeMatching; after: typeof afterMatching }) => {
-      return apiRequest('/refund-policies', {
-        method: 'PUT',
+      return apiRequest('/settings/refund-policies', {
+        method: 'POST',
         body: JSON.stringify({
           beforeMatching: policies.before,
           afterMatching: policies.after,

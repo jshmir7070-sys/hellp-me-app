@@ -11,7 +11,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
-import { apiRequest, apiUpload } from "@/lib/query-client";
+import { apiRequest, getApiUrl, getAuthToken } from "@/lib/query-client";
 import DateTimePicker from "@react-native-community/datetimepicker";
 
 type ProfileStackParamList = {
@@ -57,7 +57,7 @@ export default function HelperDisputeSubmitScreen({ navigation }: HelperDisputeS
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
+      allowsEditing: false,
       aspect: [4, 3],
       quality: 0.8,
     });
@@ -68,19 +68,31 @@ export default function HelperDisputeSubmitScreen({ navigation }: HelperDisputeS
         const formData = new FormData();
         const uri = result.assets[0].uri;
         const filename = uri.split('/').pop() || 'photo.jpg';
-
+        
         formData.append('file', {
           uri,
           name: filename,
           type: 'image/jpeg',
         } as any);
 
-        const response = await apiUpload('/api/upload/evidence', formData);
-        const data = await response.json();
-        setEvidencePhoto(data.url);
-      } catch (err: any) {
+        const token = await getAuthToken();
+        const response = await fetch(`${getApiUrl()}/api/upload/evidence`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+          body: formData,
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setEvidencePhoto(data.url);
+        } else {
+          Alert.alert("오류", "사진 업로드에 실패했습니다.");
+        }
+      } catch (err) {
         console.error("Upload error:", err);
-        Alert.alert("오류", err.message || "사진 업로드에 실패했습니다.");
+        Alert.alert("오류", "사진 업로드 중 오류가 발생했습니다.");
       } finally {
         setUploading(false);
       }

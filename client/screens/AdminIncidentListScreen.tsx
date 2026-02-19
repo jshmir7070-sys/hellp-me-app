@@ -6,6 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -103,7 +104,7 @@ export default function AdminIncidentListScreen({ navigation }: AdminIncidentLis
 
   const renderIncident = ({ item }: { item: Incident }) => (
     <Pressable
-      onPress={() => navigation.navigate("AdminIncidentDetail", { incidentId: item.id })}
+      onPress={() => navigation.navigate("AdminIncidentDetail" as any, { incidentId: item.id })}
     >
       <Card style={styles.card}>
         <View style={styles.cardHeader}>
@@ -166,7 +167,7 @@ export default function AdminIncidentListScreen({ navigation }: AdminIncidentLis
                 피해금액
               </ThemedText>
               <ThemedText style={[styles.value, { color: BrandColors.error }]}>
-                {(item.damageAmount || 0).toLocaleString()}원
+                {item.damageAmount.toLocaleString()}원
               </ThemedText>
             </View>
           ) : null}

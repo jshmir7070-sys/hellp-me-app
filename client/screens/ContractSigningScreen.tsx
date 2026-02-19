@@ -1,15 +1,19 @@
-import React, { useState, useRef } from 'react';
-import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Alert, Platform } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Alert, Platform, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { getToken } from '@/utils/secure-token-storage';
+import * as ExpoLinking from 'expo-linking';
+
 import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
+import { SignaturePad } from '@/components/SignaturePad';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/contexts/AuthContext';
 import { Spacing, BorderRadius, BrandColors, Colors } from '@/constants/theme';
-import { apiRequest } from '@/lib/query-client';
+import { getApiUrl } from '@/lib/query-client';
 
 type ContractSigningScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -103,10 +107,72 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
   const [agreePush, setAgreePush] = useState(false);
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [signatureComplete, setSignatureComplete] = useState(false);
+  const [signatureData, setSignatureData] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
 
   const scrollViewRef = useRef<ScrollView>(null);
+  const [verificationId, setVerificationId] = useState<string | null>(null);
+
+  // 본인인증 딥링크 콜백 처리
+  useEffect(() => {
+    const handleDeepLink = async (event: { url: string }) => {
+      const { url } = event;
+      if (!url) return;
+
+      try {
+        const parsed = ExpoLinking.parse(url);
+        const { queryParams, path } = parsed;
+
+        // hellpme://verify/return?identityVerificationId=xxx&status=success
+        if (path?.includes('verify') && queryParams?.status === 'success' && queryParams?.identityVerificationId) {
+          setIsVerifying(true);
+          const vid = queryParams.identityVerificationId as string;
+
+          // 서버에서 본인인증 검증
+          const response = await fetch(
+            new URL('/api/auth/verify-identity', getApiUrl()).toString(),
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ identityVerificationId: vid }),
+            }
+          );
+
+          if (response.ok) {
+            setPhoneVerified(true);
+            setVerificationId(vid);
+            if (Platform.OS === 'web') {
+              alert('본인인증이 완료되었습니다.');
+            } else {
+              Alert.alert('완료', '본인인증이 완료되었습니다.');
+            }
+          } else {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.message || '본인인증 검증 실패');
+          }
+        } else if (path?.includes('verify') && queryParams?.status === 'cancelled') {
+          if (Platform.OS === 'web') {
+            alert('본인인증이 취소되었습니다.');
+          } else {
+            Alert.alert('알림', '본인인증이 취소되었습니다.');
+          }
+        }
+      } catch (error: any) {
+        console.error('본인인증 콜백 오류:', error);
+        if (Platform.OS === 'web') {
+          alert('본인인증에 실패했습니다. 다시 시도해주세요.');
+        } else {
+          Alert.alert('오류', error.message || '본인인증에 실패했습니다. 다시 시도해주세요.');
+        }
+      } finally {
+        setIsVerifying(false);
+      }
+    };
+
+    const subscription = Linking.addEventListener('url', handleDeepLink);
+    return () => subscription.remove();
+  }, []);
 
   const handleScrollEnd = (event: any) => {
     const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
@@ -116,39 +182,76 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
     }
   };
 
-  // 본인인증 처리 (PASS/KCB 연동 전까지 서버 측 간이 인증 사용)
   const handlePhoneVerification = async () => {
     setIsVerifying(true);
     try {
-      const result = await apiRequest('POST', '/api/identity/request');
+      // 1. 서버에서 본인인증 ID 생성
+      const response = await fetch(
+        new URL('/api/auth/create-identity-verification', getApiUrl()).toString(),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        }
+      );
 
-      setPhoneVerified(true);
+      if (!response.ok) {
+        throw new Error('본인인증 준비에 실패했습니다');
+      }
+
+      const data = await response.json();
+
+      // 테스트 모드: API 시크릿 미설정 시 바로 성공 처리
+      if (data.testMode) {
+        // 테스트 모드에서 서버 검증 호출
+        const verifyResponse = await fetch(
+          new URL('/api/auth/verify-identity', getApiUrl()).toString(),
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identityVerificationId: data.identityVerificationId }),
+          }
+        );
+
+        if (verifyResponse.ok) {
+          setPhoneVerified(true);
+          setVerificationId(data.identityVerificationId);
+          if (Platform.OS === 'web') {
+            alert('본인인증이 완료되었습니다. (테스트 모드)');
+          } else {
+            Alert.alert('완료', '본인인증이 완료되었습니다. (테스트 모드)');
+          }
+        } else {
+          const err = await verifyResponse.json().catch(() => ({}));
+          throw new Error(err.message || '본인인증 검증 실패');
+        }
+        return;
+      }
+
+      // 2. 본인인증 웹 페이지 열기 (PortOne SDK 연동)
+      const returnUrl = ExpoLinking.createURL('verify/return');
+      const baseUrl = getApiUrl();
+      const verificationUrl = `${baseUrl}/identity-verification?identityVerificationId=${encodeURIComponent(data.identityVerificationId)}&returnUrl=${encodeURIComponent(returnUrl)}`;
+
       if (Platform.OS === 'web') {
-        alert('본인인증이 완료되었습니다.');
+        window.open(verificationUrl, '_blank');
       } else {
-        Alert.alert('완료', '본인인증이 완료되었습니다.');
+        await Linking.openURL(verificationUrl);
       }
     } catch (error: any) {
-      const msg = error?.message || '본인인증에 실패했습니다. 다시 시도해주세요.';
+      console.error('본인인증 오류:', error);
       if (Platform.OS === 'web') {
-        alert(msg);
+        alert(error.message || '본인인증에 실패했습니다. 다시 시도해주세요.');
       } else {
-        Alert.alert('오류', msg);
+        Alert.alert('오류', error.message || '본인인증에 실패했습니다. 다시 시도해주세요.');
       }
     } finally {
       setIsVerifying(false);
     }
   };
 
-  // 전자서명 처리 (계약 제출 시 signedAt 타임스탬프와 함께 서버에 전송됨)
-  const handleSignature = () => {
-    setSignatureComplete(true);
-    if (Platform.OS === 'web') {
-      alert('전자서명이 완료되었습니다.');
-    } else {
-      Alert.alert('완료', '전자서명이 완료되었습니다.');
-    }
-  };
+  // handleSignature removed as it is replaced by SignaturePad state management
+
 
   const allRequiredAgreed = agreeContract && agreeClosing && agreeAccident && agreeNoDirect && agreePrivacy;
 
@@ -161,17 +264,40 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
 
     setIsSubmitting(true);
     try {
-      const response = await apiRequest('POST', '/api/helpers/onboarding/submit', {
-        contractSigned: true,
-        phoneVerified: true,
-        signedAt: new Date().toISOString(),
-      });
+      const token = await getToken();
 
-      if (response) {
+      const response = await fetch(
+        new URL('/api/helpers/onboarding/submit', getApiUrl()).toString(),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            contractSigned: true,
+            phoneVerified: true,
+            identityVerificationId: verificationId,
+            signedAt: new Date().toISOString(),
+            signatureData: signatureData, // Add signature data
+            agreedTerms: {
+              contract: agreeContract,
+              closing: agreeClosing,
+              accident: agreeAccident,
+              noDirect: agreeNoDirect,
+              privacy: agreePrivacy,
+              marketing: agreeMarketing,
+              push: agreePush,
+            },
+          }),
+        }
+      );
+
+      if (response.ok) {
         if (refreshUser) {
           await refreshUser();
         }
-        
+
         if (Platform.OS === 'web') {
           alert('계약 체결이 완료되었습니다. 관리자 승인을 기다려주세요.');
           navigation.reset({
@@ -182,14 +308,20 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
           Alert.alert(
             '계약 완료',
             '계약 체결이 완료되었습니다.\n관리자 승인 후 오더 신청이 가능합니다.',
-            [{ text: '확인', onPress: () => navigation.reset({
-              index: 0,
-              routes: [{ name: 'Main' }],
-            }) }]
+            [{
+              text: '확인', onPress: () => navigation.reset({
+                index: 0,
+                routes: [{ name: 'Main' }],
+              })
+            }]
           );
         }
+      } else {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || '제출 실패');
       }
     } catch (error: any) {
+      console.error('Submit error:', error);
       if (Platform.OS === 'web') {
         alert('제출 실패: ' + (error.message || '다시 시도해주세요.'));
       } else {
@@ -203,327 +335,306 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
   const allAgreed = allRequiredAgreed;
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-      <ScrollView
-        ref={scrollViewRef}
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: headerHeight + Spacing.lg,
-            paddingBottom: insets.bottom + 100,
-          }
-        ]}
-        showsVerticalScrollIndicator={true}
-      >
-        <View style={styles.headerSection}>
-          <ThemedText style={[styles.mainTitle, { color: theme.text }]}>운송주선 플랫폼 기본계약</ThemedText>
-          <ThemedText style={[styles.mainSubtitle, { color: theme.tabIconDefault }]}>
-            본 계약은 가입 시 1회 체결되며, 모든 오더에 공통 적용됩니다
-          </ThemedText>
-        </View>
+    <ScrollView
+      ref={scrollViewRef}
+      style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
+      contentContainerStyle={{
+        paddingTop: headerHeight + Spacing.md,
+        paddingBottom: insets.bottom + 120,
+        paddingHorizontal: Spacing.lg,
+      }}
+      showsVerticalScrollIndicator={true}
+    >
+      <View style={styles.headerSection}>
+        <ThemedText style={[styles.mainTitle, { color: theme.text }]}>운송주선 플랫폼 기본계약</ThemedText>
+        <ThemedText style={[styles.mainSubtitle, { color: theme.tabIconDefault }]}>
+          본 계약은 가입 시 1회 체결되며, 모든 오더에 공통 적용됩니다
+        </ThemedText>
+      </View>
 
-        <View style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>1. 계약서 내용</ThemedText>
-          <Card style={styles.contractCard}>
-            <ScrollView 
-              style={styles.contractScroll}
-              onScroll={handleScrollEnd}
-              scrollEventThrottle={400}
-              nestedScrollEnabled={true}
-            >
-              <ThemedText style={[styles.contractText, { color: theme.text }]}>
-                {CONTRACT_CONTENT}
-              </ThemedText>
-            </ScrollView>
-            {hasReadContract ? (
-              <View style={[styles.readBadge, { backgroundColor: BrandColors.successLight }]}>
-                <Icon name="checkmark-outline" size={14} color={BrandColors.success} />
-                <ThemedText style={{ color: BrandColors.success, fontSize: 12, marginLeft: 4 }}>읽음 완료</ThemedText>
-              </View>
-            ) : (
-              <View style={[styles.readBadge, { backgroundColor: BrandColors.warningLight }]}>
-                <Icon name="alert-circle-outline" size={14} color={BrandColors.warning} />
-                <ThemedText style={{ color: BrandColors.warning, fontSize: 12, marginLeft: 4 }}>끝까지 스크롤해주세요</ThemedText>
-              </View>
-            )}
-          </Card>
-        </View>
-
-        <View style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>2. 약관 동의</ThemedText>
-          
-          <Pressable
-            style={styles.checkboxRow}
-            onPress={() => {
-              const newValue = !allAgreed;
-              setAgreeContract(newValue);
-              setAgreeClosing(newValue);
-              setAgreeAccident(newValue);
-              setAgreeNoDirect(newValue);
-              setAgreePrivacy(newValue);
-            }}
+      <View style={styles.section}>
+        <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>1. 계약서 내용</ThemedText>
+        <Card style={styles.contractCard}>
+          <ScrollView
+            style={styles.contractScroll}
+            onScroll={handleScrollEnd}
+            scrollEventThrottle={400}
+            nestedScrollEnabled={true}
           >
-            <View style={[
-              styles.checkbox,
-              { 
-                backgroundColor: allAgreed ? BrandColors.helper : 'transparent',
-                borderColor: allAgreed ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-              }
-            ]}>
-              {allAgreed ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-            </View>
-            <ThemedText style={[styles.checkboxLabel, { color: theme.text, fontWeight: '600' }]}>
-              필수 항목 전체 동의
+            <ThemedText style={[styles.contractText, { color: theme.text }]}>
+              {CONTRACT_CONTENT}
             </ThemedText>
-          </Pressable>
-
-          <View style={[styles.divider, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]} />
-
-          <Pressable style={styles.checkboxRow} onPress={() => setAgreeContract(!agreeContract)}>
-            <View style={[
-              styles.checkbox,
-              { 
-                backgroundColor: agreeContract ? BrandColors.helper : 'transparent',
-                borderColor: agreeContract ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-              }
-            ]}>
-              {agreeContract ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+          </ScrollView>
+          {hasReadContract ? (
+            <View style={[styles.readBadge, { backgroundColor: BrandColors.successLight }]}>
+              <Icon name="checkmark-outline" size={14} color={BrandColors.success} />
+              <ThemedText style={{ color: BrandColors.success, fontSize: 12, marginLeft: 4 }}>읽음 완료</ThemedText>
             </View>
-            <View style={styles.checkboxContent}>
-              <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-                (필수) 본인은 본 계약서 전문을 확인하였고, 핵심사항에 동의합니다
-              </ThemedText>
-              <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
-                플랫폼은 운송주선 사업자이며, 기사는 독립 업무수행자입니다
-              </ThemedText>
-            </View>
-          </Pressable>
-
-          <Pressable style={styles.checkboxRow} onPress={() => setAgreeClosing(!agreeClosing)}>
-            <View style={[
-              styles.checkbox,
-              { 
-                backgroundColor: agreeClosing ? BrandColors.helper : 'transparent',
-                borderColor: agreeClosing ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-              }
-            ]}>
-              {agreeClosing ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-            </View>
-            <View style={styles.checkboxContent}>
-              <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-                (필수) 마감자료 제출이 잔금 산정 및 정산의 기준임에 동의합니다
-              </ThemedText>
-              <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
-                배송/반품/기타 수량 입력, 증빙 이미지 업로드 필수
-              </ThemedText>
-            </View>
-          </Pressable>
-
-          <Pressable style={styles.checkboxRow} onPress={() => setAgreeAccident(!agreeAccident)}>
-            <View style={[
-              styles.checkbox,
-              { 
-                backgroundColor: agreeAccident ? BrandColors.helper : 'transparent',
-                borderColor: agreeAccident ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-              }
-            ]}>
-              {agreeAccident ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-            </View>
-            <View style={styles.checkboxContent}>
-              <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-                (필수) 사고 발생 시 정산 차감/보류가 발생할 수 있음에 동의합니다
-              </ThemedText>
-              <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
-                분실/파손/오배송 등 사고 시 플랫폼 정책에 따름
-              </ThemedText>
-            </View>
-          </Pressable>
-
-          <Pressable style={styles.checkboxRow} onPress={() => setAgreeNoDirect(!agreeNoDirect)}>
-            <View style={[
-              styles.checkbox,
-              { 
-                backgroundColor: agreeNoDirect ? BrandColors.helper : 'transparent',
-                borderColor: agreeNoDirect ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-              }
-            ]}>
-              {agreeNoDirect ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-            </View>
-            <View style={styles.checkboxContent}>
-              <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-                (필수) 직거래 금지 및 위반 시 제재에 동의합니다
-              </ThemedText>
-              <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
-                플랫폼 외 직거래 유도/수행 시 계정정지, 정산보류, 손해배상 등
-              </ThemedText>
-            </View>
-          </Pressable>
-
-          <Pressable style={styles.checkboxRow} onPress={() => setAgreePrivacy(!agreePrivacy)}>
-            <View style={[
-              styles.checkbox,
-              { 
-                backgroundColor: agreePrivacy ? BrandColors.helper : 'transparent',
-                borderColor: agreePrivacy ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-              }
-            ]}>
-              {agreePrivacy ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-            </View>
-            <View style={styles.checkboxContent}>
-              <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-                (필수) 개인정보를 업무 목적 외 사용하지 않음에 동의합니다
-              </ThemedText>
-              <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
-                요청자 연락처/개인정보 보호 의무, 위반 시 법적 책임
-              </ThemedText>
-            </View>
-          </Pressable>
-
-          <View style={[styles.divider, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0', marginTop: Spacing.md }]} />
-          
-          <ThemedText style={[styles.optionalTitle, { color: theme.tabIconDefault }]}>
-            선택 항목
-          </ThemedText>
-
-          <Pressable style={styles.checkboxRow} onPress={() => setAgreeMarketing(!agreeMarketing)}>
-            <View style={[
-              styles.checkbox,
-              { 
-                backgroundColor: agreeMarketing ? BrandColors.helper : 'transparent',
-                borderColor: agreeMarketing ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-              }
-            ]}>
-              {agreeMarketing ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-            </View>
-            <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-              (선택) 마케팅/혜택 안내 수신 동의
-            </ThemedText>
-          </Pressable>
-
-          <Pressable style={styles.checkboxRow} onPress={() => setAgreePush(!agreePush)}>
-            <View style={[
-              styles.checkbox,
-              { 
-                backgroundColor: agreePush ? BrandColors.helper : 'transparent',
-                borderColor: agreePush ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-              }
-            ]}>
-              {agreePush ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-            </View>
-            <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-              (선택) 푸시 알림 수신 동의
-            </ThemedText>
-          </Pressable>
-        </View>
-
-        <View style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>3. 본인인증</ThemedText>
-          
-          <Card style={styles.verificationCard}>
-            <Pressable
-              style={[
-                styles.verificationButton,
-                { 
-                  backgroundColor: phoneVerified ? BrandColors.successLight : theme.backgroundDefault,
-                  borderColor: phoneVerified ? BrandColors.success : BrandColors.helper,
-                }
-              ]}
-              onPress={handlePhoneVerification}
-              disabled={phoneVerified || isVerifying}
-            >
-              {isVerifying ? (
-                <ActivityIndicator size="small" color={BrandColors.helper} />
-              ) : (
-                <Icon 
-                  name={phoneVerified ? "checkmark-circle-outline" : "cellphone"} 
-                  size={24} 
-                  color={phoneVerified ? BrandColors.success : BrandColors.helper} 
-                />
-              )}
-              <View style={styles.verificationInfo}>
-                <ThemedText style={[styles.verificationTitle, { color: phoneVerified ? BrandColors.success : theme.text }]}>
-                  휴대폰 본인인증
-                </ThemedText>
-                <ThemedText style={[styles.verificationDesc, { color: theme.tabIconDefault }]}>
-                  {phoneVerified ? '인증 완료' : '본인 명의 휴대폰으로 인증'}
-                </ThemedText>
-              </View>
-            </Pressable>
-          </Card>
-        </View>
-
-        <View style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>4. 전자서명</ThemedText>
-          
-          <Card style={styles.verificationCard}>
-            <Pressable
-              style={[
-                styles.verificationButton,
-                { 
-                  backgroundColor: signatureComplete ? BrandColors.successLight : theme.backgroundDefault,
-                  borderColor: signatureComplete ? BrandColors.success : BrandColors.helper,
-                  opacity: allAgreed && phoneVerified ? 1 : 0.5,
-                }
-              ]}
-              onPress={handleSignature}
-              disabled={signatureComplete || !allAgreed || !phoneVerified}
-            >
-              <Icon 
-                name={signatureComplete ? "checkmark-circle-outline" : "create-outline"} 
-                size={24} 
-                color={signatureComplete ? BrandColors.success : BrandColors.helper} 
-              />
-              <View style={styles.verificationInfo}>
-                <ThemedText style={[styles.verificationTitle, { color: signatureComplete ? BrandColors.success : theme.text }]}>
-                  전자서명
-                </ThemedText>
-                <ThemedText style={[styles.verificationDesc, { color: theme.tabIconDefault }]}>
-                  {signatureComplete ? '서명 완료' : '계약서에 전자서명'}
-                </ThemedText>
-              </View>
-            </Pressable>
-            {!allAgreed || !phoneVerified ? (
-              <ThemedText style={[styles.disabledNote, { color: theme.tabIconDefault }]}>
-                약관 동의 및 본인인증 완료 후 서명 가능합니다
-              </ThemedText>
-            ) : null}
-          </Card>
-        </View>
-      </ScrollView>
-
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.md, backgroundColor: theme.backgroundRoot }]}>
-        <Pressable
-          style={[
-            styles.submitButton,
-            { 
-              backgroundColor: canSubmit() ? BrandColors.helper : '#9CA3AF',
-              opacity: isSubmitting ? 0.7 : 1,
-            }
-          ]}
-          onPress={handleSubmit}
-          disabled={isSubmitting || !canSubmit()}
-        >
-          {isSubmitting ? (
-            <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <>
-              <Icon name="document-text-outline" size={20} color="#FFFFFF" />
-              <ThemedText style={styles.submitButtonText}>계약 체결 완료</ThemedText>
-            </>
+            <View style={[styles.readBadge, { backgroundColor: BrandColors.warningLight }]}>
+              <Icon name="alert-circle-outline" size={14} color={BrandColors.warning} />
+              <ThemedText style={{ color: BrandColors.warning, fontSize: 12, marginLeft: 4 }}>끝까지 스크롤해주세요</ThemedText>
+            </View>
           )}
+        </Card>
+      </View>
+
+      <View style={styles.section}>
+        <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>2. 약관 동의</ThemedText>
+
+        <Pressable
+          style={styles.checkboxRow}
+          onPress={() => {
+            const newValue = !allAgreed;
+            setAgreeContract(newValue);
+            setAgreeClosing(newValue);
+            setAgreeAccident(newValue);
+            setAgreeNoDirect(newValue);
+            setAgreePrivacy(newValue);
+          }}
+        >
+          <View style={[
+            styles.checkbox,
+            {
+              backgroundColor: allAgreed ? BrandColors.helper : 'transparent',
+              borderColor: allAgreed ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+            }
+          ]}>
+            {allAgreed ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+          </View>
+          <ThemedText style={[styles.checkboxLabel, { color: theme.text, fontWeight: '600' }]}>
+            필수 항목 전체 동의
+          </ThemedText>
+        </Pressable>
+
+        <View style={[styles.divider, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]} />
+
+        <Pressable style={styles.checkboxRow} onPress={() => setAgreeContract(!agreeContract)}>
+          <View style={[
+            styles.checkbox,
+            {
+              backgroundColor: agreeContract ? BrandColors.helper : 'transparent',
+              borderColor: agreeContract ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+            }
+          ]}>
+            {agreeContract ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+          </View>
+          <View style={styles.checkboxContent}>
+            <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
+              (필수) 본인은 본 계약서 전문을 확인하였고, 핵심사항에 동의합니다
+            </ThemedText>
+            <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
+              플랫폼은 운송주선 사업자이며, 기사는 독립 업무수행자입니다
+            </ThemedText>
+          </View>
+        </Pressable>
+
+        <Pressable style={styles.checkboxRow} onPress={() => setAgreeClosing(!agreeClosing)}>
+          <View style={[
+            styles.checkbox,
+            {
+              backgroundColor: agreeClosing ? BrandColors.helper : 'transparent',
+              borderColor: agreeClosing ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+            }
+          ]}>
+            {agreeClosing ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+          </View>
+          <View style={styles.checkboxContent}>
+            <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
+              (필수) 마감자료 제출이 잔금 산정 및 정산의 기준임에 동의합니다
+            </ThemedText>
+            <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
+              배송/반품/기타 수량 입력, 증빙 이미지 업로드 필수
+            </ThemedText>
+          </View>
+        </Pressable>
+
+        <Pressable style={styles.checkboxRow} onPress={() => setAgreeAccident(!agreeAccident)}>
+          <View style={[
+            styles.checkbox,
+            {
+              backgroundColor: agreeAccident ? BrandColors.helper : 'transparent',
+              borderColor: agreeAccident ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+            }
+          ]}>
+            {agreeAccident ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+          </View>
+          <View style={styles.checkboxContent}>
+            <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
+              (필수) 사고 발생 시 정산 차감/보류가 발생할 수 있음에 동의합니다
+            </ThemedText>
+            <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
+              분실/파손/오배송 등 사고 시 플랫폼 정책에 따름
+            </ThemedText>
+          </View>
+        </Pressable>
+
+        <Pressable style={styles.checkboxRow} onPress={() => setAgreeNoDirect(!agreeNoDirect)}>
+          <View style={[
+            styles.checkbox,
+            {
+              backgroundColor: agreeNoDirect ? BrandColors.helper : 'transparent',
+              borderColor: agreeNoDirect ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+            }
+          ]}>
+            {agreeNoDirect ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+          </View>
+          <View style={styles.checkboxContent}>
+            <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
+              (필수) 직거래 금지 및 위반 시 제재에 동의합니다
+            </ThemedText>
+            <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
+              플랫폼 외 직거래 유도/수행 시 계정정지, 정산보류, 손해배상 등
+            </ThemedText>
+          </View>
+        </Pressable>
+
+        <Pressable style={styles.checkboxRow} onPress={() => setAgreePrivacy(!agreePrivacy)}>
+          <View style={[
+            styles.checkbox,
+            {
+              backgroundColor: agreePrivacy ? BrandColors.helper : 'transparent',
+              borderColor: agreePrivacy ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+            }
+          ]}>
+            {agreePrivacy ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+          </View>
+          <View style={styles.checkboxContent}>
+            <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
+              (필수) 개인정보를 업무 목적 외 사용하지 않음에 동의합니다
+            </ThemedText>
+            <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
+              요청자 연락처/개인정보 보호 의무, 위반 시 법적 책임
+            </ThemedText>
+          </View>
+        </Pressable>
+
+        <View style={[styles.divider, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0', marginTop: Spacing.md }]} />
+
+        <ThemedText style={[styles.optionalTitle, { color: theme.tabIconDefault }]}>
+          선택 항목
+        </ThemedText>
+
+        <Pressable style={styles.checkboxRow} onPress={() => setAgreeMarketing(!agreeMarketing)}>
+          <View style={[
+            styles.checkbox,
+            {
+              backgroundColor: agreeMarketing ? BrandColors.helper : 'transparent',
+              borderColor: agreeMarketing ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+            }
+          ]}>
+            {agreeMarketing ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+          </View>
+          <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
+            (선택) 마케팅/혜택 안내 수신 동의
+          </ThemedText>
+        </Pressable>
+
+        <Pressable style={styles.checkboxRow} onPress={() => setAgreePush(!agreePush)}>
+          <View style={[
+            styles.checkbox,
+            {
+              backgroundColor: agreePush ? BrandColors.helper : 'transparent',
+              borderColor: agreePush ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+            }
+          ]}>
+            {agreePush ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+          </View>
+          <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
+            (선택) 푸시 알림 수신 동의
+          </ThemedText>
         </Pressable>
       </View>
-    </View>
+
+      <View style={styles.section}>
+        <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>3. 본인인증</ThemedText>
+
+        <Card style={styles.verificationCard}>
+          <Pressable
+            style={[
+              styles.verificationButton,
+              {
+                backgroundColor: phoneVerified ? BrandColors.successLight : theme.backgroundDefault,
+                borderColor: phoneVerified ? BrandColors.success : BrandColors.helper,
+              }
+            ]}
+            onPress={handlePhoneVerification}
+            disabled={phoneVerified || isVerifying}
+          >
+            {isVerifying ? (
+              <ActivityIndicator size="small" color={BrandColors.helper} />
+            ) : (
+              <Icon
+                name={phoneVerified ? "checkmark-circle-outline" : "cellphone"}
+                size={24}
+                color={phoneVerified ? BrandColors.success : BrandColors.helper}
+              />
+            )}
+            <View style={styles.verificationInfo}>
+              <ThemedText style={[styles.verificationTitle, { color: phoneVerified ? BrandColors.success : theme.text }]}>
+                휴대폰 본인인증
+              </ThemedText>
+              <ThemedText style={[styles.verificationDesc, { color: theme.tabIconDefault }]}>
+                {phoneVerified ? '인증 완료' : '본인 명의 휴대폰으로 인증'}
+              </ThemedText>
+            </View>
+          </Pressable>
+        </Card>
+      </View>
+
+      <View style={styles.section}>
+        <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>4. 전자서명</ThemedText>
+
+        <Card style={styles.verificationCard}>
+          <SignaturePad
+            onSignatureChange={(hasSignature, data) => {
+              setSignatureComplete(hasSignature);
+              setSignatureData(data);
+            }}
+            primaryColor={BrandColors.helper}
+            fullScreenMode={true}
+          />
+          {!signatureComplete && (
+            <View style={styles.verificationInfo}>
+              <ThemedText style={[styles.verificationDesc, { color: theme.tabIconDefault, marginTop: Spacing.sm }]}>
+                위 버튼을 눌러 서명을 진행해주세요
+              </ThemedText>
+            </View>
+          )}
+          {!allAgreed || !phoneVerified ? (
+            <ThemedText style={[styles.disabledNote, { color: theme.tabIconDefault }]}>
+              약관 동의 및 본인인증 완료 후 서명 가능합니다
+            </ThemedText>
+          ) : null}
+        </Card>
+      </View>
+
+      {/* 제출 버튼 */}
+      <Pressable
+        style={[
+          styles.submitButton,
+          {
+            backgroundColor: canSubmit() ? BrandColors.helper : '#9CA3AF',
+            opacity: isSubmitting ? 0.7 : 1,
+          }
+        ]}
+        onPress={handleSubmit}
+        disabled={isSubmitting || !canSubmit()}
+      >
+        {isSubmitting ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <>
+            <Icon name="document-text-outline" size={20} color="#FFFFFF" />
+            <ThemedText style={styles.submitButtonText}>계약 체결 완료</ThemedText>
+          </>
+        )}
+      </Pressable>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: Spacing.lg,
-  },
   headerSection: {
     marginBottom: Spacing.xl,
   },
@@ -627,21 +738,11 @@ const styles = StyleSheet.create({
     marginTop: Spacing.sm,
     textAlign: 'center',
   },
-  bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
-  },
   submitButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing.md,
+    padding: Spacing.lg,
     borderRadius: BorderRadius.md,
     gap: Spacing.sm,
   },

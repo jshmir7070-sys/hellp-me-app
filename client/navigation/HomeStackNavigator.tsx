@@ -9,6 +9,12 @@ import HomeScreen from "@/screens/HomeScreen";
 import NotificationsScreen from "@/screens/NotificationsScreen";
 import ApplicantListScreen from "@/screens/ApplicantListScreen";
 import RequesterClosingScreen from "@/screens/RequesterClosingScreen";
+import DocumentsMenuScreen from "@/screens/DocumentsMenuScreen";
+import BusinessCertSubmitScreen from "@/screens/BusinessCertSubmitScreen";
+import DriverLicenseSubmitScreen from "@/screens/DriverLicenseSubmitScreen";
+import CargoLicenseSubmitScreen from "@/screens/CargoLicenseSubmitScreen";
+import VehicleCertSubmitScreen from "@/screens/VehicleCertSubmitScreen";
+import ContractSigningScreen from "@/screens/ContractSigningScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useTheme } from "@/hooks/useTheme";
@@ -21,6 +27,12 @@ export type HomeStackParamList = {
   Notifications: undefined;
   ApplicantList: { orderId: number };
   RequesterClosing: undefined;
+  DocumentsMenu: undefined;
+  BusinessCertSubmit: undefined;
+  DriverLicenseSubmit: undefined;
+  CargoLicenseSubmit: undefined;
+  VehicleCertSubmit: undefined;
+  ContractSigning: undefined;
 };
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
@@ -125,6 +137,36 @@ export default function HomeStackNavigator() {
         options={{
           headerTitle: "마감 확인",
         }}
+      />
+      <Stack.Screen
+        name="DocumentsMenu"
+        component={DocumentsMenuScreen}
+        options={{ headerTitle: "서류 제출" }}
+      />
+      <Stack.Screen
+        name="BusinessCertSubmit"
+        component={BusinessCertSubmitScreen}
+        options={{ headerTitle: "사업자등록증" }}
+      />
+      <Stack.Screen
+        name="DriverLicenseSubmit"
+        component={DriverLicenseSubmitScreen}
+        options={{ headerTitle: "운전면허증" }}
+      />
+      <Stack.Screen
+        name="CargoLicenseSubmit"
+        component={CargoLicenseSubmitScreen}
+        options={{ headerTitle: "화물운송종사자격증" }}
+      />
+      <Stack.Screen
+        name="VehicleCertSubmit"
+        component={VehicleCertSubmitScreen}
+        options={{ headerTitle: "차량등록증" }}
+      />
+      <Stack.Screen
+        name="ContractSigning"
+        component={ContractSigningScreen}
+        options={{ headerTitle: "화물위탁운송계약서" }}
       />
     </Stack.Navigator>
   );

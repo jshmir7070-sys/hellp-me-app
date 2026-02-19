@@ -7,7 +7,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   Platform,
-  Alert,
 } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Icon } from "@/components/Icon";
@@ -64,9 +63,6 @@ export function EditOrderModal({
       queryClient.invalidateQueries({ queryKey: ["/api/requester/orders"] });
       onClose();
     },
-    onError: (err: any) => {
-      Alert.alert("오류", err?.message || "오더 수정에 실패했습니다.");
-    },
   });
 
   const handleSave = () => {
@@ -114,7 +110,6 @@ export function EditOrderModal({
       onRequestClose={onClose}
     >
       <Pressable style={styles.overlay} onPress={onClose}>
-        {/* 내부 Pressable: 모달 내부 클릭 시 overlay onClose 전파 방지 */}
         <Pressable onPress={() => {}} style={styles.contentWrapper}>
           <Card style={styles.modalContent}>
             <View style={styles.header}>
