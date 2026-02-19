@@ -334,9 +334,9 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
       <FlatList
         style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
         contentContainerStyle={{
-          paddingTop: headerHeight + Spacing.lg,
-          paddingBottom: tabBarHeight + Spacing.xl,
-          paddingHorizontal: Spacing.lg,
+          paddingTop: headerHeight + Spacing.sm,
+          paddingBottom: tabBarHeight + Spacing.lg,
+          paddingHorizontal: Spacing.md,
           flexGrow: 1,
         }}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
   },
   tabBarContainer: {
     flexDirection: 'row',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
   tabButton: {
     flex: 1,
@@ -394,12 +394,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   headerContent: {
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
   filterRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.sm,
   },
   filterChip: {
     flex: 1,

@@ -131,91 +131,134 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
   const displayAddress = data.deliveryArea || data.addressShort || 
     (data.region1 ? `${data.region1} ${data.region2 || ""}`.trim() : "위치 미정");
 
+  // 오더공고/신청내역 등 리스트용 컨텍스트인지 판별
+  const isListContext = context === 'helper_recruitment' || context === 'helper_application' || context === 'helper_my_orders';
+
+  // 상세 정보가 필요한 컨텍스트 (요청자 이력, 정산 등)
+  const isDetailContext = context === 'requester_history' || context === 'settlement_list';
+
   return (
-    <Card variant="glass" padding="lg" style={styles.card} onPress={handleCardPress}>
-        <View style={styles.header}>
+    <Card variant="glass" padding={isListContext ? "sm" : "lg"} style={isListContext ? styles.cardCompact : styles.card} onPress={handleCardPress}>
+        {/* === 헤더: 업체명 + 상태뱃지 === */}
+        <View style={isListContext ? styles.headerCompact : styles.header}>
           <View style={styles.titleSection}>
             {data.isUrgent ? (
               <Animated.View style={{ opacity: flashAnim }}>
                 <Badge variant="gradient" color="red" size="sm" style={styles.urgentBadge}>
-                  ⚡ 긴급
+                  긴급
                 </Badge>
               </Animated.View>
             ) : null}
-            <ThemedText style={[styles.companyName, { color: theme.text }]} numberOfLines={1}>
+            <ThemedText style={[isListContext ? styles.companyNameCompact : styles.companyName, { color: theme.text }]} numberOfLines={1}>
               {displayName}
             </ThemedText>
           </View>
           <Badge
             variant="gradient"
             color={getStatusBadgeColor(statusLabel.bgColor)}
-            size="md"
+            size="sm"
           >
             {statusLabel.text}
           </Badge>
         </View>
 
-        <View style={styles.infoGrid}>
-          <View style={styles.infoRow}>
-            <View style={styles.infoItem}>
-              <Icon name="calendar-outline" size={14} color={theme.tabIconDefault} />
-              <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>입차기간</ThemedText>
-              <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-                {formatDateRange(data.startAt, data.endAt)}
-              </ThemedText>
-            </View>
-            <View style={styles.infoItem}>
-              <Icon name="car-outline" size={14} color={theme.tabIconDefault} />
-              <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>차종</ThemedText>
-              <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-                {data.vehicleType || "-"}
-              </ThemedText>
-            </View>
+        {/* === 핵심 정보: 1줄로 압축 (리스트) 또는 기존 2행 (상세) === */}
+        {isListContext ? (
+          <View style={styles.infoRowCompact}>
+            <ThemedText style={[styles.infoChip, { color: theme.text }]}>
+              <ThemedText style={[styles.infoChipLabel, { color: theme.tabIconDefault }]}>기간 </ThemedText>
+              {formatDateRange(data.startAt, data.endAt)}
+            </ThemedText>
+            <ThemedText style={[styles.infoChipSep, { color: theme.backgroundSecondary }]}>|</ThemedText>
+            <ThemedText style={[styles.infoChip, { color: theme.text }]}>
+              <ThemedText style={[styles.infoChipLabel, { color: theme.tabIconDefault }]}>차종 </ThemedText>
+              {data.vehicleType || "-"}
+            </ThemedText>
+            <ThemedText style={[styles.infoChipSep, { color: theme.backgroundSecondary }]}>|</ThemedText>
+            <ThemedText style={[styles.infoChip, { color: BrandColors.primary }]} numberOfLines={1}>
+              {formatUnitPrice()}
+            </ThemedText>
           </View>
-          <View style={styles.infoRow}>
-            <View style={styles.infoItem}>
-              <Icon name="cash-outline" size={14} color={theme.tabIconDefault} />
-              <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>단가</ThemedText>
-              <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-                {formatUnitPrice()}
-              </ThemedText>
-            </View>
-            <View style={styles.infoItem}>
-              <Icon name="cube-outline" size={14} color={theme.tabIconDefault} />
-              <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>물량</ThemedText>
-              <ThemedText style={[styles.infoValue, { color: theme.text }]} numberOfLines={1}>
-                {formatDeliverySummary()}
-              </ThemedText>
-            </View>
-          </View>
-          {data.applicantCount !== undefined && data.applicantCount > 0 ? (
+        ) : (
+          <View style={styles.infoGrid}>
             <View style={styles.infoRow}>
               <View style={styles.infoItem}>
-                <Icon name="people-outline" size={14} color={theme.tabIconDefault} />
-                <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>지원자</ThemedText>
+                <Icon name="calendar-outline" size={14} color={theme.tabIconDefault} />
+                <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>입차기간</ThemedText>
                 <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-                  {data.applicantCount}명 / 3명
+                  {formatDateRange(data.startAt, data.endAt)}
+                </ThemedText>
+              </View>
+              <View style={styles.infoItem}>
+                <Icon name="car-outline" size={14} color={theme.tabIconDefault} />
+                <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>차종</ThemedText>
+                <ThemedText style={[styles.infoValue, { color: theme.text }]}>
+                  {data.vehicleType || "-"}
                 </ThemedText>
               </View>
             </View>
-          ) : null}
-        </View>
-
-        <View style={[styles.addressRow, { borderTopColor: theme.backgroundSecondary }]}>
-          <Icon name="location-outline" size={14} color={theme.tabIconDefault} />
-          <View style={styles.addressContent}>
-            {data.campName ? (
-              <ThemedText style={[styles.campName, { color: theme.text }]} numberOfLines={1}>
-                {data.campName}
-              </ThemedText>
+            <View style={styles.infoRow}>
+              <View style={styles.infoItem}>
+                <Icon name="cash-outline" size={14} color={theme.tabIconDefault} />
+                <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>단가</ThemedText>
+                <ThemedText style={[styles.infoValue, { color: theme.text }]}>
+                  {formatUnitPrice()}
+                </ThemedText>
+              </View>
+              <View style={styles.infoItem}>
+                <Icon name="cube-outline" size={14} color={theme.tabIconDefault} />
+                <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>물량</ThemedText>
+                <ThemedText style={[styles.infoValue, { color: theme.text }]} numberOfLines={1}>
+                  {formatDeliverySummary()}
+                </ThemedText>
+              </View>
+            </View>
+            {data.applicantCount !== undefined && data.applicantCount > 0 ? (
+              <View style={styles.infoRow}>
+                <View style={styles.infoItem}>
+                  <Icon name="people-outline" size={14} color={theme.tabIconDefault} />
+                  <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>지원자</ThemedText>
+                  <ThemedText style={[styles.infoValue, { color: theme.text }]}>
+                    {data.applicantCount}명 / 3명
+                  </ThemedText>
+                </View>
+              </View>
             ) : null}
-            <ThemedText style={[styles.addressText, { color: theme.tabIconDefault }]} numberOfLines={1}>
-              {displayAddress}
-            </ThemedText>
           </View>
-        </View>
+        )}
 
-        {context !== 'requester_home' && context !== 'requester_history' && (data.finalAmount !== undefined || data.downPaidAmount !== undefined || data.balanceAmount !== undefined) ? (
+        {/* === 주소 + 지원자 (리스트에서는 1줄로 합침) === */}
+        {isListContext ? (
+          <View style={styles.addressRowCompact}>
+            <Icon name="location-outline" size={12} color={theme.tabIconDefault} />
+            <ThemedText style={[styles.addressTextCompact, { color: theme.tabIconDefault }]} numberOfLines={1}>
+              {data.campName ? `${data.campName} · ` : ""}{displayAddress}
+            </ThemedText>
+            {data.applicantCount !== undefined && data.applicantCount > 0 ? (
+              <View style={styles.applicantChip}>
+                <Icon name="people-outline" size={10} color={BrandColors.helper} />
+                <ThemedText style={styles.applicantChipText}>{data.applicantCount}/3</ThemedText>
+              </View>
+            ) : null}
+          </View>
+        ) : (
+          <View style={[styles.addressRow, { borderTopColor: theme.backgroundSecondary }]}>
+            <Icon name="location-outline" size={14} color={theme.tabIconDefault} />
+            <View style={styles.addressContent}>
+              {data.campName ? (
+                <ThemedText style={[styles.campName, { color: theme.text }]} numberOfLines={1}>
+                  {data.campName}
+                </ThemedText>
+              ) : null}
+              <ThemedText style={[styles.addressText, { color: theme.tabIconDefault }]} numberOfLines={1}>
+                {displayAddress}
+              </ThemedText>
+            </View>
+          </View>
+        )}
+
+        {/* === 금액 행 (리스트 컨텍스트에서는 숨김) === */}
+        {!isListContext && context !== 'requester_home' && context !== 'requester_history' && (data.finalAmount !== undefined || data.downPaidAmount !== undefined || data.balanceAmount !== undefined) ? (
           <View style={[styles.amountRow, { borderTopColor: theme.backgroundSecondary }]}>
             {data.finalAmount !== undefined && data.finalAmount > 0 ? (
               <View style={styles.amountItem}>
@@ -238,11 +281,12 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
           </View>
         ) : null}
 
-        {data.assignedHelperName || data.requesterName ? (
+        {/* === 담당자 행 (리스트 컨텍스트에서는 숨김) === */}
+        {!isListContext && (data.assignedHelperName || data.requesterName) ? (
           <View style={styles.personRow}>
             <Icon name="person-outline" size={14} color={theme.tabIconDefault} />
             <ThemedText style={[styles.personText, { color: theme.tabIconDefault }]}>
-              {data.viewerRole === "requester" 
+              {data.viewerRole === "requester"
                 ? `헬퍼: ${data.assignedHelperName || "미배정"}`
                 : `요청자: ${data.requesterName || "-"}`
               }
@@ -250,6 +294,7 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
           </View>
         ) : null}
 
+        {/* === 정산 섹션 (요청자 이력에서만) === */}
         {context === 'requester_history' ? (
           <View style={[styles.settlementSection, { borderTopColor: theme.backgroundSecondary }]}>
             <View style={styles.paymentGrid}>
@@ -303,7 +348,7 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
               </View>
               {data.paymentStatus?.balance === 'PAID' ? (
                 <Badge variant="gradient" color="green" size="md">
-                  ✓ 정산완료
+                  정산완료
                 </Badge>
               ) : (
                 <Pressable
@@ -320,7 +365,6 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
                       if (result.ok) {
                         Alert.alert("전송 완료", `계좌번호가 문자로 전송되었습니다.\n\n${result.accountInfo}`);
                       } else {
-                        // 문자 전송 실패 시 클립보드 복사로 대체
                         const accountInfo = "신한은행 110-123-456789 (주)헬프미";
                         await Clipboard.setStringAsync(accountInfo);
                         Alert.alert("복사 완료", `문자 전송이 실패하여 클립보드에 복사되었습니다.\n\n${accountInfo}`);
@@ -340,7 +384,8 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
           </View>
         ) : null}
 
-        {buttons.length > 0 ? (
+        {/* === 버튼 행 (리스트 컨텍스트에서는 숨김 - 카드 탭으로 상세 이동) === */}
+        {!isListContext && buttons.length > 0 ? (
           <View style={styles.buttonRow}>
             {buttons.map((btn, index) => (
               <PremiumButton
@@ -429,6 +474,7 @@ function getRequesterHistoryButtons(hasReview: boolean): ActionButton[] {
 }
 
 const styles = StyleSheet.create({
+  // ========== 기존 (상세 컨텍스트용) ==========
   card: {
     marginBottom: Spacing.md,
   },
@@ -602,6 +648,64 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
     minWidth: 100,
+  },
+
+  // ========== 컴팩트 (리스트 컨텍스트용) ==========
+  cardCompact: {
+    marginBottom: 6,
+  },
+  headerCompact: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  companyNameCompact: {
+    fontSize: 14,
+    fontWeight: "700",
+    flex: 1,
+  },
+  infoRowCompact: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 4,
+    marginBottom: 4,
+  },
+  infoChip: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  infoChipLabel: {
+    fontSize: 11,
+    fontWeight: "400",
+  },
+  infoChipSep: {
+    fontSize: 11,
+    opacity: 0.4,
+  },
+  addressRowCompact: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  addressTextCompact: {
+    fontSize: 11,
+    flex: 1,
+  },
+  applicantChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: "rgba(30,64,175,0.08)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  applicantChipText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: BrandColors.helper,
   },
 });
 
