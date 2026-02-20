@@ -66,9 +66,7 @@ export function adaptRequesterOrder(order: any): OrderCardDTO {
   const orderStatus = mapOrderStatus(order.status || order.orderStatus);
   const closingReviewStatus = mapClosingReviewStatus(order.closingReviewStatus);
   
-  const avgQty = order.averageQuantity 
-    ? parseInt(String(order.averageQuantity).replace(/[^0-9]/g, '')) || 0
-    : undefined;
+  const avgQty = getAverageQuantity(order);
   
   return {
     orderId: String(order.id || order.orderId),
@@ -121,9 +119,7 @@ export function adaptRequesterOrder(order: any): OrderCardDTO {
 }
 
 export function adaptHelperRecruitmentOrder(order: any, hasApplied: boolean = false): OrderCardDTO {
-  const avgQty = order.averageQuantity 
-    ? parseInt(String(order.averageQuantity).replace(/[^0-9]/g, '')) || 0
-    : undefined;
+  const avgQty = getAverageQuantity(order);
   
   const serverHasApplied = order.myCandidateStatus != null || hasApplied;
   const applicantCount = order.activeCandidates ?? order.applicantCount ?? order.applicationCount ?? 0;
@@ -169,9 +165,7 @@ export function adaptHelperApplicationOrder(application: any): OrderCardDTO {
   const order = application.order || application;
   const applicationStatus = mapApplicationStatus(application.status);
   
-  const avgQty = order.averageQuantity 
-    ? parseInt(String(order.averageQuantity).replace(/[^0-9]/g, '')) || 0
-    : undefined;
+  const avgQty = getAverageQuantity(order);
   
   let orderStatus: OrderStatus;
   if (applicationStatus === 'accepted') {
@@ -242,9 +236,7 @@ export function adaptHelperMyOrder(order: any): OrderCardDTO {
   const orderStatus = mapOrderStatus(order.status || order.orderStatus);
   const closingReviewStatus = mapClosingReviewStatus(order.closingReviewStatus);
   
-  const avgQty = order.averageQuantity 
-    ? parseInt(String(order.averageQuantity).replace(/[^0-9]/g, '')) || 0
-    : undefined;
+  const avgQty = getAverageQuantity(order);
   
   return {
     orderId: String(order.id || order.orderId),
@@ -440,6 +432,30 @@ function parseCourierCategory(category?: string): CourierCategory | undefined {
   if (!category) return undefined;
   if (category === "cold" || category === "other" || category === "parcel") return category;
   return undefined;
+}
+
+// 냉탑전용: 경유지 수를 착수로 계산
+function parseWaypointCount(order: any): number | undefined {
+  if (order.courierCategory !== "cold") return undefined;
+  if (!order.waypoints) return undefined;
+  try {
+    const wp = typeof order.waypoints === "string" ? JSON.parse(order.waypoints) : order.waypoints;
+    if (Array.isArray(wp)) {
+      const filtered = wp.filter((w: string) => w && w.trim());
+      return filtered.length > 0 ? filtered.length : undefined;
+    }
+  } catch { /* ignore */ }
+  return undefined;
+}
+
+function getAverageQuantity(order: any): number | undefined {
+  // 냉탑전용은 경유지 수 = 착수
+  const wpCount = parseWaypointCount(order);
+  if (wpCount !== undefined) return wpCount;
+  // 일반/기타: averageQuantity 파싱
+  return order.averageQuantity
+    ? parseInt(String(order.averageQuantity).replace(/[^0-9]/g, '')) || 0
+    : undefined;
 }
 
 function formatOrderTitle(order: any): string {

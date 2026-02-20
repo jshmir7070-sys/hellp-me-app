@@ -141,8 +141,10 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
   };
   const priceLabel = getPriceLabel();
 
-  // 물량 라벨/단위: 기타택배는 박스당→"박스"/"박스", 착지당→"착수"/"착수"
+  // 물량 라벨/단위:
+  // 냉탑전용→"착수"(경유지 수), 기타택배 per_box→"박스", per_drop→"착수"
   const getQuantityLabel = () => {
+    if (isCold) return "착수";
     if (isOther && data.unitPriceType) {
       if (data.unitPriceType === "per_drop") return "착수";
       if (data.unitPriceType === "per_box") return "박스";
@@ -150,7 +152,7 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
     return "물량";
   };
   const quantityLabel = getQuantityLabel();
-  const quantityUnit = isOther ? (data.unitPriceType === "per_drop" ? "착수" : "박스") : "건";
+  const quantityUnit = isCold ? "착수" : isOther ? (data.unitPriceType === "per_drop" ? "착수" : "박스") : "건";
 
   // 주소: 대분류 중분류 소분류 표기
   const buildAddress = () => {
