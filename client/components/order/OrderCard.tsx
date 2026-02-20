@@ -129,8 +129,16 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
   // 카테고리 라벨
   const categoryLabel = isCold ? "냉탑전용" : isOther ? "기타택배" : null;
 
-  // 단가 라벨: 냉탑전용은 "운임", 기타/택배사는 "단가"
-  const priceLabel = isCold ? "운임" : "단가";
+  // 단가 라벨: 냉탑전용은 "운임", 기타택배는 박스당/착지당, 택배사는 "단가"
+  const getPriceLabel = () => {
+    if (isCold) return "운임";
+    if (isOther && data.unitPriceType) {
+      if (data.unitPriceType === "per_drop") return "착지당";
+      if (data.unitPriceType === "per_box") return "박스당";
+    }
+    return "단가";
+  };
+  const priceLabel = getPriceLabel();
 
   // 주소: 대분류 중분류 소분류 표기
   const buildAddress = () => {
