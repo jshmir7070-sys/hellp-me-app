@@ -84,14 +84,15 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
       const delivered = data.deliveredCount || 0;
       const returned = data.returnedCount || 0;
       const other = data.otherCount || 0;
+      const u = quantityUnit;
       if (other > 0) {
-        return `${delivered}건 / ${returned}건 / ${other}건`;
+        return `${delivered}${u} / ${returned}${u} / ${other}${u}`;
       }
-      return `${delivered}건 / ${returned}건`;
+      return `${delivered}${u} / ${returned}${u}`;
     }
     // 마감 전에는 예상 물량 표시
     if (data.averageQuantity) {
-      return `평균 ${data.averageQuantity}건`;
+      return `평균 ${data.averageQuantity}${quantityUnit}`;
     }
     return "-";
   };
@@ -139,6 +140,17 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
     return "단가";
   };
   const priceLabel = getPriceLabel();
+
+  // 물량 라벨/단위: 기타택배는 박스당→"박스"/"박스", 착지당→"착수"/"착수"
+  const getQuantityLabel = () => {
+    if (isOther && data.unitPriceType) {
+      if (data.unitPriceType === "per_drop") return "착수";
+      if (data.unitPriceType === "per_box") return "박스";
+    }
+    return "물량";
+  };
+  const quantityLabel = getQuantityLabel();
+  const quantityUnit = isOther ? (data.unitPriceType === "per_drop" ? "착수" : "박스") : "건";
 
   // 주소: 대분류 중분류 소분류 표기
   const buildAddress = () => {
@@ -204,7 +216,7 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
           </ThemedText>
           <View style={styles.infoDivider} />
           <Icon name="cube-outline" size={11} color={theme.tabIconDefault} />
-          <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>물량</ThemedText>
+          <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>{quantityLabel}</ThemedText>
           <ThemedText style={[styles.infoValue, { color: theme.text }]} numberOfLines={1}>
             {formatDeliverySummary()}
           </ThemedText>
