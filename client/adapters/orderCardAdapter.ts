@@ -1,5 +1,7 @@
 import type { OrderStatus, ClosingReviewStatus, PaymentStatusType, ViewerRole, SettlementStatus, ApplicationStatus } from "@/domain/orderCardRules";
 
+export type CourierCategory = "parcel" | "other" | "cold";
+
 export interface OrderCardDTO {
   orderId: string;
   contractId?: string;
@@ -7,6 +9,7 @@ export interface OrderCardDTO {
   title?: string;
   courierName?: string;
   companyName?: string;
+  courierCategory?: CourierCategory;
   region1?: string;
   region2?: string;
   addressShort?: string;
@@ -73,6 +76,7 @@ export function adaptRequesterOrder(order: any): OrderCardDTO {
     title: order.title || order.orderTitle || formatOrderTitle(order),
     courierName: order.courierName || order.carrierName,
     companyName: order.companyName,
+    courierCategory: parseCourierCategory(order.courierCategory),
     region1: order.region1 || order.pickupRegion1 || order.deliveryRegion1,
     region2: order.region2 || order.pickupRegion2 || order.deliveryRegion2,
     addressShort: order.addressShort || order.pickupAddress || order.deliveryAddress,
@@ -130,6 +134,7 @@ export function adaptHelperRecruitmentOrder(order: any, hasApplied: boolean = fa
     title: order.title || order.orderTitle || formatOrderTitle(order),
     courierName: order.courierName || order.carrierName || order.courierCompany,
     companyName: order.companyName,
+    courierCategory: parseCourierCategory(order.courierCategory),
     region1: order.region1 || order.pickupRegion1 || order.deliveryRegion1,
     region2: order.region2 || order.pickupRegion2 || order.deliveryRegion2,
     addressShort: order.addressShort || order.pickupAddress,
@@ -182,6 +187,7 @@ export function adaptHelperApplicationOrder(application: any): OrderCardDTO {
     title: order.title || order.orderTitle || formatOrderTitle(order),
     courierName: order.courierName || order.carrierName || order.courierCompany,
     companyName: order.companyName,
+    courierCategory: parseCourierCategory(order.courierCategory),
     region1: order.region1 || order.pickupRegion1 || order.deliveryRegion1,
     region2: order.region2 || order.pickupRegion2 || order.deliveryRegion2,
     addressShort: order.addressShort || order.pickupAddress,
@@ -246,6 +252,7 @@ export function adaptHelperMyOrder(order: any): OrderCardDTO {
     title: order.title || order.orderTitle || formatOrderTitle(order),
     courierName: order.courierName || order.carrierName || order.courierCompany,
     companyName: order.companyName,
+    courierCategory: parseCourierCategory(order.courierCategory),
     region1: order.region1 || order.pickupRegion1 || order.deliveryRegion1,
     region2: order.region2 || order.pickupRegion2 || order.deliveryRegion2,
     addressShort: order.addressShort || order.pickupAddress || order.deliveryAddress,
@@ -427,6 +434,12 @@ function mapSettlementStatus(status?: string): SettlementStatus | undefined {
   };
   
   return statusMap[status];
+}
+
+function parseCourierCategory(category?: string): CourierCategory | undefined {
+  if (!category) return undefined;
+  if (category === "cold" || category === "other" || category === "parcel") return category;
+  return undefined;
 }
 
 function formatOrderTitle(order: any): string {

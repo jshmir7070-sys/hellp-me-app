@@ -30,6 +30,7 @@ interface Order {
   pricePerUnit?: number;
   status: string;
   category?: string;
+  courierCategory?: string;
   deadline?: string;
   description?: string;
   requirements?: string;
@@ -42,6 +43,8 @@ interface Order {
   scheduledDateEnd?: string;
   arrivalTime?: string;
   campAddress?: string;
+  campAddressDetail?: string;
+  contactPhone?: string;
   deliveryGuideUrl?: string;
   deliveryGuide?: string;
   deliveryLat?: string;
@@ -52,6 +55,16 @@ interface Order {
   matchedHelperId?: string;
   assignedHelperId?: string;
   helperId?: string;
+  // 냉탑전용 필드
+  freight?: number;
+  recommendedFee?: number;
+  waypoints?: string;
+  loadingPoint?: string;
+  loadingPointDetail?: string;
+  hasTachometer?: boolean;
+  hasPartition?: boolean;
+  // 기타택배 필드
+  pricingType?: string;
 }
 
 interface ClosingReport {
@@ -273,6 +286,82 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
             <ThemedText style={[styles.detailValue, { color: theme.text }]}>
               {order.campAddress}
             </ThemedText>
+          </Card>
+        ) : null}
+
+        {/* 냉탑전용: 상차지 + 경유지 */}
+        {order.courierCategory === 'cold' && order.loadingPoint ? (
+          <Card style={styles.detailCard}>
+            <View style={styles.detailHeader}>
+              <Icon name="location-outline" size={16} color={theme.tabIconDefault} />
+              <ThemedText style={[styles.detailLabel, { color: theme.tabIconDefault }]}>상차지</ThemedText>
+              <Pressable style={styles.copyButton} onPress={() => copyAddress(order.loadingPoint!)}>
+                <Icon name="copy-outline" size={14} color={BrandColors.helper} />
+              </Pressable>
+            </View>
+            <ThemedText style={[styles.detailValue, { color: theme.text }]}>
+              {order.loadingPoint}{order.loadingPointDetail ? ` ${order.loadingPointDetail}` : ''}
+            </ThemedText>
+            {order.waypoints ? (
+              <View style={{ marginTop: Spacing.sm }}>
+                <ThemedText style={[styles.detailLabel, { color: theme.tabIconDefault, marginBottom: 4 }]}>경유지</ThemedText>
+                {(() => {
+                  try {
+                    const wp = JSON.parse(order.waypoints);
+                    return Array.isArray(wp) ? wp.map((w: string, i: number) => (
+                      <ThemedText key={i} style={[styles.detailValue, { color: theme.text, marginBottom: 2 }]}>
+                        {i + 1}. {w}
+                      </ThemedText>
+                    )) : null;
+                  } catch { return null; }
+                })()}
+              </View>
+            ) : null}
+          </Card>
+        ) : null}
+
+        {/* 냉탑전용: 운임 + 수수료 + 차량 옵션 */}
+        {order.courierCategory === 'cold' ? (
+          <Card style={styles.detailCard}>
+            <View style={styles.detailHeader}>
+              <Icon name="cash-outline" size={16} color={theme.tabIconDefault} />
+              <ThemedText style={[styles.detailLabel, { color: theme.tabIconDefault }]}>운임 정보</ThemedText>
+            </View>
+            {order.freight ? (
+              <View style={styles.detailRow}>
+                <ThemedText style={[styles.detailRowLabel, { color: theme.tabIconDefault }]}>운임</ThemedText>
+                <ThemedText style={[styles.detailRowValue, { color: theme.text }]}>
+                  {new Intl.NumberFormat('ko-KR').format(order.freight)}원
+                </ThemedText>
+              </View>
+            ) : null}
+            {order.recommendedFee ? (
+              <View style={styles.detailRow}>
+                <ThemedText style={[styles.detailRowLabel, { color: theme.tabIconDefault }]}>권장 수수료</ThemedText>
+                <ThemedText style={[styles.detailRowValue, { color: theme.text }]}>
+                  {new Intl.NumberFormat('ko-KR').format(order.recommendedFee)}원
+                </ThemedText>
+              </View>
+            ) : null}
+            <View style={styles.detailRow}>
+              <ThemedText style={[styles.detailRowLabel, { color: theme.tabIconDefault }]}>타코미터</ThemedText>
+              <ThemedText style={[styles.detailRowValue, { color: theme.text }]}>{order.hasTachometer ? '있음' : '없음'}</ThemedText>
+            </View>
+            <View style={styles.detailRow}>
+              <ThemedText style={[styles.detailRowLabel, { color: theme.tabIconDefault }]}>칸막이</ThemedText>
+              <ThemedText style={[styles.detailRowValue, { color: theme.text }]}>{order.hasPartition ? '있음' : '없음'}</ThemedText>
+            </View>
+          </Card>
+        ) : null}
+
+        {/* 담당자 연락처 */}
+        {order.contactPhone ? (
+          <Card style={styles.detailCard}>
+            <View style={styles.detailHeader}>
+              <Icon name="call-outline" size={16} color={theme.tabIconDefault} />
+              <ThemedText style={[styles.detailLabel, { color: theme.tabIconDefault }]}>담당자 연락처</ThemedText>
+            </View>
+            <ThemedText style={[styles.detailValue, { color: theme.text }]}>{order.contactPhone}</ThemedText>
           </Card>
         ) : null}
 
@@ -540,6 +629,19 @@ const styles = StyleSheet.create({
   detailValue: {
     fontSize: 14,
     lineHeight: 22,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  detailRowLabel: {
+    fontSize: 13,
+  },
+  detailRowValue: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   arrivalTimeText: {
     fontSize: 14,

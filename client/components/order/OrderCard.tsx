@@ -120,7 +120,17 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
     }
   };
 
-  const displayName = data.courierName || data.companyName || data.title || "오더";
+  const isCold = data.courierCategory === "cold";
+  const isOther = data.courierCategory === "other";
+
+  // 카테고리별 표시명: 냉탑전용/기타택배는 companyName, 택배사는 courierName
+  const displayName = data.companyName || data.courierName || data.title || "오더";
+
+  // 카테고리 라벨
+  const categoryLabel = isCold ? "냉탑전용" : isOther ? "기타택배" : null;
+
+  // 단가 라벨: 냉탑전용은 "운임", 기타/택배사는 "단가"
+  const priceLabel = isCold ? "운임" : "단가";
 
   // 주소: 대분류 중분류 소분류 표기
   const buildAddress = () => {
@@ -145,6 +155,13 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
               <Icon name="warning-outline" size={11} color="#fff" />
               <ThemedText style={styles.urgentText}>긴급</ThemedText>
             </Animated.View>
+          ) : null}
+          {categoryLabel ? (
+            <View style={[styles.categoryBadge, isCold ? styles.categoryBadgeCold : styles.categoryBadgeOther]}>
+              <ThemedText style={[styles.categoryBadgeText, isCold ? styles.categoryTextCold : styles.categoryTextOther]}>
+                {categoryLabel}
+              </ThemedText>
+            </View>
           ) : null}
           <ThemedText style={[styles.companyName, { color: theme.text }]} numberOfLines={1}>
             {displayName}
@@ -173,7 +190,7 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
         </View>
         <View style={styles.infoRow}>
           <Icon name="cash-outline" size={11} color={theme.tabIconDefault} />
-          <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>단가</ThemedText>
+          <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>{priceLabel}</ThemedText>
           <ThemedText style={[styles.infoValue, { color: theme.text }]} numberOfLines={1}>
             {formatUnitPrice()}
           </ThemedText>
@@ -439,6 +456,27 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 10,
     fontWeight: "700",
+  },
+  categoryBadge: {
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: BorderRadius.sm,
+  },
+  categoryBadgeCold: {
+    backgroundColor: "#DBEAFE",
+  },
+  categoryBadgeOther: {
+    backgroundColor: "#FEF3C7",
+  },
+  categoryBadgeText: {
+    fontSize: 9,
+    fontWeight: "700",
+  },
+  categoryTextCold: {
+    color: "#1D4ED8",
+  },
+  categoryTextOther: {
+    color: "#D97706",
   },
   infoGrid: {
     gap: 0,
