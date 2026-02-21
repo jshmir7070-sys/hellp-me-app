@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, StyleSheet, Alert, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { getToken } from '@/utils/secure-token-storage';
 
@@ -21,6 +22,7 @@ type ChangePasswordScreenProps = {
 export default function ChangePasswordScreen({ navigation }: ChangePasswordScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
   const { user, logout } = useAuth();
 
@@ -113,7 +115,7 @@ export default function ChangePasswordScreen({ navigation }: ChangePasswordScree
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: insets.bottom + Spacing.xl,
+        paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
       scrollIndicatorInsets={{ bottom: insets.bottom }}

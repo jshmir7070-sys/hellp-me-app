@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, StyleSheet, Alert, Platform, TextInput, ScrollView, Pressable, ActivityIndicator, Image, Dimensions, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as ImagePicker from "expo-image-picker";
@@ -17,12 +18,12 @@ const { width: screenWidth } = Dimensions.get('window');
 
 type IncidentType = 'damage' | 'loss' | 'misdelivery' | 'delay' | 'other';
 
-const INCIDENT_TYPES: { value: IncidentType; label: string; icon: string }[] = [
-  { value: 'damage', label: '파손', icon: 'alert-outline' },
-  { value: 'loss', label: '분실', icon: 'close-circle-outline' },
-  { value: 'misdelivery', label: '오배송', icon: 'map-marker-outline' },
-  { value: 'delay', label: '지연', icon: 'clock-outline' },
-  { value: 'other', label: '기타', icon: 'help-circle-outline' },
+const INCIDENT_TYPES: { value: IncidentType; label: string }[] = [
+  { value: 'damage', label: '파손' },
+  { value: 'loss', label: '분실' },
+  { value: 'misdelivery', label: '오배송' },
+  { value: 'delay', label: '지연' },
+  { value: 'other', label: '기타' },
 ];
 
 type IncidentReportScreenProps = NativeStackScreenProps<any, 'IncidentReport'>;
@@ -31,10 +32,12 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const queryClient = useQueryClient();
   const { orderId } = route.params || {};
 
   const [incidentType, setIncidentType] = useState<IncidentType | null>(null);
+  const [showTypePicker, setShowTypePicker] = useState(false);
   const [description, setDescription] = useState('');
   const [additionalInfo, setAdditionalInfo] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
@@ -44,6 +47,10 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [evidencePhotos, setEvidencePhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+
+  const selectedTypeLabel = incidentType
+    ? INCIDENT_TYPES.find(t => t.value === incidentType)?.label || incidentType
+    : null;
 
   const { data: orderDetail, isLoading: isLoadingOrder } = useQuery<any>({
     queryKey: [`/api/requester/orders/${orderId}`],
@@ -143,7 +150,7 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
       } else {
         Alert.alert('접수 완료', '화물사고가 접수되었습니다. 담당자가 확인 후 연락드리겠습니다.');
       }
-      navigation.goBack();
+      navigation.replace('IncidentList' as any);
     },
     onError: (err: any) => {
       if (Platform.OS === 'web') {
@@ -230,7 +237,7 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: insets.bottom + 120,
+        paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
     >
@@ -281,39 +288,15 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
         <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
           사고 유형 (필수)
         </ThemedText>
-        <View style={styles.typeGrid}>
-          {INCIDENT_TYPES.map((type) => (
-            <Pressable
-              key={type.value}
-              style={[
-                styles.typeItem,
-                {
-                  backgroundColor: incidentType === type.value 
-                    ? BrandColors.requester 
-                    : theme.backgroundDefault,
-                  borderColor: incidentType === type.value 
-                    ? BrandColors.requester 
-                    : theme.tabIconDefault,
-                },
-              ]}
-              onPress={() => setIncidentType(type.value)}
-            >
-              <Icon 
-                name={type.icon as any} 
-                size={20} 
-                color={incidentType === type.value ? '#FFFFFF' : theme.text} 
-              />
-              <ThemedText 
-                style={[
-                  styles.typeLabel, 
-                  { color: incidentType === type.value ? '#FFFFFF' : theme.text }
-                ]}
-              >
-                {type.label}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
+        <Pressable
+          style={[styles.pickerTrigger, { backgroundColor: theme.backgroundDefault, borderColor: incidentType ? BrandColors.requester : theme.tabIconDefault }]}
+          onPress={() => setShowTypePicker(true)}
+        >
+          <ThemedText style={[styles.pickerTriggerText, { color: selectedTypeLabel ? theme.text : theme.tabIconDefault }]}>
+            {selectedTypeLabel || "사고 유형을 선택하세요"}
+          </ThemedText>
+          <Icon name="chevron-down-outline" size={20} color={theme.tabIconDefault} />
+        </Pressable>
       </Card>
 
       <Card style={styles.inputCard}>
@@ -566,7 +549,7 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
         animationType="fade"
         onRequestClose={() => setSelectedImage(null)}
       >
-        <Pressable 
+        <Pressable
           style={styles.modalOverlay}
           onPress={() => setSelectedImage(null)}
         >
@@ -584,6 +567,43 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
             >
               <Icon name="close-outline" size={24} color="#fff" />
             </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={showTypePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowTypePicker(false)}
+      >
+        <Pressable style={styles.pickerOverlay} onPress={() => setShowTypePicker(false)}>
+          <View style={[styles.pickerContainer, { backgroundColor: theme.backgroundDefault }]}>
+            <View style={styles.pickerHeader}>
+              <ThemedText style={[styles.pickerHeaderTitle, { color: theme.text }]}>사고 유형 선택</ThemedText>
+              <Pressable onPress={() => setShowTypePicker(false)}>
+                <Icon name="close-outline" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+            <ScrollView style={styles.pickerList}>
+              {INCIDENT_TYPES.map((type) => (
+                <Pressable
+                  key={type.value}
+                  style={[styles.pickerItem, { borderBottomColor: theme.backgroundTertiary || 'rgba(0,0,0,0.05)' }]}
+                  onPress={() => {
+                    setIncidentType(type.value);
+                    setShowTypePicker(false);
+                  }}
+                >
+                  <ThemedText style={[styles.pickerItemText, { color: theme.text }]}>
+                    {type.label}
+                  </ThemedText>
+                  {incidentType === type.value && (
+                    <Icon name="checkmark" size={20} color={BrandColors.requester} />
+                  )}
+                </Pressable>
+              ))}
+            </ScrollView>
           </View>
         </Pressable>
       </Modal>
@@ -653,23 +673,52 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: Spacing.md,
   },
-  typeGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  typeItem: {
+  pickerTrigger: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.sm,
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.lg,
     borderWidth: 1,
-    gap: Spacing.xs,
   },
-  typeLabel: {
-    ...Typography.small,
-    fontWeight: '500',
+  pickerTriggerText: {
+    fontSize: 15,
+  },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  pickerContainer: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '50%',
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: Spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
+  },
+  pickerHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  pickerList: {
+    paddingHorizontal: Spacing.lg,
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    borderBottomWidth: 1,
+  },
+  pickerItemText: {
+    fontSize: 15,
   },
   inputCard: {
     padding: Spacing.lg,

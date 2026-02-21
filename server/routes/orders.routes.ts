@@ -645,6 +645,110 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
       const estimatedPlatformFee = Math.round(calculatedAmount * (platformFeeRate / 100));
       const estimatedPayout = calculatedAmount - estimatedPlatformFee;
 
+      // === 정산(Settlement) 자동 생성 ===
+      try {
+        const existingSettlement = await storage.getSettlementStatementByOrder(orderId);
+        if (existingSettlement) {
+          console.log(`[Settlement] Already exists for order ${orderId}, skipping creation`);
+        } else {
+          // 수수료율 조회 (우선순위: 신청 스냅샷 > 오더 스냅샷 > 현재 정책)
+          let totalCommissionRate: number;
+          let settlePlatformRate: number;
+          let settleTeamLeaderRate: number;
+          let settleRateSource: string;
+          let settleTeamLeaderId: string | null = null;
+
+          if (application[0]?.snapshotCommissionRate != null &&
+            application[0]?.snapshotPlatformRate != null &&
+            application[0]?.snapshotTeamLeaderRate != null) {
+            totalCommissionRate = application[0].snapshotCommissionRate;
+            settlePlatformRate = application[0].snapshotPlatformRate;
+            settleTeamLeaderRate = application[0].snapshotTeamLeaderRate;
+            settleTeamLeaderId = application[0].snapshotTeamLeaderId;
+            settleRateSource = application[0].snapshotSource || "application_snapshot";
+          } else if (order.snapshotCommissionRate != null &&
+            order.snapshotPlatformRate != null &&
+            order.snapshotTeamLeaderRate != null) {
+            totalCommissionRate = order.snapshotCommissionRate;
+            settlePlatformRate = order.snapshotPlatformRate;
+            settleTeamLeaderRate = order.snapshotTeamLeaderRate;
+            settleRateSource = "order_snapshot";
+            const teamMember = await storage.getTeamMemberByUserId(user.id);
+            if (teamMember) {
+              const team = await storage.getTeamById(teamMember.teamId);
+              settleTeamLeaderId = team?.leaderId || null;
+            }
+          } else {
+            const effectiveRate = await storage.getEffectiveCommissionRate(user.id);
+            totalCommissionRate = effectiveRate.rate;
+            settlePlatformRate = effectiveRate.platformRate;
+            settleTeamLeaderRate = effectiveRate.teamLeaderRate;
+            settleRateSource = effectiveRate.source;
+            settleTeamLeaderId = effectiveRate.teamLeaderId;
+          }
+
+          console.log(`[Settlement] Total: ${totalCommissionRate}% (Platform: ${settlePlatformRate}%, TeamLeader: ${settleTeamLeaderRate}%), Source: ${settleRateSource}`);
+
+          // 박스수 = 배송 + 반품 + 기타
+          const totalBoxCount = parsedDeliveredCount + parsedReturnedCount + parsedEtcCount;
+
+          // 공급가액 = 단가 × 박스수
+          const settleSupplyAmount = totalBoxCount * (order.pricePerUnit ?? 0);
+
+          // 부가세 = 공급가액 × 10%
+          const settleVatAmount = calculateVat(settleSupplyAmount);
+
+          // 총합계금 = 공급가액 + 부가세
+          const totalAmountWithVat = settleSupplyAmount + settleVatAmount;
+
+          // 수수료 계산
+          const totalCommissionAmount = Math.round(totalAmountWithVat * totalCommissionRate / 100);
+          const platformCommission = Math.round(totalAmountWithVat * settlePlatformRate / 100);
+          const teamLeaderIncentive = Math.round(totalAmountWithVat * settleTeamLeaderRate / 100);
+
+          // 기사 수령액 = 총합계금 - 총 수수료
+          const netPayout = totalAmountWithVat - totalCommissionAmount;
+
+          // 근무일: scheduledDate(ISO) > 오늘 날짜
+          let workDateStr = new Date().toISOString().split('T')[0];
+          if (order.scheduledDate) {
+            const parsed = new Date(order.scheduledDate);
+            if (!isNaN(parsed.getTime())) {
+              workDateStr = parsed.toISOString().split('T')[0];
+            }
+          }
+
+          await storage.createSettlementStatement({
+            orderId,
+            helperId: user.id,
+            requesterId: order.requesterId || null,
+            workDate: workDateStr,
+            deliveryCount: parsedDeliveredCount,
+            returnCount: parsedReturnedCount,
+            pickupCount: 0,
+            otherCount: parsedEtcCount,
+            basePay: settleSupplyAmount,
+            additionalPay: 0,
+            penalty: 0,
+            deduction: 0,
+            commissionRate: totalCommissionRate,
+            commissionAmount: totalCommissionAmount,
+            platformCommission,
+            teamLeaderIncentive,
+            teamLeaderId: settleTeamLeaderId,
+            supplyAmount: settleSupplyAmount,
+            vatAmount: settleVatAmount,
+            totalAmount: totalAmountWithVat,
+            netAmount: netPayout,
+            status: "pending",
+          });
+          console.log(`[Settlement Created] Order ${orderId}, Helper ${user.id}, Source: ${settleRateSource}, Rate: ${totalCommissionRate}%, Total: ${totalAmountWithVat}원, Commission: ${totalCommissionAmount}원 (Platform: ${platformCommission}원, TeamLeader: ${teamLeaderIncentive}원), Net: ${netPayout}원`);
+        }
+      } catch (settlementErr) {
+        console.error(`[Settlement Error] Failed to create settlement for order ${orderId}:`, settlementErr);
+        // 정산 생성 실패해도 마감 제출은 정상 처리
+      }
+
       const depositAmount = contract?.depositAmount || contract?.downPaymentAmount || 0;
       const balanceAmount = Math.max(0, calculatedAmount - depositAmount);
 
@@ -1431,13 +1535,36 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
 
           sendPushToUser(order.matchedHelperId, {
             title: "화물사고 접수",
-            body: `${order.companyName} 오더에 화물사고가 접수되었습니다.`,
+            body: `${(order as any).companyName || ""} 오더에 화물사고가 접수되었습니다.`,
             url: `/orders/${orderId}/incident`,
             tag: `incident-${incident.id}`,
           });
         }
       } catch (notificationErr) {
-        console.error(`[Notification Error] Failed to send incident notification for order ${orderId}:`, notificationErr);
+        console.error(`[Notification Error] Failed to send incident notification to helper for order ${orderId}:`, notificationErr);
+      }
+
+      // 관리자에게 알림 + 푸시
+      try {
+        const admins = await storage.getAdminUsers?.() || [];
+        for (const admin of admins) {
+          await storage.createNotification({
+            userId: admin.id,
+            type: "order_update" as any,
+            title: "화물사고 접수",
+            message: `${user.name || "요청자"}님이 오더 #${orderId}에 화물사고를 접수했습니다.`,
+            relatedId: orderId,
+          });
+
+          sendPushToUser(admin.id, {
+            title: "화물사고 접수",
+            body: `${user.name || "요청자"}님이 오더 #${orderId}에 화물사고를 접수했습니다.`,
+            url: `/orders/${orderId}/incident`,
+            tag: `admin-incident-${incident.id}`,
+          });
+        }
+      } catch (adminNotifErr) {
+        console.error(`[Notification Error] Failed to send incident notification to admins for order ${orderId}:`, adminNotifErr);
       }
 
       res.status(201).json({
@@ -1629,10 +1756,26 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
       const review = await storage.createReview({
         orderId,
         requesterId: userId,
+        helperId,
         contractId,
+        reviewerType: "requester",
         rating,
         comment: comment || null,
       });
+
+      // 헬퍼 평점 요약 업데이트
+      try {
+        const helperReviews = await storage.getHelperReviews(helperId);
+        const totalRating = helperReviews.reduce((sum: number, r: any) => sum + r.rating, 0);
+        const avgRating = helperReviews.length > 0 ? Math.round((totalRating / helperReviews.length) * 100) : 0;
+        await storage.upsertHelperRatingSummary({
+          helperUserId: helperId,
+          avgRating,
+          reviewCount: helperReviews.length,
+        });
+      } catch (summaryErr) {
+        console.error("Failed to update helper rating summary:", summaryErr);
+      }
 
       res.status(201).json(review);
     } catch (err: any) {
@@ -2334,8 +2477,8 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         return res.status(400).json({ message: "필수 정보가 누락되었습니다" });
       }
 
-      // 이의제기 유형 검증 (정산/결제 관련 유형만 허용)
-      const validDisputeTypes = ["settlement_error", "invoice_error", "contract_dispute", "service_complaint", "amount_error", "other"];
+      // 이의제기 유형 검증
+      const validDisputeTypes = ["settlement_error", "invoice_error", "contract_dispute", "service_complaint", "delay", "no_show", "amount_error", "other"];
       if (!validDisputeTypes.includes(incidentType)) {
         return res.status(400).json({ message: "유효하지 않은 이의제기 유형입니다" });
       }
@@ -2388,11 +2531,13 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         });
 
         // 이의제기 유형 라벨
-        const disputeTypeLabel = incidentType === "settlement_error" ? "정산 금액 오류" :
+        const disputeTypeLabel = incidentType === "settlement_error" ? "정산오류" :
           incidentType === "invoice_error" ? "세금계산서 오류" :
-            incidentType === "contract_dispute" ? "계약 조건 분쟁" :
-              incidentType === "service_complaint" ? "서비스 불만" :
-                incidentType === "amount_error" ? "금액 오류" : "기타";
+            incidentType === "contract_dispute" ? "계약조건분쟁" :
+              incidentType === "service_complaint" ? "서비스불만" :
+                incidentType === "delay" ? "일정관련" :
+                  incidentType === "no_show" ? "노쇼" :
+                    incidentType === "amount_error" ? "금액 오류" : "기타";
 
         // 헬퍼에게 이의제기 접수 알림 전송
         const disputeMessage = `의뢰인이 이의제기를 접수했습니다.\n유형: ${disputeTypeLabel}\n내용: ${description.substring(0, 100)}${description.length > 100 ? "..." : ""}`;
@@ -2625,15 +2770,20 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
       // referenceImageUri / imageUri → regionMapUrl (배송지 이미지)
       // waypoints 배열 → JSON 문자열
       const rawBody = req.body as any;
+      const category = rawBody.courierCategory || "parcel";
+      const resolvedCampAddress = rawBody.pickupAddress || input.campAddress;
       const mappedInput = {
         ...input,
-        campAddress: rawBody.pickupAddress || input.campAddress,
+        campAddress: resolvedCampAddress,
         deliveryGuide: rawBody.description || input.deliveryGuide,
         regionMapUrl: rawBody.referenceImageUri || rawBody.imageUri || input.regionMapUrl,
         courierCompany: input.companyName || null,
-        courierCategory: rawBody.courierCategory || "parcel",
+        courierCategory: category,
         // 냉탑전용 필드: waypoints 배열을 JSON 문자열로 변환
         waypoints: Array.isArray(rawBody.waypoints) ? JSON.stringify(rawBody.waypoints) : (input as any).waypoints || null,
+        // 냉탑전용: campAddress를 loadingPoint에도 매핑 (상차지 = 캠프주소)
+        loadingPoint: category === "cold" ? ((input as any).loadingPoint || resolvedCampAddress) : (input as any).loadingPoint || null,
+        loadingPointDetail: category === "cold" ? ((input as any).loadingPointDetail || (input as any).campAddressDetail) : (input as any).loadingPointDetail || null,
       };
 
       // 현재 글로벌 수수료 정책 스냅샷 가져오기
@@ -2646,12 +2796,12 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
       const snapshotTeamLeaderRate = helperPolicy?.teamLeaderRate ?? 2;
 
       // 카테고리별 수수료 오버라이드 (other/cold 카테고리는 system_settings에서 별도 수수료율 사용)
-      const category = mappedInput.courierCategory;
-      if (category === "other" || category === "cold") {
+      const commissionCategory = mappedInput.courierCategory;
+      if (commissionCategory === "other" || commissionCategory === "cold") {
         const allSettings = await storage.getAllSystemSettings();
         const settingsMap: Record<string, string> = {};
         allSettings.forEach((s: any) => { settingsMap[s.settingKey] = s.settingValue; });
-        const categoryCommissionKey = `${category}_commission_rate`;
+        const categoryCommissionKey = `${commissionCategory}_commission_rate`;
         const categoryCommission = parseInt(settingsMap[categoryCommissionKey]);
         if (!isNaN(categoryCommission) && categoryCommission > 0) {
           snapshotCommissionRate = categoryCommission;
@@ -4783,9 +4933,28 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         const order = await storage.getOrder(report.orderId);
         if (!order) continue;
 
-        // scheduledDate 기준으로 해당 월 확인 (fallback: startAt → closingReport.createdAt)
-        const rawDate = order.scheduledDate || order.startAt || report.createdAt;
-        const workDate = rawDate ? new Date(rawDate) : null;
+        // scheduledDate 기준으로 해당 월 확인 (fallback: closingReport.createdAt)
+        // scheduledDate는 ISO 형식(2026-02-19) 또는 한국어 형식(2월 19일) 가능
+        let workDate: Date | null = null;
+
+        if (order.scheduledDate) {
+          const parsed = new Date(order.scheduledDate);
+          if (!isNaN(parsed.getTime())) {
+            workDate = parsed;
+          } else {
+            // 한국어 날짜 형식 파싱 (예: "2월 19일", "12월 3일")
+            const korMatch = order.scheduledDate.match(/(\d{1,2})월\s*(\d{1,2})일?/);
+            if (korMatch) {
+              workDate = new Date(year, parseInt(korMatch[1]) - 1, parseInt(korMatch[2]));
+            }
+          }
+        }
+
+        // fallback: 마감보고서 생성일
+        if (!workDate || isNaN(workDate.getTime())) {
+          workDate = report.createdAt ? new Date(report.createdAt) : null;
+        }
+
         if (!workDate || isNaN(workDate.getTime())) continue;
         if (workDate < startDate || workDate > endDate) continue;
         // 통합 계산 모듈 사용 (Single Source of Truth)
@@ -5432,21 +5601,57 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         notes: note || null,
       });
 
-      // Notify requester about helper action
+      // Notify requester about helper action (in-app + push)
+      const actionLabels: Record<string, string> = {
+        item_found: '물건을 찾았습니다',
+        recovered: '오배송 회수 완료',
+        redelivered: '재배송 완료',
+        damage_confirmed: '파손 확인',
+        request_handling: '처리를 요망합니다',
+        confirmed: '사고를 확인했습니다',
+        dispute: '이의를 제기했습니다',
+      };
+
       if (incident.requesterId) {
-        const actionLabels: Record<string, string> = {
-          item_found: '물건을 찾았습니다',
-          recovered: '오배송 회수 완료',
-          redelivered: '재배송 완료',
-          damage_confirmed: '파손 확인',
-          request_handling: '처리를 요망합니다',
-          confirmed: '사고를 확인했습니다',
-          dispute: '이의를 제기했습니다',
-        };
-        sendPushToUser(incident.requesterId, {
-          title: '사고 처리 업데이트',
-          body: `헬퍼가 "${actionLabels[action]}"(으)로 응답했습니다.`,
-        } as any);
+        try {
+          await storage.createNotification({
+            userId: incident.requesterId,
+            type: "order_update" as any,
+            title: "사고 처리 업데이트",
+            message: `헬퍼가 "${actionLabels[action]}"(으)로 응답했습니다.`,
+            relatedId: incident.orderId,
+          });
+          sendPushToUser(incident.requesterId, {
+            title: '사고 처리 업데이트',
+            body: `헬퍼가 "${actionLabels[action]}"(으)로 응답했습니다.`,
+            url: `/incidents/${id}`,
+            tag: `incident-action-${id}`,
+          } as any);
+        } catch (reqNotifErr) {
+          console.error(`[Notification Error] Failed to send incident action notification to requester:`, reqNotifErr);
+        }
+      }
+
+      // 관리자에게 알림 + 푸시
+      try {
+        const admins = await storage.getAdminUsers?.() || [];
+        for (const admin of admins) {
+          await storage.createNotification({
+            userId: admin.id,
+            type: "order_update" as any,
+            title: "사고 처리 업데이트",
+            message: `헬퍼 ${user.name || ""}님이 사고 #${id}에 "${actionLabels[action]}"(으)로 응답했습니다.`,
+            relatedId: incident.orderId,
+          });
+          sendPushToUser(admin.id, {
+            title: "사고 처리 업데이트",
+            body: `헬퍼 ${user.name || ""}님이 사고 #${id}에 "${actionLabels[action]}"(으)로 응답했습니다.`,
+            url: `/incidents/${id}`,
+            tag: `admin-incident-action-${id}`,
+          });
+        }
+      } catch (adminNotifErr) {
+        console.error(`[Notification Error] Failed to send incident action notification to admins:`, adminNotifErr);
       }
 
       res.json({ message: "액션이 처리되었습니다", action });
@@ -5486,6 +5691,12 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         return res.status(400).json({ message: "필수 항목을 입력해주세요" });
       }
 
+      // 이의제기 유형 검증
+      const validHelperDisputeTypes = ["settlement_error", "invoice_error", "service_complaint", "count_mismatch", "amount_error", "delivery_issue", "lost", "wrong_delivery", "other"];
+      if (!validHelperDisputeTypes.includes(disputeType)) {
+        return res.status(400).json({ message: "유효하지 않은 이의제기 유형입니다" });
+      }
+
       const dispute = await storage.createDispute({
         helperId: userId,
         submitterRole: "helper",
@@ -5522,10 +5733,23 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         description,
       });
 
-      // Send push notification to all admins (via WebSocket broadcast)
+      // Send notification to all admins (in-app + push)
       try {
         const admins = await storage.getAdminUsers?.() || [];
+        const disputeTypeLabels: Record<string, string> = {
+          settlement_error: "정산", invoice_error: "세금계산서",
+          service_complaint: "요청자 불만", count_mismatch: "수량 오류",
+          amount_error: "금액 오류", other: "기타",
+        };
+        const typeLabel = disputeTypeLabels[disputeType] || disputeType;
         for (const admin of admins) {
+          await storage.createNotification({
+            userId: admin.id,
+            type: "order_update" as any,
+            title: "새 이의제기 접수",
+            message: `${user.name || user.username}님이 [${typeLabel}] 이의제기를 접수했습니다. (${workDate})`,
+            relatedId: dispute.id,
+          });
           await sendPushToUser(admin.id, {
             title: "새 이의제기 접수",
             body: `${user.name || user.username}님이 ${workDate} 작업건에 대해 이의제기를 접수했습니다.`,
@@ -6183,14 +6407,16 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         }
 
         // 헬퍼에게 매칭완료 알림 (알림 실패해도 매칭 처리에 영향 없도록)
+        // 담당자 연락처: 오더에 등록된 contactPhone 우선, 없으면 의뢰인 전화번호
+        const helperNotifPhone = order.contactPhone || requester?.phoneNumber || null;
         try {
           await storage.createNotification({
             userId: app.helperId,
             type: "matching_completed",
             title: "매칭 완료",
-            message: `${order.companyName} 오더 매칭이 완료되었습니다. 담당자 연락처: ${requester?.phoneNumber || "미등록"}`,
+            message: `${order.companyName} 오더 매칭이 완료되었습니다. 담당자 연락처: ${helperNotifPhone || "미등록"}`,
             relatedId: orderId,
-            phoneNumber: requester?.phoneNumber || null,
+            phoneNumber: helperNotifPhone,
           });
 
           // WebSocket 알림
@@ -6202,7 +6428,7 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
           // 푸시 알림
           sendPushToUser(app.helperId, {
             title: "매칭 완료",
-            body: `${order.companyName} 오더 매칭이 완료되었습니다. 담당자: ${requester?.phoneNumber || "미등록"}`,
+            body: `${order.companyName} 오더 매칭이 완료되었습니다. 담당자: ${helperNotifPhone || "미등록"}`,
             url: "/helper-home",
             tag: `matching-complete-${orderId}`,
           });
@@ -6835,6 +7061,8 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
             helperName: helper?.name || "Unknown",
             helperNickname: (helper as any)?.nickname || null,
             helperPhone: helper?.phoneNumber,
+            teamName: (helper as any)?.teamName || null,
+            completedJobs: (credential as any)?.completedOrders || 0,
             reviewCount: reviews.length,
             recentReviews: reviews.slice(0, 4).map(r => ({
               id: r.id,
@@ -6844,6 +7072,7 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
               requesterName: null,
             })),
             averageRating: avgRating,
+            profileImageUrl: (helper as any)?.profileImageUrl || null,
             profileImage: (helper as any)?.profileImageUrl || null,
           };
         })

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { View, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Platform, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -30,6 +31,7 @@ const BANKS = [
 export default function PaymentSettingsScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -92,7 +94,7 @@ export default function PaymentSettingsScreen() {
         style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.xl,
-          paddingBottom: insets.bottom + Spacing.xl,
+          paddingBottom: tabBarHeight + Spacing.xl,
           paddingHorizontal: Spacing.lg,
         }}
       >
@@ -124,7 +126,7 @@ export default function PaymentSettingsScreen() {
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.xl,
-        paddingBottom: insets.bottom + Spacing.xl,
+        paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
     >

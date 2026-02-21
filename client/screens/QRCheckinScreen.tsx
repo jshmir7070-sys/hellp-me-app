@@ -3,17 +3,20 @@ import { View, Pressable, StyleSheet, ActivityIndicator, Share, Platform, Alert,
 import { useNavigation } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 import QRCode from "react-native-qrcode-svg";
+import { getToken } from "@/utils/secure-token-storage";
 
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
 import { useAuth } from "@/contexts/AuthContext";
+import { getApiUrl } from "@/lib/query-client";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 
 type QRCheckinScreenProps = {
@@ -36,6 +39,7 @@ interface PersonalCodeResponse {
 export default function QRCheckinScreen({ navigation }: QRCheckinScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -48,7 +52,7 @@ export default function QRCheckinScreen({ navigation }: QRCheckinScreenProps) {
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: insets.bottom + 120,
+        paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
     >
@@ -97,9 +101,8 @@ function HelperScanView({
     
     setIsVerifying(true);
     try {
-      const token = await import('@react-native-async-storage/async-storage').then(m => m.default.getItem('auth_token'));
-      const { getApiUrl } = await import('@/lib/query-client');
-      
+      const token = await getToken();
+
       const response = await fetch(new URL('/api/checkin/by-code', getApiUrl()).toString(), {
         method: 'POST',
         headers: {

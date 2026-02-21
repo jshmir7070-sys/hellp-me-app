@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
@@ -102,6 +103,7 @@ const STATUS_CONFIG = {
 export default function DocumentsMenuScreen({ navigation }: DocumentsMenuScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
 
   // 서류 상태 조회
@@ -128,7 +130,7 @@ export default function DocumentsMenuScreen({ navigation }: DocumentsMenuScreenP
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.md,
-        paddingBottom: insets.bottom + 120,
+        paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
     >
@@ -261,6 +263,39 @@ export default function DocumentsMenuScreen({ navigation }: DocumentsMenuScreenP
             </Pressable>
           );
         })}
+      </View>
+
+      {/* 정산 계좌 */}
+      <View style={styles.documentsSection}>
+        <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>
+          정산 계좌
+        </ThemedText>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.documentCard,
+            {
+              backgroundColor: theme.backgroundDefault,
+              opacity: pressed ? 0.7 : 1,
+            },
+          ]}
+          onPress={() => navigation.navigate('PaymentSettings')}
+        >
+          <View style={styles.documentLeft}>
+            <View style={[styles.documentIcon, { backgroundColor: BrandColors.helperLight }]}>
+              <Icon name="card-outline" size={24} color={BrandColors.helper} />
+            </View>
+            <View style={styles.documentInfo}>
+              <ThemedText style={[styles.documentTitle, { color: theme.text }]}>
+                정산 계좌 등록
+              </ThemedText>
+              <ThemedText style={[styles.documentDescription, { color: theme.tabIconDefault }]}>
+                급여 수령을 위한 계좌 정보를 등록하세요
+              </ThemedText>
+            </View>
+          </View>
+          <Icon name="chevron-forward-outline" size={20} color={theme.tabIconDefault} />
+        </Pressable>
       </View>
 
       {/* 안내 사항 */}

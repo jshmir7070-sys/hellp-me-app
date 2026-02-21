@@ -25,16 +25,38 @@ export function registerReviewRoutes(ctx: RouteContext): void {
         return res.status(400).json({ message: "이미 리뷰를 작성했습니다" });
       }
 
+      // helperId가 없으면 오더에서 조회
+      let resolvedHelperId = helperId;
+      if (!resolvedHelperId && orderId) {
+        const order = await storage.getOrder(Number(orderId));
+        resolvedHelperId = (order as any)?.selectedHelperId || (order as any)?.matchedHelperId || null;
+      }
+
       const review = await storage.createReview({
         contractId,
         orderId,
         requesterId: userId,
-        helperId: null,
-        trackingNumber: null,
+        helperId: resolvedHelperId,
         reviewerType: "requester",
         rating,
         comment,
       });
+
+      // 헬퍼 평점 요약 업데이트
+      if (resolvedHelperId) {
+        try {
+          const helperReviews = await storage.getHelperReviews(resolvedHelperId);
+          const totalRating = helperReviews.reduce((sum: number, r: any) => sum + r.rating, 0);
+          const avgRating = helperReviews.length > 0 ? Math.round((totalRating / helperReviews.length) * 100) : 0;
+          await storage.upsertHelperRatingSummary({
+            helperUserId: resolvedHelperId,
+            avgRating,
+            reviewCount: helperReviews.length,
+          });
+        } catch (summaryErr) {
+          console.error("Failed to update helper rating summary:", summaryErr);
+        }
+      }
 
       res.status(201).json(review);
     } catch (err: any) {

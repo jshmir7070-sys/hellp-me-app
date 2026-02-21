@@ -2,6 +2,7 @@ import React from "react";
 import { View, FlatList, Pressable, StyleSheet, ActivityIndicator, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
@@ -49,6 +50,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 export default function IncidentListScreen({ navigation }: IncidentListScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
 
   const { data: incidents = [], isLoading, refetch, isRefetching } = useQuery<Incident[]>({
@@ -161,7 +163,7 @@ export default function IncidentListScreen({ navigation }: IncidentListScreenPro
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={[
           styles.listContent,
-          { paddingTop: headerHeight + Spacing.md, paddingBottom: insets.bottom + Spacing.xl },
+          { paddingTop: headerHeight + Spacing.md, paddingBottom: tabBarHeight + Spacing.xl },
         ]}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         ListEmptyComponent={renderEmpty}

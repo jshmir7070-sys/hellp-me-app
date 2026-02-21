@@ -16,6 +16,7 @@ export default function Step1BasicInfo({
   courierOptions,
   coldTruckOptions,
   onOpenSelectModal,
+  onImportPreviousOrder,
   onNext,
   onBack,
   theme,
@@ -122,6 +123,20 @@ export default function Step1BasicInfo({
             />
           </View>
         )}
+
+        {/* 이전 이력 불러오기 버튼 */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.importButton,
+            { borderColor: BrandColors.requester, opacity: pressed ? 0.7 : 1 },
+          ]}
+          onPress={onImportPreviousOrder}
+        >
+          <Icon name="time-outline" size={18} color={BrandColors.requester} />
+          <ThemedText style={[styles.importButtonText, { color: BrandColors.requester }]}>
+            이전 이력 불러오기
+          </ThemedText>
+        </Pressable>
       </ScrollView>
 
       <View style={[styles.footer, { backgroundColor: theme.backgroundRoot }]}>
@@ -181,6 +196,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: BorderRadius.md,
     ...Typography.body,
+  },
+  importButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.md,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    borderStyle: 'dashed',
+  },
+  importButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   footer: {
     position: 'absolute',

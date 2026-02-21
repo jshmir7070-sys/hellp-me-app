@@ -2,6 +2,7 @@ import React, { useEffect, useCallback } from "react";
 import { View, Pressable, StyleSheet, Switch, Linking, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
@@ -20,6 +21,7 @@ type SettingsScreenProps = {
 export default function SettingsScreen({ navigation }: SettingsScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark, themeMode, setThemeMode } = useTheme();
   const { user } = useAuth();
 
@@ -79,7 +81,7 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: insets.bottom + Spacing.xl,
+        paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
       scrollIndicatorInsets={{ bottom: insets.bottom }}

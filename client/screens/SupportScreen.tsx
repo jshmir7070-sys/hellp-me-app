@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, Pressable, StyleSheet, ScrollView, Linking, Alert } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
@@ -218,6 +219,7 @@ const KAKAO_CHANNEL = 'https://pf.kakao.com/_hellpme';
 export default function SupportScreen({ navigation }: SupportScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const { user } = useAuth();
 
@@ -262,7 +264,7 @@ export default function SupportScreen({ navigation }: SupportScreenProps) {
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: insets.bottom + Spacing.xl,
+        paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
       scrollIndicatorInsets={{ bottom: insets.bottom }}

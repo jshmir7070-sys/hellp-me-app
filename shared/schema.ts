@@ -1659,6 +1659,12 @@ export const announcements = pgTable("announcements", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow(),
+  // 팝업/광고 관련 필드
+  imageUrl: text("image_url"),           // 팝업 이미지 URL
+  linkUrl: text("link_url"),             // 이미지 탭 시 이동할 링크
+  isPopup: boolean("is_popup").default(false),  // 홈 팝업 표시 여부
+  priority: text("priority").default("normal"),  // normal, high, urgent
+  expiresAt: timestamp("expires_at"),    // 만료일 (null=무기한)
 });
 
 // Announcement recipients table (공지 수신자 추적)
@@ -1684,6 +1690,11 @@ export const insertAnnouncementSchema = createInsertSchema(announcements)
     content: z.string().min(1, "내용을 입력해주세요"),
     targetAudience: z.enum(targetAudiences),
     createdBy: z.string(),
+    imageUrl: z.string().nullable().optional(),
+    linkUrl: z.string().nullable().optional(),
+    isPopup: z.boolean().optional(),
+    priority: z.enum(["normal", "high", "urgent"]).optional(),
+    expiresAt: z.string().nullable().optional(),
   });
 
 export const insertAnnouncementRecipientSchema = createInsertSchema(announcementRecipients)

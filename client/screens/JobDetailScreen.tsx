@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useLayoutEffect } from "react";
 import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, Linking, Image, Modal, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -13,8 +14,9 @@ import { Card } from "@/components/Card";
 import { OrderCard } from "@/components/order/OrderCard";
 import { adaptHelperRecruitmentOrder, type OrderCardDTO } from "@/adapters/orderCardAdapter";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
+import { Avatar } from "@/components/Avatar";
 import { JobsStackParamList } from "@/navigation/types";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -80,11 +82,20 @@ interface ClosingReport {
 
 export default function JobDetailScreen({ navigation, route }: JobDetailScreenProps) {
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const { user } = useAuth();
   const { jobId } = route.params;
   const queryClient = useQueryClient();
   const [mapModalVisible, setMapModalVisible] = useState(false);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({ headerShown: false });
+  }, [navigation]);
+
+  const profileImg = user?.profileImageUrl;
+  const displayUserName = (user as any)?.nickname || user?.name || '헬퍼';
+  const userTeamName = user?.teamName;
 
   const { data: order, isLoading, error } = useQuery<Order>({
     queryKey: [`/api/orders/${jobId}`],
@@ -255,10 +266,39 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
 
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
+      {/* 커스텀 헤더: 프로필 + 팀명 */}
+      <View style={[styles.customHeader, { paddingTop: insets.top + Spacing.sm }]}>
+        <Pressable style={styles.headerBackButton} onPress={() => navigation.goBack()}>
+          <Icon name="chevron-back" size={24} color="#FFFFFF" />
+        </Pressable>
+        <View style={styles.headerProfileSection}>
+          <View style={styles.headerAvatarWrap}>
+            {profileImg ? (
+              profileImg.startsWith('avatar:') ? (
+                <Avatar uri={profileImg} size={32} isHelper={true} />
+              ) : (
+                <Image
+                  source={{ uri: profileImg.startsWith('/') ? `${getApiUrl()}${profileImg}` : profileImg }}
+                  style={styles.headerAvatarImage}
+                />
+              )
+            ) : (
+              <Icon name="person" size={18} color="#FFFFFF" />
+            )}
+          </View>
+          <View>
+            <ThemedText style={styles.headerUserName} numberOfLines={1}>{displayUserName}</ThemedText>
+            {userTeamName ? (
+              <ThemedText style={styles.headerTeamName} numberOfLines={1}>{userTeamName}</ThemedText>
+            ) : null}
+          </View>
+        </View>
+      </View>
+
       <ScrollView
         contentContainerStyle={{
-          paddingTop: insets.top + 56 + Spacing.md,
-          paddingBottom: insets.bottom + 120,
+          paddingTop: Spacing.md,
+          paddingBottom: tabBarHeight + Spacing.xl,
           paddingHorizontal: Spacing.lg,
         }}
       >
@@ -286,6 +326,11 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
             <ThemedText style={[styles.detailValue, { color: theme.text }]}>
               {order.campAddress}
             </ThemedText>
+            {order.campAddressDetail ? (
+              <ThemedText style={[styles.detailValue, { color: theme.tabIconDefault, fontSize: 13 }]}>
+                {order.campAddressDetail}
+              </ThemedText>
+            ) : null}
           </Card>
         ) : null}
 
@@ -474,7 +519,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
         ) : null}
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, Spacing.xl) + Spacing.lg, backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.footer, { paddingBottom: tabBarHeight + Spacing.xl, backgroundColor: theme.backgroundRoot }]}>
         {order.status === 'scheduled' && isAssignedHelper ? (
           <View style={styles.footerRow}>
             <Pressable
@@ -591,6 +636,46 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  customHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: BrandColors.helper,
+    paddingBottom: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.sm,
+  },
+  headerBackButton: {
+    padding: Spacing.xs,
+  },
+  headerProfileSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    flex: 1,
+  },
+  headerAvatarWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  headerAvatarImage: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  headerUserName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  headerTeamName: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.8)',
   },
   loadingContainer: {
     flex: 1,

@@ -2,6 +2,7 @@ import React from "react";
 import { View, FlatList, Pressable, StyleSheet, ActivityIndicator, RefreshControl } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
@@ -34,11 +35,16 @@ interface Dispute {
 }
 
 const DISPUTE_TYPE_LABELS: Record<string, string> = {
+  settlement_error: "정산오류",
+  invoice_error: "세금계산서 오류",
+  contract_dispute: "계약조건분쟁",
+  service_complaint: "서비스불만",
+  delay: "일정관련",
+  no_show: "노쇼",
   count_mismatch: "수량 불일치",
   amount_error: "금액 오류",
   freight_accident: "화물 사고",
   damage: "물품 파손",
-  delay: "배송 지연",
   other: "기타",
 };
 
@@ -52,6 +58,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 export default function RequesterDisputeListScreen({ navigation }: RequesterDisputeListScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
 
   const { data: disputes = [], isLoading, refetch, isRefetching } = useQuery<Dispute[]>({
@@ -162,7 +169,7 @@ export default function RequesterDisputeListScreen({ navigation }: RequesterDisp
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.lg,
           paddingHorizontal: Spacing.lg,
-          paddingBottom: insets.bottom + 80,
+          paddingBottom: tabBarHeight + Spacing.xl,
         }}
         ListEmptyComponent={renderEmpty}
         refreshControl={

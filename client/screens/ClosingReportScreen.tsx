@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, TextInput, KeyboardAvoidingView, Image } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
@@ -26,6 +27,7 @@ interface ExtraCost {
 export default function ClosingReportScreen({ navigation, route }: ClosingReportScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const { orderId } = route.params;
   const queryClient = useQueryClient();
@@ -250,7 +252,7 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
       <ScrollView
         contentContainerStyle={{
           paddingTop: Spacing.lg,
-          paddingBottom: insets.bottom + 100,
+          paddingBottom: tabBarHeight + Spacing.xl,
           paddingHorizontal: Spacing.lg,
         }}
       >
@@ -472,7 +474,7 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
         </Card>
       </ScrollView>
 
-      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md, backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.footer, { paddingBottom: tabBarHeight + Spacing.md, backgroundColor: theme.backgroundRoot }]}>
         <Pressable
           testID="button-submit-closing-report"
           style={({ pressed }) => [

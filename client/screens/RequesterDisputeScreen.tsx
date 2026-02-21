@@ -1,7 +1,8 @@
-import React, { useState } from "react";
-import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, TextInput, Image } from "react-native";
+import React, { useState, useRef } from "react";
+import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, TextInput, Image, Modal, FlatList, Animated } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/components/Icon";
@@ -31,17 +32,19 @@ interface DisputeStatusResponse {
 }
 
 const DISPUTE_TYPES = [
-  { value: "settlement_error", label: "정산 금액 오류" },
+  { value: "settlement_error", label: "정산오류" },
   { value: "invoice_error", label: "세금계산서 오류" },
-  { value: "contract_dispute", label: "계약 조건 분쟁" },
-  { value: "service_complaint", label: "서비스 불만" },
-  { value: "delay", label: "일정 관련" },
+  { value: "contract_dispute", label: "계약조건분쟁" },
+  { value: "service_complaint", label: "서비스불만" },
+  { value: "delay", label: "일정관련" },
+  { value: "no_show", label: "노쇼" },
   { value: "other", label: "기타" },
 ];
 
 export default function RequesterDisputeScreen({ navigation, route }: RequesterDisputeScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
   const orderId = route.params?.orderId;
@@ -50,6 +53,9 @@ export default function RequesterDisputeScreen({ navigation, route }: RequesterD
   const [description, setDescription] = useState("");
   const [photos, setPhotos] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [showTypePicker, setShowTypePicker] = useState(false);
+
+  const selectedTypeLabel = DISPUTE_TYPES.find(t => t.value === disputeType)?.label || "";
 
   const handlePickImage = async () => {
     try {
@@ -143,9 +149,10 @@ export default function RequesterDisputeScreen({ navigation, route }: RequesterD
   const orderNumber = order?.orderNumber || `O-${orderId}`;
 
   return (
+    <>
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
-      contentContainerStyle={{ paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + 120 }}
+      contentContainerStyle={{ paddingTop: headerHeight + Spacing.lg, paddingBottom: tabBarHeight + Spacing.xl }}
     >
       <View style={styles.content}>
         <Card style={styles.orderCard}>
@@ -231,28 +238,26 @@ export default function RequesterDisputeScreen({ navigation, route }: RequesterD
 
             <Card style={styles.section}>
               <ThemedText style={[styles.label, { color: theme.text }]}>유형 선택</ThemedText>
-              <View style={styles.typeGrid}>
-                {DISPUTE_TYPES.map((type) => (
-                  <Pressable
-                    key={type.value}
-                    style={[
-                      styles.typeButton,
-                      { borderColor: disputeType === type.value ? BrandColors.requester : theme.backgroundTertiary },
-                      disputeType === type.value && { backgroundColor: BrandColors.requesterLight },
-                    ]}
-                    onPress={() => setDisputeType(type.value)}
-                  >
-                    <ThemedText
-                      style={[
-                        styles.typeText,
-                        disputeType === type.value && { color: BrandColors.requester, fontWeight: "600" },
-                      ]}
-                    >
-                      {type.label}
-                    </ThemedText>
-                  </Pressable>
-                ))}
-              </View>
+              <Pressable
+                style={[
+                  styles.pickerTrigger,
+                  {
+                    borderColor: disputeType ? BrandColors.requester : theme.backgroundTertiary,
+                    backgroundColor: theme.backgroundDefault,
+                  },
+                ]}
+                onPress={() => setShowTypePicker(true)}
+              >
+                <ThemedText
+                  style={[
+                    styles.pickerTriggerText,
+                    { color: disputeType ? theme.text : theme.tabIconDefault },
+                  ]}
+                >
+                  {selectedTypeLabel || "유형을 선택해주세요"}
+                </ThemedText>
+                <Icon name="chevron-down-outline" size={20} color={theme.tabIconDefault} />
+              </Pressable>
             </Card>
 
             <Card style={styles.section}>
@@ -327,6 +332,62 @@ export default function RequesterDisputeScreen({ navigation, route }: RequesterD
         )}
       </View>
     </ScrollView>
+
+    {/* 유형 선택 모달 피커 */}
+    <Modal
+      visible={showTypePicker}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowTypePicker(false)}
+    >
+      <Pressable
+        style={styles.pickerOverlay}
+        onPress={() => setShowTypePicker(false)}
+      >
+        <View style={[styles.pickerContainer, { backgroundColor: theme.backgroundDefault }]}>
+          <View style={[styles.pickerHeader, { borderBottomColor: theme.backgroundTertiary }]}>
+            <ThemedText style={[styles.pickerTitle, { color: theme.text }]}>유형 선택</ThemedText>
+            <Pressable onPress={() => setShowTypePicker(false)}>
+              <Icon name="close-outline" size={24} color={theme.text} />
+            </Pressable>
+          </View>
+
+          <ScrollView style={styles.pickerList} bounces={false}>
+            {DISPUTE_TYPES.map((type) => {
+              const isActive = disputeType === type.value;
+              return (
+                <Pressable
+                  key={type.value}
+                  style={[
+                    styles.pickerItem,
+                    { borderBottomColor: theme.backgroundSecondary },
+                    isActive && { backgroundColor: BrandColors.requester + '10' },
+                  ]}
+                  onPress={() => {
+                    setDisputeType(type.value);
+                    setShowTypePicker(false);
+                  }}
+                >
+                  <ThemedText
+                    style={[
+                      styles.pickerItemText,
+                      { color: isActive ? BrandColors.requester : theme.text },
+                      isActive && { fontWeight: '700' },
+                    ]}
+                  >
+                    {type.label}
+                  </ThemedText>
+                  {isActive ? (
+                    <Icon name="checkmark-outline" size={20} color={BrandColors.requester} />
+                  ) : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </View>
+      </Pressable>
+    </Modal>
+    </>
   );
 }
 
@@ -419,19 +480,53 @@ const styles = StyleSheet.create({
   dateText: {
     fontSize: 15,
   },
-  typeGrid: {
+  pickerTrigger: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Spacing.sm,
-  },
-  typeButton: {
-    paddingVertical: Spacing.sm,
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: Spacing.md,
     paddingHorizontal: Spacing.md,
     borderWidth: 1,
     borderRadius: BorderRadius.md,
   },
-  typeText: {
-    fontSize: 14,
+  pickerTriggerText: {
+    fontSize: 15,
+  },
+  pickerOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  pickerContainer: {
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
+    maxHeight: '50%',
+    paddingBottom: 34,
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: 1,
+  },
+  pickerTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  pickerList: {
+    paddingHorizontal: Spacing.lg,
+  },
+  pickerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  pickerItemText: {
+    fontSize: 16,
   },
   textArea: {
     borderWidth: 1,

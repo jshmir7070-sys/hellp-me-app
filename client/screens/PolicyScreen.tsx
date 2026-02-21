@@ -2,6 +2,7 @@ import React from "react";
 import { ScrollView, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { ThemedText } from "@/components/ThemedText";
@@ -106,6 +107,7 @@ const PRIVACY_POLICY = `헬프미 개인정보 처리방침
 export default function PolicyScreen({ route }: PolicyScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
 
   const policyType = route.params?.type as 'terms' | 'privacy';
@@ -117,7 +119,7 @@ export default function PolicyScreen({ route }: PolicyScreenProps) {
         style={styles.scrollView}
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.xl,
-          paddingBottom: insets.bottom + 150,
+          paddingBottom: tabBarHeight + Spacing.xl,
           paddingHorizontal: Spacing.lg,
         }}
         scrollIndicatorInsets={{ bottom: insets.bottom }}

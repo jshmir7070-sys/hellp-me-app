@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Alert, Platform, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getToken } from '@/utils/secure-token-storage';
@@ -94,6 +95,7 @@ const CONTRACT_CONTENT = `운송주선 플랫폼 근무(업무수행) 기본계�
 export default function ContractSigningScreen({ navigation }: ContractSigningScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
   const { refreshUser } = useAuth();
 
@@ -340,7 +342,7 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.md,
-        paddingBottom: insets.bottom + 120,
+        paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
       showsVerticalScrollIndicator={true}

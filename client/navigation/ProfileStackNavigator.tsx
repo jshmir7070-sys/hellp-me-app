@@ -42,6 +42,7 @@ import AdminDisputeDetailScreen from "@/screens/AdminDisputeDetailScreen";
 import AdminIncidentListScreen from "@/screens/AdminIncidentListScreen";
 import AdminDeductionListScreen from "@/screens/AdminDeductionListScreen";
 import AdminRefundListScreen from "@/screens/AdminRefundListScreen";
+import PartnerRegistrationScreen from "@/screens/PartnerRegistrationScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
@@ -67,14 +68,14 @@ export type ProfileStackParamList = {
   RequesterDispute: { orderId: number };
   RequesterDisputeList: undefined;
   RequesterDisputeDetail: { disputeId: number };
-  HelperDisputeSubmit: undefined;
+  HelperDisputeSubmit: { orderId?: number; workDate?: string; orderTitle?: string } | undefined;
   HelperDisputeList: undefined;
   HelperDisputeDetail: { disputeId: number };
   BusinessRegistration: undefined;
   IncidentList: undefined;
   IncidentReport: { orderId: number };
   IncidentDetail: { incidentId: number };
-  HelperIncidentList: undefined;
+  HelperIncidentList: { orderId?: number } | undefined;
   HelperIncidentDetail: { incidentId: number };
   AdminDisputeList: undefined;
   AdminDisputeDetail: { disputeId: number };
@@ -88,6 +89,7 @@ export type ProfileStackParamList = {
   CargoLicenseSubmit: undefined;
   VehicleCertSubmit: undefined;
   ContractSigning: undefined;
+  PartnerRegistration: undefined;
 };
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
@@ -164,7 +166,7 @@ export default function ProfileStackNavigator() {
         name="CreateTeam"
         component={CreateTeamScreen}
         options={{
-          headerTitle: () => <HeaderTitle size="small" />,
+          headerTitle: '팀 가입',
         }}
       />
       <Stack.Screen
@@ -378,6 +380,11 @@ export default function ProfileStackNavigator() {
         name="ContractSigning"
         component={ContractSigningScreen}
         options={{ headerTitle: '화물위탁운송계약서' }}
+      />
+      <Stack.Screen
+        name="PartnerRegistration"
+        component={PartnerRegistrationScreen}
+        options={{ headerTitle: '협력업체 등록' }}
       />
     </Stack.Navigator>
   );

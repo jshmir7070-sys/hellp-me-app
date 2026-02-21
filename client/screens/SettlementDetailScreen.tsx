@@ -1,7 +1,8 @@
-import React from "react";
-import { View, ScrollView, StyleSheet, Image, ActivityIndicator, Pressable, Linking } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, ScrollView, StyleSheet, Image, ActivityIndicator, Pressable, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { useQuery } from "@tanstack/react-query";
 import { RouteProp } from "@react-navigation/native";
@@ -11,6 +12,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 import { getApiUrl } from "@/lib/query-client";
+import { getToken } from "@/utils/secure-token-storage";
 
 type SettlementDetailScreenProps = {
   route: RouteProp<{ SettlementDetail: { date: string; orderId?: number } }, 'SettlementDetail'>;
@@ -49,6 +51,7 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
   const { date, orderId } = route.params;
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
 
   const queryString = orderId 
@@ -58,6 +61,16 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
   const { data: workDetail, isLoading } = useQuery<WorkDetail>({
     queryKey: [queryString],
   });
+
+  const [authToken, setAuthToken] = useState<string | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  useEffect(() => { getToken().then(setAuthToken); }, []);
+
+  const getImageUrl = (imagePath: string) => {
+    if (imagePath.startsWith('http')) return imagePath;
+    const base = new URL(imagePath, getApiUrl()).toString();
+    return authToken ? `${base}?token=${authToken}` : base;
+  };
 
   const formatCurrency = (amount?: number) => {
     if (amount === undefined || amount === null) return '-';
@@ -93,11 +106,12 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
     : [];
 
   return (
+    <>
     <ScrollView
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: insets.bottom + Spacing.xl + 60,
+        paddingBottom: tabBarHeight + Spacing.xl + 60,
         paddingHorizontal: Spacing.lg,
       }}
     >
@@ -286,9 +300,9 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
           </ThemedText>
           <View style={styles.imagesGrid}>
             {workDetail.deliveryHistoryImages.map((img, idx) => {
-              const imageUrl = img.startsWith('http') ? img : `${getApiUrl()}${img}`;
+              const imageUrl = getImageUrl(img);
               return (
-                <Pressable key={idx} onPress={() => Linking.openURL(imageUrl)}>
+                <Pressable key={idx} onPress={() => setSelectedImage(imageUrl)}>
                   <Image source={{ uri: imageUrl }} style={styles.thumbnail} resizeMode="cover" />
                 </Pressable>
               );
@@ -304,9 +318,9 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
           </ThemedText>
           <View style={styles.imagesGrid}>
             {workDetail.etcImages.map((img, idx) => {
-              const imageUrl = img.startsWith('http') ? img : `${getApiUrl()}${img}`;
+              const imageUrl = getImageUrl(img);
               return (
-                <Pressable key={idx} onPress={() => Linking.openURL(imageUrl)}>
+                <Pressable key={idx} onPress={() => setSelectedImage(imageUrl)}>
                   <Image source={{ uri: imageUrl }} style={styles.thumbnail} resizeMode="cover" />
                 </Pressable>
               );
@@ -321,6 +335,35 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
         </ThemedText>
       ) : null}
     </ScrollView>
+
+    <Modal
+      visible={!!selectedImage}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setSelectedImage(null)}
+    >
+      <Pressable
+        style={styles.modalOverlay}
+        onPress={() => setSelectedImage(null)}
+      >
+        <View style={styles.modalContent}>
+          {selectedImage && (
+            <Image
+              source={{ uri: selectedImage }}
+              style={styles.fullImage}
+              resizeMode="contain"
+            />
+          )}
+          <Pressable
+            style={styles.closeButton}
+            onPress={() => setSelectedImage(null)}
+          >
+            <Icon name="close-outline" size={24} color="#fff" />
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
+  </>
   );
 }
 
@@ -459,5 +502,32 @@ const styles = StyleSheet.create({
     ...Typography.small,
     textAlign: 'center',
     marginTop: Spacing.md,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullImage: {
+    width: '90%',
+    height: '80%',
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

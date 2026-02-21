@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { View, StyleSheet, Alert, Pressable, RefreshControl, ActivityIndicator, ScrollView, TextInput } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Icon } from "@/components/Icon";
@@ -52,6 +53,7 @@ interface TeamResponse {
 export default function TeamManagementScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
   const queryClient = useQueryClient();
   const primaryColor = BrandColors.helper;
@@ -210,7 +212,7 @@ export default function TeamManagementScreen() {
         style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.xl,
-          paddingBottom: insets.bottom + Spacing.xl,
+          paddingBottom: tabBarHeight + Spacing.xl,
           paddingHorizontal: Spacing.lg,
         }}
         refreshControl={
@@ -246,7 +248,7 @@ export default function TeamManagementScreen() {
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.xl,
-        paddingBottom: insets.bottom + Spacing.xl,
+        paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
       refreshControl={

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 
@@ -36,6 +37,7 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
   const { theme, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const queryClient = useQueryClient();
 
   const [businessNumber, setBusinessNumber] = useState('');
@@ -131,8 +133,8 @@ export default function BusinessRegistrationScreen({ navigation }: Props) {
       <KeyboardAwareScrollViewCompat
         style={{ flex: 1 }}
         contentContainerStyle={{
-          paddingTop: Spacing.lg,
-          paddingBottom: insets.bottom + Spacing.xl,
+          paddingTop: headerHeight + Spacing.lg,
+          paddingBottom: tabBarHeight + Spacing.xl,
           paddingHorizontal: Spacing.lg,
         }}
         scrollIndicatorInsets={{ bottom: insets.bottom }}

@@ -1378,6 +1378,61 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
+  // ===== Announcement image upload setup =====
+  const announcementImagesDir = path.join(process.cwd(), "uploads", "announcements");
+  if (!fs.existsSync(announcementImagesDir)) {
+    fs.mkdirSync(announcementImagesDir, { recursive: true });
+  }
+
+  const uploadAnnouncementImage = multer({
+    storage: multer.diskStorage({
+      destination: (_req: any, _file: any, cb: any) => cb(null, announcementImagesDir),
+      filename: (_req: any, file: any, cb: any) => {
+        const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+        const ext = path.extname(file.originalname) || '.jpg';
+        cb(null, `ann_${uniqueSuffix}${ext}`);
+      },
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    fileFilter: (_req: any, file: any, cb: any) => {
+      const allowedMimeTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif'];
+      const allowedExtensions = /\.(jpeg|jpg|png|webp|gif)$/i;
+      if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.test(file.originalname)) {
+        cb(null, true);
+      } else {
+        cb(new Error("이미지 파일만 업로드 가능합니다 (jpg, png, webp, gif)"));
+      }
+    },
+  });
+
+  // POST /api/admin/announcements/upload-image — 공지사항 이미지 업로드
+  app.post("/api/admin/announcements/upload-image", adminAuth, requirePermission("notifications.send"), uploadAnnouncementImage.single('file'), async (req: AuthenticatedRequest, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "이미지 파일을 업로드해주세요" });
+      }
+      const filePath = req.file.filename;
+      const url = `/uploads/announcements/${filePath}`;
+      console.log(`[Announcement Image Upload] Uploaded: ${url}`);
+      res.json({ success: true, url });
+    } catch (err: any) {
+      console.error("Announcement image upload error:", err);
+      res.status(500).json({ message: "이미지 업로드에 실패했습니다" });
+    }
+  });
+
+  // GET /api/announcements/popups — 팝업용 공지사항 조회 (앱 클라이언트용)
+  app.get("/api/announcements/popups", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const user = req.user!;
+      const popups = await storage.getPopupAnnouncements(user.role);
+      res.json(popups);
+    } catch (err: any) {
+      console.error("Popup announcements error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Announcement routes (본사 공지)
   app.get("/api/announcements", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
@@ -1432,7 +1487,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
 
   app.post("/api/admin/announcements", adminAuth, requirePermission("notifications.send"), async (req, res) => {
     try {
-      const { title, content, targetAudience, createdBy } = req.body;
+      const { title, content, targetAudience, createdBy, imageUrl, linkUrl, isPopup, priority, expiresAt } = req.body;
       if (!title || !content || !targetAudience || !createdBy) {
         return res.status(400).json({ message: "필수 필드를 모두 입력해주세요" });
       }
@@ -1442,6 +1497,11 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         content,
         targetAudience,
         createdBy,
+        imageUrl: imageUrl || null,
+        linkUrl: linkUrl || null,
+        isPopup: isPopup || false,
+        priority: priority || "normal",
+        expiresAt: expiresAt || null,
       });
 
       // Create notifications for target users

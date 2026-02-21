@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { randomUUID, randomBytes, createHmac } from "crypto";
 import { storage, db } from "./storage";
 import { api } from "@shared/routes";
-import { insertCarrierRateItemSchema, insertAdminBankAccountSchema, insertCustomerServiceInquirySchema, updateCustomerServiceInquirySchema, userLocationLogs, userLocationLatest, teamIncentives, incentiveDetails, requesterRefundAccounts, insertRequesterRefundAccountSchema, SettlementStatement, authAuditLogs, insertDestinationPricingSchema, insertColdChainSettingSchema, destinationRegions, timeSlots, regionPricingRules, vatSettings, minimumGuaranteeRules, minimumGuaranteeApplications, settlementAuditLogs, settlementPayoutAttempts, orderForceStatusLogs, manualDispatchLogs, proofUploadFailures, orders, settlementStatements, helperBankAccounts, carrierMinRates, pricingTables, pricingTableRows, identityVerifications, documentReviewTasks, orderStatusEvents, smsTemplates, smsLogs, webhookLogs, integrationHealth, systemEvents, refunds, supportTicketEscalations, closingReports, contracts, incidentReports, incidentEvidence, incidentActions, auditLogs, orderStartTokens, integrationEvents, users, orderApplications, closingFieldSettings, carrierPricingPolicies, urgentFeePolicies, platformFeePolicies, extraCostCatalog, orderPolicySnapshots, settlementRecords, customerServiceInquiries, refundPolicies, insertRefundPolicySchema, customerInquiries, inquiryComments, ticketEscalations, pushNotificationLogs, deductions, signupConsents, termsVersions, termsReConsents } from "@shared/schema";
+import { insertCarrierRateItemSchema, insertAdminBankAccountSchema, insertCustomerServiceInquirySchema, updateCustomerServiceInquirySchema, userLocationLogs, userLocationLatest, teamIncentives, incentiveDetails, requesterRefundAccounts, insertRequesterRefundAccountSchema, SettlementStatement, authAuditLogs, insertDestinationPricingSchema, insertColdChainSettingSchema, destinationRegions, timeSlots, regionPricingRules, vatSettings, minimumGuaranteeRules, minimumGuaranteeApplications, settlementAuditLogs, settlementPayoutAttempts, orderForceStatusLogs, manualDispatchLogs, proofUploadFailures, orders, settlementStatements, settlementLineItems, helperBankAccounts, carrierMinRates, pricingTables, pricingTableRows, identityVerifications, documentReviewTasks, orderStatusEvents, smsTemplates, smsLogs, webhookLogs, integrationHealth, systemEvents, refunds, supportTicketEscalations, closingReports, contracts, incidentReports, incidentEvidence, incidentActions, auditLogs, orderStartTokens, integrationEvents, users, orderApplications, closingFieldSettings, carrierPricingPolicies, urgentFeePolicies, platformFeePolicies, extraCostCatalog, orderPolicySnapshots, settlementRecords, customerServiceInquiries, refundPolicies, insertRefundPolicySchema, customerInquiries, inquiryComments, ticketEscalations, pushNotificationLogs, deductions, disputes, signupConsents, termsVersions, termsReConsents } from "@shared/schema";
 import { sql, eq, desc, and, or, inArray, not, isNull, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -1128,6 +1128,311 @@ async function seedTestUsers() {
   }
 }
 
+// Seed closing reports, settlements, and dispute-ready data for testing
+async function seedClosingAndSettlementData() {
+  // Check if we already have closing data
+  const existingClosings = await db.select({ id: closingReports.id }).from(closingReports).limit(1);
+  if (existingClosings.length > 0) {
+    console.log("Closing/settlement seed data already exists, skipping...");
+    return;
+  }
+
+  // Find test users
+  const helper1 = await storage.getUserByEmail("testhelper@test.com");
+  const helper2 = await storage.getUserByEmail("testhelper2@test.com");
+  const requester1 = await storage.getUserByEmail("testrequester@test.com");
+  const requester2 = await storage.getUserByEmail("testrequester2@test.com");
+
+  if (!helper1 || !requester1) {
+    console.log("Test users not found, skipping closing/settlement seed");
+    return;
+  }
+
+  const now = new Date();
+  const thisYear = now.getFullYear();
+  const thisMonth = now.getMonth(); // 0-indexed
+
+  // Create orders in various statuses for the current month
+  const orderDates = [
+    { day: 3, company: "CJ대한통운", area: "서울시 강남구 역삼동", status: "settled", price: 1400, qty: "300box", vehicle: "1톤 하이탑" },
+    { day: 7, company: "롯데택배", area: "서울시 서초구 반포동", status: "settled", price: 1200, qty: "250box", vehicle: "1톤 저탑" },
+    { day: 10, company: "한진택배", area: "경기도 성남시 분당구", status: "closing_submitted", price: 1500, qty: "400box", vehicle: "1톤 하이탑" },
+    { day: 14, company: "쿠팡 로켓배송", area: "서울시 송파구 잠실동", status: "settled", price: 1300, qty: "350box", vehicle: "1톤 정탑" },
+    { day: 17, company: "CJ대한통운", area: "경기도 고양시 일산", status: "closing_submitted", price: 1400, qty: "280box", vehicle: "1톤 하이탑" },
+    { day: 20, company: "롯데택배", area: "서울시 마포구 상암동", status: "in_progress", price: 1100, qty: "200box", vehicle: "1톤 저탑" },
+  ];
+
+  const createdOrders: any[] = [];
+
+  for (const od of orderDates) {
+    const scheduledDate = `${thisYear}-${String(thisMonth + 1).padStart(2, "0")}-${String(od.day).padStart(2, "0")}`;
+    const order = await storage.createOrder({
+      requesterId: requester1.id,
+      companyName: od.company,
+      pricePerUnit: od.price,
+      averageQuantity: od.qty,
+      deliveryArea: od.area,
+      scheduledDate,
+      vehicleType: od.vehicle,
+      status: od.status,
+      maxHelpers: 1,
+      currentHelpers: 1,
+    });
+
+    // Set matchedHelperId
+    await db.update(orders).set({ matchedHelperId: helper1.id, matchedAt: new Date() }).where(eq(orders.id, order.id));
+
+    createdOrders.push({ ...order, scheduledDate, ...od });
+  }
+
+  // Also create orders for helper2
+  const helper2Order = await storage.createOrder({
+    requesterId: requester2?.id || requester1.id,
+    companyName: "한진택배",
+    pricePerUnit: 1300,
+    averageQuantity: "320box",
+    deliveryArea: "서울시 강서구 마곡동",
+    scheduledDate: `${thisYear}-${String(thisMonth + 1).padStart(2, "0")}-12`,
+    vehicleType: "1톤 정탑",
+    status: "settled",
+    maxHelpers: 1,
+    currentHelpers: 1,
+  });
+  if (helper2) {
+    await db.update(orders).set({ matchedHelperId: helper2.id, matchedAt: new Date() }).where(eq(orders.id, helper2Order.id));
+  }
+
+  console.log(`Created ${createdOrders.length + 1} test orders for closing/settlement`);
+
+  // Create contracts for each order
+  for (let i = 0; i < createdOrders.length; i++) {
+    const od = createdOrders[i];
+    const totalAmount = od.price * parseInt(od.qty);
+    await storage.createContract({
+      orderId: od.id,
+      helperId: helper1.id,
+      requesterId: requester1.id,
+      totalAmount,
+      depositAmount: Math.round(totalAmount * 0.2),
+      balanceAmount: Math.round(totalAmount * 0.8),
+      depositPaid: true,
+      downPaymentStatus: "paid",
+      balancePaid: od.status === "settled",
+      balanceDueDate: od.scheduledDate,
+      status: od.status === "settled" ? "completed" : "deposit_paid",
+    });
+  }
+
+  // Create contracts for helper2 order
+  if (helper2) {
+    await storage.createContract({
+      orderId: helper2Order.id,
+      helperId: helper2.id,
+      requesterId: requester2?.id || requester1.id,
+      totalAmount: 416000,
+      depositAmount: 83200,
+      balanceAmount: 332800,
+      depositPaid: true,
+      downPaymentStatus: "paid",
+      balancePaid: true,
+      balanceDueDate: `${thisYear}-${String(thisMonth + 1).padStart(2, "0")}-12`,
+      status: "completed",
+    });
+  }
+
+  console.log("Created test contracts");
+
+  // Create closing reports for orders that are closing_submitted or settled
+  const closingData = [
+    { orderIdx: 0, delivered: 285, returned: 15, status: "approved" },
+    { orderIdx: 1, delivered: 240, returned: 10, status: "approved" },
+    { orderIdx: 2, delivered: 380, returned: 20, status: "submitted" },
+    { orderIdx: 3, delivered: 330, returned: 20, status: "approved" },
+    { orderIdx: 4, delivered: 260, returned: 20, status: "submitted" },
+  ];
+
+  const createdClosings: any[] = [];
+
+  for (const cd of closingData) {
+    const od = createdOrders[cd.orderIdx];
+    const deliveredAmount = cd.delivered * od.price;
+    const supplyAmount = Math.round(deliveredAmount / 1.1);
+    const vatAmount = deliveredAmount - supplyAmount;
+    const platformFee = Math.round(deliveredAmount * 0.05);
+    const netAmount = deliveredAmount - platformFee;
+
+    const [closing] = await db.insert(closingReports).values({
+      orderId: od.id,
+      helperId: helper1.id,
+      deliveredCount: cd.delivered,
+      returnedCount: cd.returned,
+      status: cd.status,
+      calculatedAmount: deliveredAmount,
+      supplyAmount,
+      vatAmount,
+      totalAmount: deliveredAmount,
+      platformFeeRate: 5,
+      platformFee,
+      netAmount,
+      deliveryHistoryImagesJson: JSON.stringify(["/uploads/sample-delivery-history.jpg"]),
+      memo: `테스트 마감 데이터 - ${od.company}`,
+    }).returning();
+
+    createdClosings.push({ closing, orderData: od, closingData: cd });
+  }
+
+  // Also create closing for helper2
+  if (helper2) {
+    await db.insert(closingReports).values({
+      orderId: helper2Order.id,
+      helperId: helper2.id,
+      deliveredCount: 300,
+      returnedCount: 20,
+      status: "approved",
+      calculatedAmount: 390000,
+      supplyAmount: 354545,
+      vatAmount: 35455,
+      totalAmount: 390000,
+      platformFeeRate: 5,
+      platformFee: 19500,
+      netAmount: 370500,
+      deliveryHistoryImagesJson: JSON.stringify(["/uploads/sample-delivery-history.jpg"]),
+      memo: "테스트 마감 데이터 - 한진택배",
+    });
+  }
+
+  console.log(`Created ${createdClosings.length + 1} closing reports`);
+
+  // Create settlement statements for approved closings
+  const settledClosings = createdClosings.filter(c => c.closingData.status === "approved");
+  const createdSettlements: any[] = [];
+
+  for (const sc of settledClosings) {
+    const od = sc.orderData;
+    const cl = sc.closing;
+
+    const statement = await storage.createSettlementStatement({
+      orderId: od.id,
+      helperId: helper1.id,
+      requesterId: requester1.id,
+      workDate: od.scheduledDate,
+      deliveryCount: cl.deliveredCount,
+      returnCount: cl.returnedCount,
+      basePay: cl.calculatedAmount,
+      additionalPay: 0,
+      penalty: 0,
+      deduction: 0,
+      commissionRate: 5,
+      commissionAmount: cl.platformFee,
+      platformCommission: cl.platformFee,
+      supplyAmount: cl.supplyAmount,
+      vatAmount: cl.vatAmount,
+      totalAmount: cl.totalAmount,
+      netAmount: cl.netAmount,
+      status: "confirmed",
+      helperConfirmed: true,
+      helperConfirmedAt: new Date(),
+    });
+
+    createdSettlements.push(statement);
+
+    // Create line items
+    await storage.createSettlementLineItem({
+      statementId: statement.id,
+      itemType: "delivery",
+      itemName: "배송 수수료",
+      quantity: cl.deliveredCount,
+      unitPrice: od.price,
+      amount: cl.calculatedAmount,
+    });
+
+    await storage.createSettlementLineItem({
+      statementId: statement.id,
+      itemType: "platform_fee",
+      itemName: "플랫폼 수수료",
+      quantity: 1,
+      unitPrice: cl.platformFee,
+      amount: -cl.platformFee,
+      notes: "5% 플랫폼 수수료",
+    });
+  }
+
+  // Helper2 settlement
+  if (helper2) {
+    const h2Statement = await storage.createSettlementStatement({
+      orderId: helper2Order.id,
+      helperId: helper2.id,
+      requesterId: requester2?.id || requester1.id,
+      workDate: `${thisYear}-${String(thisMonth + 1).padStart(2, "0")}-12`,
+      deliveryCount: 300,
+      returnCount: 20,
+      basePay: 390000,
+      additionalPay: 0,
+      penalty: 0,
+      deduction: 0,
+      commissionRate: 5,
+      commissionAmount: 19500,
+      platformCommission: 19500,
+      supplyAmount: 354545,
+      vatAmount: 35455,
+      totalAmount: 390000,
+      netAmount: 370500,
+      status: "confirmed",
+      helperConfirmed: true,
+      helperConfirmedAt: new Date(),
+    });
+
+    await storage.createSettlementLineItem({
+      statementId: h2Statement.id,
+      itemType: "delivery",
+      itemName: "배송 수수료",
+      quantity: 300,
+      unitPrice: 1300,
+      amount: 390000,
+    });
+  }
+
+  console.log(`Created ${createdSettlements.length + 1} settlement statements with line items`);
+
+  // Create a sample dispute for testing
+  if (createdSettlements.length > 0) {
+    const disputeSettlement = createdSettlements[0];
+    await storage.createDispute({
+      helperId: helper1.id,
+      submitterRole: "helper",
+      settlementId: disputeSettlement.id,
+      orderId: disputeSettlement.orderId,
+      workDate: disputeSettlement.workDate || createdOrders[0].scheduledDate,
+      disputeType: "count_mismatch",
+      description: "배송 수량이 실제와 다릅니다. 실제로는 290건을 배송했으나 285건으로 집계되었습니다.",
+      requestedDeliveryCount: 290,
+      status: "pending",
+    });
+
+    console.log("Created sample dispute for testing");
+  }
+
+  // Create a sample incident for testing
+  const incidentOrder = createdOrders[3]; // settled order
+  if (incidentOrder) {
+    const [incident] = await db.insert(incidentReports).values({
+      orderId: incidentOrder.id,
+      reporterId: requester1.id,
+      reporterType: "requester",
+      requesterId: requester1.id,
+      helperId: helper1.id,
+      incidentDate: incidentOrder.scheduledDate,
+      incidentType: "damage",
+      description: "배송 중 화물 외박스 파손이 발생했습니다. 수령인이 확인 후 사진을 첨부합니다.",
+      status: "submitted",
+    }).returning();
+
+    console.log("Created sample incident report for testing");
+  }
+
+  console.log("=== Closing/Settlement/Dispute seed data complete ===");
+}
+
 // Permission checking middleware factory
 // Dangerous permissions that require explicit RBAC check even for HQ staff
 const dangerousPermsRequireRbac = ["orders.force_override"];
@@ -1202,10 +1507,11 @@ export async function registerRoutes(
   // Always ensure admin user exists (runs in all environments)
   await ensureAdminUser();
   
-  // Test seeding disabled - use manual account creation
-  // if (process.env.NODE_ENV !== 'production' && process.env.SKIP_TEST_SEED !== 'true') {
-  //   await seedTestUsers();
-  // }
+  // Test seeding - creates test users, orders, closings, settlements, disputes
+  if (process.env.NODE_ENV !== 'production' && process.env.SKIP_TEST_SEED !== 'true') {
+    await seedTestUsers();
+    await seedClosingAndSettlementData();
+  }
 
   // Register Object Storage routes
   registerObjectStorageRoutes(httpServer, app);

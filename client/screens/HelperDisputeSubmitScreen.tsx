@@ -1,9 +1,10 @@
 import React, { useState } from "react";
-import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, TextInput, Image } from "react-native";
+import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, TextInput, Image, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from "expo-image-picker";
 import { Icon } from "@/components/Icon";
 
@@ -12,47 +13,42 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
 import { apiRequest, getApiUrl, getAuthToken } from "@/lib/query-client";
-import DateTimePicker from "@react-native-community/datetimepicker";
 
-type ProfileStackParamList = {
-  HelperDisputeSubmit: undefined;
+type SettlementStackParamList = {
+  HelperDisputeSubmit: { orderId?: number; workDate?: string; orderTitle?: string } | undefined;
+  HelperDisputeList: undefined;
 };
 
-type HelperDisputeSubmitScreenProps = NativeStackScreenProps<ProfileStackParamList, 'HelperDisputeSubmit'>;
+type HelperDisputeSubmitScreenProps = NativeStackScreenProps<SettlementStackParamList, 'HelperDisputeSubmit'>;
 
 const DISPUTE_TYPES = [
-  { value: "count_mismatch", label: "수량 오류" },
-  { value: "lost", label: "분실" },
-  { value: "wrong_delivery", label: "오배송" },
-  { value: "amount_error", label: "금액 오류" },
-  { value: "delivery_issue", label: "배송 문제" },
-  { value: "other", label: "기타" },
+  { value: "settlement_error", label: "정산" },
+  { value: "invoice_error", label: "세금계산서" },
+  { value: "service_complaint", label: "요청자 불만" },
+  { value: "other", label: "기타(직접작성)" },
 ];
 
-interface Courier {
-  id: number;
-  courierName: string;
-  category: string;
-}
-
-export default function HelperDisputeSubmitScreen({ navigation }: HelperDisputeSubmitScreenProps) {
+export default function HelperDisputeSubmitScreen({ navigation, route }: HelperDisputeSubmitScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
 
-  const [courierName, setCourierName] = useState("");
-  const [workDate, setWorkDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const orderId = route.params?.orderId;
+  const workDate = route.params?.workDate || new Date().toISOString().split('T')[0];
+  const orderTitle = route.params?.orderTitle;
+
   const [disputeType, setDisputeType] = useState("");
+  const [customType, setCustomType] = useState("");
   const [description, setDescription] = useState("");
   const [evidencePhoto, setEvidencePhoto] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [showTypePicker, setShowTypePicker] = useState(false);
 
-  const { data: couriers = [] } = useQuery<Courier[]>({
-    queryKey: ['/api/meta/couriers'],
-  });
+  const selectedTypeLabel = disputeType === "other" && customType.trim()
+    ? `기타: ${customType}`
+    : DISPUTE_TYPES.find(t => t.value === disputeType)?.label || "";
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -68,7 +64,7 @@ export default function HelperDisputeSubmitScreen({ navigation }: HelperDisputeS
         const formData = new FormData();
         const uri = result.assets[0].uri;
         const filename = uri.split('/').pop() || 'photo.jpg';
-        
+
         formData.append('file', {
           uri,
           name: filename,
@@ -101,12 +97,14 @@ export default function HelperDisputeSubmitScreen({ navigation }: HelperDisputeS
 
   const submitMutation = useMutation({
     mutationFn: async () => {
+      const finalDescription = disputeType === "other" && customType.trim()
+        ? `[${customType}] ${description}`
+        : description;
       return apiRequest("POST", "/api/helper/disputes", {
-        courierName: courierName || null,
-        workDate: workDate.toISOString().split('T')[0],
-        invoiceNumber: invoiceNumber || null,
+        orderId: orderId || null,
+        workDate,
         disputeType,
-        description,
+        description: finalDescription,
         evidencePhotoUrl: evidencePhoto || null,
       });
     },
@@ -117,7 +115,7 @@ export default function HelperDisputeSubmitScreen({ navigation }: HelperDisputeS
       } else {
         Alert.alert("접수 완료", "이의제기가 접수되었습니다. 관리자 검토 후 안내드리겠습니다.");
       }
-      navigation.goBack();
+      navigation.replace('HelperDisputeList' as any);
     },
     onError: (err: Error) => {
       const message = err.message || "접수에 실패했습니다.";
@@ -130,12 +128,12 @@ export default function HelperDisputeSubmitScreen({ navigation }: HelperDisputeS
   });
 
   const handleSubmit = () => {
-    if (!courierName) {
-      Alert.alert("알림", "운송사를 선택해주세요.");
+    if (!disputeType) {
+      Alert.alert("알림", "이의제기 유형을 선택해주세요.");
       return;
     }
-    if (!disputeType) {
-      Alert.alert("알림", "유형을 선택해주세요.");
+    if (disputeType === "other" && !customType.trim()) {
+      Alert.alert("알림", "유형을 직접 입력해주세요.");
       return;
     }
     if (!description.trim()) {
@@ -145,186 +143,186 @@ export default function HelperDisputeSubmitScreen({ navigation }: HelperDisputeS
     submitMutation.mutate();
   };
 
-  const formatDate = (date: Date) => {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const formatDisplayDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
   };
 
-  const uniqueCouriers = [...new Set(couriers.map(c => c.courierName))];
-
   return (
-    <ScrollView
-      style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
-      contentContainerStyle={{ paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + 120 }}
-    >
-      <View style={styles.content}>
-        <Card style={styles.section}>
-          <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>이의제기 접수</ThemedText>
-          <ThemedText style={[styles.description, { color: theme.tabIconDefault }]}>
-            정산 오류, 수량 차이, 배송 문제 등에 대해 이의를 제기할 수 있습니다.
-          </ThemedText>
-        </Card>
-
-        <Card style={styles.section}>
-          <ThemedText style={[styles.label, { color: theme.text }]}>운송사 선택 *</ThemedText>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.courierScroll}>
-            <View style={styles.courierRow}>
-              {uniqueCouriers.map((name) => (
-                <Pressable
-                  key={name}
-                  style={[
-                    styles.courierChip,
-                    { borderColor: courierName === name ? BrandColors.helper : theme.backgroundTertiary },
-                    courierName === name && { backgroundColor: BrandColors.helperLight },
-                  ]}
-                  onPress={() => setCourierName(name)}
-                >
-                  <ThemedText
-                    style={[
-                      styles.courierText,
-                      courierName === name && { color: BrandColors.helper, fontWeight: "600" },
-                    ]}
-                  >
-                    {name}
-                  </ThemedText>
-                </Pressable>
-              ))}
+    <>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
+        contentContainerStyle={{ paddingTop: headerHeight + Spacing.lg, paddingBottom: tabBarHeight + Spacing.xl }}
+      >
+        <View style={styles.content}>
+          {/* 마감정보 카드 */}
+          <Card style={styles.infoCard}>
+            <View style={styles.infoHeader}>
+              <Icon name="document-text-outline" size={20} color={BrandColors.helper} />
+              <ThemedText style={[styles.infoTitle, { color: theme.text }]}>마감 정보</ThemedText>
             </View>
-          </ScrollView>
-        </Card>
+            {orderTitle ? (
+              <View style={styles.infoRow}>
+                <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>오더</ThemedText>
+                <ThemedText style={[styles.infoValue, { color: theme.text }]}>{orderTitle}</ThemedText>
+              </View>
+            ) : null}
+            <View style={styles.infoRow}>
+              <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>근무일</ThemedText>
+              <ThemedText style={[styles.infoValue, { color: theme.text }]}>{formatDisplayDate(workDate)}</ThemedText>
+            </View>
+            {orderId ? (
+              <View style={styles.infoRow}>
+                <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>오더 번호</ThemedText>
+                <ThemedText style={[styles.infoValue, { color: theme.text }]}>#{orderId}</ThemedText>
+              </View>
+            ) : null}
+          </Card>
 
-        <Card style={styles.section}>
-          <ThemedText style={[styles.label, { color: theme.text }]}>근무일 *</ThemedText>
-          <Pressable
-            style={[styles.dateButton, { borderColor: theme.backgroundTertiary }]}
-            onPress={() => setShowDatePicker(true)}
-          >
-            <Icon name="calendar-outline" size={20} color={theme.text} />
-            <ThemedText style={[styles.dateText, { color: theme.text }]}>
-              {formatDate(workDate)}
-            </ThemedText>
-          </Pressable>
-          {showDatePicker && (
-            <DateTimePicker
-              value={workDate}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-              onChange={(event, selectedDate) => {
-                setShowDatePicker(Platform.OS === 'ios');
-                if (selectedDate) {
-                  setWorkDate(selectedDate);
-                }
-              }}
-              maximumDate={new Date()}
+          {/* 이의제기 유형 선택 (모달 피커) */}
+          <Card style={styles.section}>
+            <ThemedText style={[styles.label, { color: theme.text }]}>이의제기 유형 *</ThemedText>
+            <Pressable
+              style={[styles.pickerButton, { borderColor: theme.backgroundTertiary, backgroundColor: theme.backgroundDefault }]}
+              onPress={() => setShowTypePicker(true)}
+            >
+              <ThemedText style={[styles.pickerText, { color: disputeType ? theme.text : theme.tabIconDefault }]}>
+                {selectedTypeLabel || "유형을 선택하세요"}
+              </ThemedText>
+              <Icon name="chevron-down-outline" size={20} color={theme.tabIconDefault} />
+            </Pressable>
+            {disputeType === "other" && (
+              <TextInput
+                style={[styles.customTypeInput, { color: theme.text, borderColor: theme.backgroundTertiary, backgroundColor: theme.backgroundDefault }]}
+                value={customType}
+                onChangeText={setCustomType}
+                placeholder="유형을 직접 입력하세요"
+                placeholderTextColor={theme.tabIconDefault}
+                autoFocus
+              />
+            )}
+          </Card>
+
+          {/* 상세 내용 */}
+          <Card style={styles.section}>
+            <ThemedText style={[styles.label, { color: theme.text }]}>상세 내용 *</ThemedText>
+            <TextInput
+              style={[styles.textArea, { color: theme.text, borderColor: theme.backgroundTertiary, backgroundColor: theme.backgroundDefault }]}
+              value={description}
+              onChangeText={setDescription}
+              placeholder="이의제기 사유를 상세히 작성해주세요"
+              placeholderTextColor={theme.tabIconDefault}
+              multiline
+              numberOfLines={5}
+              textAlignVertical="top"
             />
-          )}
-        </Card>
+          </Card>
 
-        <Card style={styles.section}>
-          <ThemedText style={[styles.label, { color: theme.text }]}>송장번호 (선택)</ThemedText>
-          <TextInput
-            style={[styles.input, { color: theme.text, borderColor: theme.backgroundTertiary, backgroundColor: theme.backgroundDefault }]}
-            value={invoiceNumber}
-            onChangeText={setInvoiceNumber}
-            placeholder="송장번호를 입력하세요"
-            placeholderTextColor={theme.tabIconDefault}
-          />
-        </Card>
+          {/* 증빙사진 */}
+          <Card style={styles.section}>
+            <ThemedText style={[styles.label, { color: theme.text }]}>증빙사진 (선택)</ThemedText>
+            <ThemedText style={[styles.description, { color: theme.tabIconDefault, marginBottom: Spacing.md }]}>
+              관련 증빙 자료가 있으면 첨부해주세요.
+            </ThemedText>
 
-        <Card style={styles.section}>
-          <ThemedText style={[styles.label, { color: theme.text }]}>유형 선택 *</ThemedText>
-          <View style={styles.typeGrid}>
+            {evidencePhoto ? (
+              <View style={styles.photoPreviewContainer}>
+                <Image source={{ uri: evidencePhoto }} style={styles.photoPreview} />
+                <Pressable
+                  style={styles.removePhotoButton}
+                  onPress={() => setEvidencePhoto(null)}
+                >
+                  <Icon name="close-circle" size={24} color={BrandColors.error} />
+                </Pressable>
+              </View>
+            ) : (
+              <Pressable
+                style={[styles.uploadButton, { borderColor: theme.backgroundTertiary }]}
+                onPress={pickImage}
+                disabled={uploading}
+              >
+                {uploading ? (
+                  <ActivityIndicator size="small" color={BrandColors.helper} />
+                ) : (
+                  <>
+                    <Icon name="camera-outline" size={32} color={theme.tabIconDefault} />
+                    <ThemedText style={[styles.uploadText, { color: theme.tabIconDefault }]}>
+                      사진 첨부
+                    </ThemedText>
+                  </>
+                )}
+              </Pressable>
+            )}
+          </Card>
+        </View>
+
+        <View style={[styles.footer, { paddingBottom: tabBarHeight + Spacing.lg }]}>
+          <Pressable
+            style={[
+              styles.submitButton,
+              { backgroundColor: BrandColors.helper },
+              submitMutation.isPending && { opacity: 0.7 },
+            ]}
+            onPress={handleSubmit}
+            disabled={submitMutation.isPending}
+          >
+            {submitMutation.isPending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <ThemedText style={styles.submitButtonText}>이의제기 접수</ThemedText>
+            )}
+          </Pressable>
+        </View>
+      </ScrollView>
+
+      {/* 유형 선택 모달 */}
+      <Modal
+        visible={showTypePicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowTypePicker(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowTypePicker(false)}>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+            <View style={styles.modalHandle} />
+            <ThemedText style={[styles.modalTitle, { color: theme.text }]}>이의제기 유형 선택</ThemedText>
             {DISPUTE_TYPES.map((type) => (
               <Pressable
                 key={type.value}
                 style={[
-                  styles.typeButton,
-                  { borderColor: disputeType === type.value ? BrandColors.helper : theme.backgroundTertiary },
-                  disputeType === type.value && { backgroundColor: BrandColors.helperLight },
+                  styles.modalOption,
+                  { borderBottomColor: theme.backgroundTertiary },
+                  disputeType === type.value && { backgroundColor: BrandColors.helperLight || '#D1FAE5' },
                 ]}
-                onPress={() => setDisputeType(type.value)}
+                onPress={() => {
+                  setDisputeType(type.value);
+                  setShowTypePicker(false);
+                }}
               >
                 <ThemedText
                   style={[
-                    styles.typeText,
-                    disputeType === type.value && { color: BrandColors.helper, fontWeight: "600" },
+                    styles.modalOptionText,
+                    { color: theme.text },
+                    disputeType === type.value && { color: BrandColors.helper, fontWeight: "700" },
                   ]}
                 >
                   {type.label}
                 </ThemedText>
+                {disputeType === type.value && (
+                  <Icon name="checkmark" size={20} color={BrandColors.helper} />
+                )}
               </Pressable>
             ))}
-          </View>
-        </Card>
-
-        <Card style={styles.section}>
-          <ThemedText style={[styles.label, { color: theme.text }]}>상세 내용 *</ThemedText>
-          <TextInput
-            style={[styles.textArea, { color: theme.text, borderColor: theme.backgroundTertiary, backgroundColor: theme.backgroundDefault }]}
-            value={description}
-            onChangeText={setDescription}
-            placeholder="이의제기 사유를 상세히 작성해주세요"
-            placeholderTextColor={theme.tabIconDefault}
-            multiline
-            numberOfLines={5}
-            textAlignVertical="top"
-          />
-        </Card>
-
-        <Card style={styles.section}>
-          <ThemedText style={[styles.label, { color: theme.text }]}>증빙사진 (선택)</ThemedText>
-          <ThemedText style={[styles.description, { color: theme.tabIconDefault, marginBottom: Spacing.md }]}>
-            관련 증빙 자료가 있으면 첨부해주세요.
-          </ThemedText>
-          
-          {evidencePhoto ? (
-            <View style={styles.photoPreviewContainer}>
-              <Image source={{ uri: evidencePhoto }} style={styles.photoPreview} />
-              <Pressable
-                style={styles.removePhotoButton}
-                onPress={() => setEvidencePhoto(null)}
-              >
-                <Icon name="close-circle" size={24} color={BrandColors.error} />
-              </Pressable>
-            </View>
-          ) : (
             <Pressable
-              style={[styles.uploadButton, { borderColor: theme.backgroundTertiary }]}
-              onPress={pickImage}
-              disabled={uploading}
+              style={[styles.modalCloseButton, { backgroundColor: theme.backgroundTertiary }]}
+              onPress={() => setShowTypePicker(false)}
             >
-              {uploading ? (
-                <ActivityIndicator size="small" color={BrandColors.helper} />
-              ) : (
-                <>
-                  <Icon name="camera-outline" size={32} color={theme.tabIconDefault} />
-                  <ThemedText style={[styles.uploadText, { color: theme.tabIconDefault }]}>
-                    사진 첨부
-                  </ThemedText>
-                </>
-              )}
+              <ThemedText style={[styles.modalCloseText, { color: theme.text }]}>닫기</ThemedText>
             </Pressable>
-          )}
-        </Card>
-      </View>
-
-      <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.lg }]}>
-        <Pressable
-          style={[
-            styles.submitButton,
-            { backgroundColor: BrandColors.helper },
-            submitMutation.isPending && { opacity: 0.7 },
-          ]}
-          onPress={handleSubmit}
-          disabled={submitMutation.isPending}
-        >
-          {submitMutation.isPending ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <ThemedText style={styles.submitButtonText}>이의제기 접수</ThemedText>
-          )}
+          </View>
         </Pressable>
-      </View>
-    </ScrollView>
+      </Modal>
+    </>
   );
 }
 
@@ -333,71 +331,62 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     gap: Spacing.md,
   },
-  section: {
+  infoCard: {
     padding: Spacing.lg,
+    gap: Spacing.sm,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
+  infoHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: Spacing.sm,
     marginBottom: Spacing.xs,
   },
-  description: {
+  infoTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 4,
+  },
+  infoLabel: {
+    fontSize: 13,
+  },
+  infoValue: {
     fontSize: 14,
-    lineHeight: 20,
+    fontWeight: "600",
+  },
+  section: {
+    padding: Spacing.lg,
   },
   label: {
     fontSize: 14,
     fontWeight: "600",
     marginBottom: Spacing.sm,
   },
-  courierScroll: {
-    marginHorizontal: -Spacing.xs,
+  description: {
+    fontSize: 14,
+    lineHeight: 20,
   },
-  courierRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Spacing.xs,
-    paddingHorizontal: Spacing.xs,
-  },
-  courierChip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-  },
-  courierText: {
-    fontSize: 13,
-  },
-  dateButton: {
+  pickerButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    borderWidth: 1,
-  },
-  dateText: {
-    fontSize: 15,
-  },
-  input: {
+    justifyContent: "space-between",
     borderWidth: 1,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
+  },
+  pickerText: {
     fontSize: 15,
   },
-  typeGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: Spacing.sm,
-  },
-  typeButton: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
+  customTypeInput: {
     borderWidth: 1,
-  },
-  typeText: {
-    fontSize: 14,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    fontSize: 15,
+    marginTop: Spacing.md,
   },
   textArea: {
     borderWidth: 1,
@@ -446,6 +435,52 @@ const styles = StyleSheet.create({
   },
   submitButtonText: {
     color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: Spacing.lg,
+    paddingBottom: 40,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: "#ccc",
+    borderRadius: 2,
+    alignSelf: "center",
+    marginBottom: Spacing.lg,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: Spacing.lg,
+    textAlign: "center",
+  },
+  modalOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: Spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  modalOptionText: {
+    fontSize: 16,
+  },
+  modalCloseButton: {
+    marginTop: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: "center",
+  },
+  modalCloseText: {
     fontSize: 16,
     fontWeight: "600",
   },

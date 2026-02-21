@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   StyleSheet,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Icon } from "@/components/Icon";
@@ -23,6 +24,7 @@ import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
 import { Spacing, Typography, BorderRadius, BrandColors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { getToken } from "@/utils/secure-token-storage";
 import { ClosingStackParamList } from "@/navigation/ClosingStackNavigator";
 
 type ClosingDetailScreenProps = NativeStackScreenProps<ClosingStackParamList, 'ClosingDetail'>;
@@ -56,7 +58,13 @@ export default function ClosingDetailScreen({ route, navigation }: ClosingDetail
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const [selectedImage, setSelectedImage] = React.useState<string | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    getToken().then(setAuthToken);
+  }, []);
 
   const { data: summary, isLoading } = useQuery<ClosingSummary>({
     queryKey: ['/api/orders', orderId, 'closing-summary'],
@@ -111,7 +119,8 @@ export default function ClosingDetailScreen({ route, navigation }: ClosingDetail
 
   const getImageUrl = (imagePath: string) => {
     if (imagePath.startsWith('http')) return imagePath;
-    return new URL(imagePath, getApiUrl()).toString();
+    const base = new URL(imagePath, getApiUrl()).toString();
+    return authToken ? `${base}?token=${authToken}` : base;
   };
 
   const renderImageGrid = (images: string[], title: string, required: boolean = false) => {
@@ -181,7 +190,7 @@ export default function ClosingDetailScreen({ route, navigation }: ClosingDetail
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.lg,
           paddingHorizontal: Spacing.lg,
-          paddingBottom: insets.bottom + Spacing.xl + 80,
+          paddingBottom: tabBarHeight + Spacing.xl + 80,
         }}
         showsVerticalScrollIndicator={true}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
@@ -213,7 +222,6 @@ export default function ClosingDetailScreen({ route, navigation }: ClosingDetail
               </ThemedText>
               <ThemedText style={[styles.amountValue, { color: theme.text }]}>
                 {summary?.etcCount || 0}건
-                {summary?.etcPricePerUnit ? ` (${formatCurrency(summary.etcPricePerUnit)}/건)` : ''}
               </ThemedText>
             </View>
           </View>

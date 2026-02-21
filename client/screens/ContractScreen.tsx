@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, TextInput, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -51,6 +52,7 @@ interface Contract {
 export default function ContractScreen({ navigation, route }: ContractScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -158,7 +160,7 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
       <ScrollView
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.md,
-          paddingBottom: insets.bottom + 100,
+          paddingBottom: tabBarHeight + Spacing.xl,
           paddingHorizontal: Spacing.lg,
         }}
       >
@@ -343,7 +345,7 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
       </ScrollView>
 
       {!isSigned ? (
-        <View style={[styles.footer, { paddingBottom: insets.bottom + Spacing.md, backgroundColor: theme.backgroundRoot }]}>
+        <View style={[styles.footer, { paddingBottom: tabBarHeight + Spacing.md, backgroundColor: theme.backgroundRoot }]}>
           <Pressable
             style={({ pressed }) => [
               styles.signButton,

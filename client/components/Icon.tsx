@@ -384,6 +384,47 @@ export function Icon({ name, size = 24, color = "#000", style }: IconProps) {
         <Path d="M14 2v6h6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
       </Svg>
     ),
+    "call": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z" fill={color} stroke={color} strokeWidth={1} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "person-add-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle cx="9" cy="7" r="4" stroke={color} strokeWidth={strokeWidth}/>
+        <Path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M20 8v6M23 11h-6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round"/>
+      </Svg>
+    ),
+    "megaphone-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M21 3L9 9H3a1 1 0 00-1 1v4a1 1 0 001 1h1l2 7h3l-2-7h2l12 6V3z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "shield-checkmark-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M9 12l2 2 4-4" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "checkmark-done-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M18 6L7 17l-5-5" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M22 10L11 21" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "chatbubbles-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
+    "open-outline": (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M15 3h6v6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+        <Path d="M10 14L21 3" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>
+      </Svg>
+    ),
     "refresh-outline": (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <Path d="M23 4v6h-6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round"/>

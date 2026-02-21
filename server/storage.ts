@@ -342,6 +342,7 @@ export interface IStorage {
   addAnnouncementRecipient(recipient: InsertAnnouncementRecipient): Promise<AnnouncementRecipient>;
   getAnnouncementRecipients(announcementId: number): Promise<AnnouncementRecipient[]>;
   getUserAnnouncements(userId: string, userRole: string): Promise<Announcement[]>;
+  getPopupAnnouncements(userRole: string): Promise<Announcement[]>;
 
   // Job contracts (건별 전자계약)
   createJobContract(contract: InsertJobContract): Promise<JobContract>;
@@ -1842,9 +1843,26 @@ export class DatabaseStorage implements IStorage {
 
   async getUserAnnouncements(userId: string, userRole: string): Promise<Announcement[]> {
     const allAnnouncements = await db.select().from(announcements).orderBy(desc(announcements.createdAt));
-    return allAnnouncements.filter(a => 
+    return allAnnouncements.filter(a =>
       a.targetAudience === 'all' || a.targetAudience === userRole
     );
+  }
+
+  async getPopupAnnouncements(userRole: string): Promise<Announcement[]> {
+    return await db.select().from(announcements)
+      .where(and(
+        eq(announcements.isPopup, true),
+        or(
+          eq(announcements.targetAudience, 'all'),
+          eq(announcements.targetAudience, userRole)
+        ),
+        or(
+          isNull(announcements.expiresAt),
+          gte(announcements.expiresAt, new Date())
+        )
+      ))
+      .orderBy(desc(announcements.createdAt))
+      .limit(5);
   }
 
   // Job contracts (건별 전자계약)

@@ -86,6 +86,7 @@ export interface Step1Props extends BaseStepProps {
   courierOptions: string[];
   coldTruckOptions: string[];
   onOpenSelectModal: (type: string, options: string[], callback: (value: string) => void) => void;
+  onImportPreviousOrder: () => void;
 }
 
 export interface Step2Props extends BaseStepProps {

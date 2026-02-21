@@ -6,13 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ExcelTable, ColumnDef } from '@/components/common/ExcelTable';
 import { StatusBadge, DateRangePicker, getDefaultDateRange } from '@/components/common';
-import { Bell, Send, Plus, RefreshCw, MessageSquare, Mail, Smartphone, Download, Eye, Trash2 } from 'lucide-react';
+import { Bell, Send, Plus, RefreshCw, MessageSquare, Mail, Smartphone, Download, Eye, Trash2, ImageIcon, Link as LinkIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { apiRequest } from '@/lib/api';
+import { apiRequest, getAuthHeaders } from '@/lib/api';
 
 interface Notification {
   id: number;
@@ -31,12 +32,16 @@ interface Announcement {
   title: string;
   content: string;
   targetRole: string;
+  targetAudience?: string;
   priority: string;
   isActive: boolean;
   createdAt: string;
   expiresAt?: string;
   createdBy: number;
   creatorName?: string;
+  imageUrl?: string | null;
+  linkUrl?: string | null;
+  isPopup?: boolean;
 }
 
 export default function NotificationsPage() {
@@ -64,7 +69,11 @@ export default function NotificationsPage() {
     targetRole: 'all',
     priority: 'normal',
     expiresAt: '',
+    imageUrl: '',
+    linkUrl: '',
+    isPopup: false,
   });
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const { data: notifications = [], isLoading: notificationsLoading, refetch: refetchNotifications } = useQuery<Notification[]>({
     queryKey: ['/notifications', dateRange.from, dateRange.to],
@@ -105,21 +114,62 @@ export default function NotificationsPage() {
 
   const createAnnouncementMutation = useMutation({
     mutationFn: async (data: typeof announcementForm) => {
+      const adminUser = JSON.parse(localStorage.getItem('admin_user') || '{}');
       return apiRequest('/announcements', {
         method: 'POST',
-        body: JSON.stringify(data),
+        body: JSON.stringify({
+          title: data.title,
+          content: data.content,
+          targetAudience: data.targetRole,
+          createdBy: adminUser?.id || 'admin',
+          imageUrl: data.imageUrl || null,
+          linkUrl: data.linkUrl || null,
+          isPopup: data.isPopup,
+          priority: data.priority,
+          expiresAt: data.expiresAt || null,
+        }),
       });
     },
     onSuccess: () => {
       toast({ title: '공지사항 등록 완료' });
       setShowAnnouncementDialog(false);
-      setAnnouncementForm({ title: '', content: '', targetRole: 'all', priority: 'normal', expiresAt: '' });
+      setAnnouncementForm({ title: '', content: '', targetRole: 'all', priority: 'normal', expiresAt: '', imageUrl: '', linkUrl: '', isPopup: false });
       queryClient.invalidateQueries({ queryKey: ['/announcements'] });
     },
     onError: (error: Error) => {
       toast({ title: '등록 실패', description: error.message, variant: 'destructive' });
     },
   });
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const authHeaders = getAuthHeaders();
+      const response = await fetch('/api/admin/announcements/upload-image', {
+        method: 'POST',
+        headers: authHeaders,
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('이미지 업로드에 실패했습니다');
+      }
+
+      const result = await response.json();
+      setAnnouncementForm(prev => ({ ...prev, imageUrl: result.url }));
+      toast({ title: '이미지 업로드 완료' });
+    } catch (err: any) {
+      toast({ title: '이미지 업로드 실패', description: err.message, variant: 'destructive' });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
 
   const deleteAnnouncementMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -296,33 +346,49 @@ export default function NotificationsPage() {
     {
       key: 'id',
       header: 'ID',
-      width: 100,
+      width: 80,
       render: (value) => <span className="font-mono text-sm">ANN-{value}</span>,
     },
     {
       key: 'title',
       header: '제목',
-      width: 250,
-      render: (value) => <span className="font-medium">{value}</span>,
+      width: 200,
+      render: (value, row: Announcement) => (
+        <div className="flex items-center gap-2">
+          <span className="font-medium">{value}</span>
+          {row.imageUrl && <ImageIcon className="h-3 w-3 text-blue-500" />}
+        </div>
+      ),
     },
     {
-      key: 'targetRole',
+      key: 'targetAudience',
       header: '대상',
-      width: 100,
-      render: (value) => getTargetLabel(value),
+      width: 80,
+      render: (value, row: Announcement) => getTargetLabel(value || row.targetRole),
     },
     {
       key: 'priority',
       header: '우선순위',
-      width: 100,
+      width: 80,
       render: (value) => (
         <StatusBadge status={value === 'urgent' ? 'CANCELLED' : value === 'high' ? 'PENDING' : 'COMPLETED'} />
       ),
     },
     {
+      key: 'isPopup',
+      header: '팝업',
+      width: 70,
+      align: 'center',
+      render: (value) => (
+        <span className={cn("text-xs font-medium", value ? "text-blue-600" : "text-muted-foreground")}>
+          {value ? '팝업' : '-'}
+        </span>
+      ),
+    },
+    {
       key: 'isActive',
       header: '상태',
-      width: 80,
+      width: 70,
       align: 'center',
       render: (value) => (
         <StatusBadge status={value ? 'COMPLETED' : 'CANCELLED'} />
@@ -615,7 +681,7 @@ export default function NotificationsPage() {
       </Dialog>
 
       <Dialog open={showAnnouncementDialog} onOpenChange={setShowAnnouncementDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>공지사항 등록</DialogTitle>
           </DialogHeader>
@@ -680,11 +746,78 @@ export default function NotificationsPage() {
                 onChange={(e) => setAnnouncementForm(prev => ({ ...prev, expiresAt: e.target.value }))}
               />
             </div>
+
+            {/* 팝업/광고 설정 */}
+            <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
+              <h4 className="text-sm font-semibold flex items-center gap-2">
+                <ImageIcon className="h-4 w-4" />
+                팝업/광고 설정
+              </h4>
+
+              {/* 이미지 업로드 */}
+              <div className="space-y-2">
+                <Label>팝업 이미지 (선택)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    disabled={uploadingImage}
+                    className="flex-1"
+                  />
+                  {uploadingImage && <span className="text-sm text-muted-foreground">업로드 중...</span>}
+                </div>
+                {announcementForm.imageUrl && (
+                  <div className="relative mt-2">
+                    <img
+                      src={announcementForm.imageUrl}
+                      alt="미리보기"
+                      className="w-full max-h-48 object-cover rounded-md border"
+                    />
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="absolute top-2 right-2"
+                      onClick={() => setAnnouncementForm(prev => ({ ...prev, imageUrl: '' }))}
+                    >
+                      삭제
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* 링크 URL */}
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <LinkIcon className="h-3 w-3" />
+                  링크 URL (선택)
+                </Label>
+                <Input
+                  value={announcementForm.linkUrl}
+                  onChange={(e) => setAnnouncementForm(prev => ({ ...prev, linkUrl: e.target.value }))}
+                  placeholder="https://... 또는 앱 내 화면명"
+                />
+                <p className="text-xs text-muted-foreground">이미지 탭 시 이동할 링크입니다</p>
+              </div>
+
+              {/* 팝업 표시 여부 */}
+              <div className="flex items-center gap-3">
+                <Checkbox
+                  id="isPopup"
+                  checked={announcementForm.isPopup}
+                  onCheckedChange={(checked) => setAnnouncementForm(prev => ({ ...prev, isPopup: !!checked }))}
+                />
+                <Label htmlFor="isPopup" className="text-sm cursor-pointer">
+                  로그인 시 팝업으로 표시
+                </Label>
+              </div>
+            </div>
+
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setShowAnnouncementDialog(false)}>취소</Button>
               <Button
                 onClick={() => createAnnouncementMutation.mutate(announcementForm)}
-                disabled={!announcementForm.title || !announcementForm.content || createAnnouncementMutation.isPending}
+                disabled={!announcementForm.title || !announcementForm.content || createAnnouncementMutation.isPending || uploadingImage}
               >
                 {createAnnouncementMutation.isPending ? '등록 중...' : '등록'}
               </Button>
@@ -721,16 +854,40 @@ export default function NotificationsPage() {
                 </div>
               )}
               {'targetRole' in selectedItem && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-muted-foreground">대상</Label>
-                    <p>{getTargetLabel(selectedItem.targetRole)}</p>
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-muted-foreground">대상</Label>
+                      <p>{getTargetLabel((selectedItem as Announcement).targetAudience || selectedItem.targetRole)}</p>
+                    </div>
+                    <div>
+                      <Label className="text-muted-foreground">우선순위</Label>
+                      <p>{selectedItem.priority}</p>
+                    </div>
                   </div>
-                  <div>
-                    <Label className="text-muted-foreground">우선순위</Label>
-                    <p>{selectedItem.priority}</p>
-                  </div>
-                </div>
+                  {(selectedItem as Announcement).isPopup && (
+                    <div>
+                      <Label className="text-muted-foreground">팝업 표시</Label>
+                      <p className="text-blue-600 font-medium">팝업 활성화됨</p>
+                    </div>
+                  )}
+                  {(selectedItem as Announcement).imageUrl && (
+                    <div>
+                      <Label className="text-muted-foreground">팝업 이미지</Label>
+                      <img
+                        src={(selectedItem as Announcement).imageUrl!}
+                        alt="팝업 이미지"
+                        className="mt-1 w-full max-h-48 object-cover rounded-md border"
+                      />
+                    </div>
+                  )}
+                  {(selectedItem as Announcement).linkUrl && (
+                    <div>
+                      <Label className="text-muted-foreground">링크 URL</Label>
+                      <p className="text-sm text-blue-600 break-all">{(selectedItem as Announcement).linkUrl}</p>
+                    </div>
+                  )}
+                </>
               )}
               <div>
                 <Label className="text-muted-foreground">생성일</Label>

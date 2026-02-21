@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
 
@@ -59,6 +60,7 @@ export default function AdminDeductionListScreen({ navigation }: AdminDeductionL
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const queryClient = useQueryClient();
   const [selectedStatus, setSelectedStatus] = useState("pending");
 
@@ -250,7 +252,7 @@ export default function AdminDeductionListScreen({ navigation }: AdminDeductionL
           contentContainerStyle={{
             paddingHorizontal: Spacing.lg,
             paddingTop: Spacing.md,
-            paddingBottom: insets.bottom + Spacing.xl,
+            paddingBottom: tabBarHeight + Spacing.xl,
           }}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} />

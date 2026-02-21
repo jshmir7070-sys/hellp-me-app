@@ -79,7 +79,18 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
     enabled: !isHelper,
   });
 
-  const profile = isHelper ? helperProfile : requesterProfile;
+  // 요청자는 /api/requesters/business에 프로필 이미지/이름 등이 없으므로
+  // /api/auth/me에서 유저 프로필 정보를 별도로 가져옴
+  const { data: authMe, refetch: refetchAuthMe } = useQuery<{ user: UserProfile }>({
+    queryKey: ['/api/auth/me'],
+    enabled: !isHelper,
+  });
+
+  const profile = isHelper
+    ? helperProfile
+    : authMe?.user
+      ? { ...authMe.user, ...(requesterProfile || {}) }
+      : requesterProfile;
 
   const { data: team } = useQuery<Team>({
     queryKey: ['/api/helper/my-team'],
@@ -177,6 +188,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
         if (isHelper) {
           refetchHelper();
         } else {
+          refetchAuthMe();
           refetchRequester();
         }
         Alert.alert('완료', '프로필 사진이 변경되었습니다');
@@ -201,8 +213,12 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
       });
       if (res.ok) {
         await refreshUser();
-        if (isHelper) refetchHelper();
-        else refetchRequester();
+        if (isHelper) {
+          refetchHelper();
+        } else {
+          refetchAuthMe();
+          refetchRequester();
+        }
         Alert.alert('완료', '아바타가 변경되었습니다');
       } else {
         const data = await res.json();
@@ -266,9 +282,6 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
                 style={styles.avatarContainer}
               />
             )}
-            <View style={[styles.cameraIcon, { backgroundColor: primaryColor }]}>
-              <Icon name="camera-outline" size={14} color="#fff" />
-            </View>
           </View>
         </Pressable>
         <ThemedText style={[styles.userName, { color: theme.text }]}>
@@ -361,78 +374,28 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
             ) : (
               <MenuItem
                 icon="people-outline"
-                label="팀 생성하기"
-                description="팀을 만들어 함께 일해보세요"
+                label="팀 가입하기"
+                description="팀 코드를 입력하여 팀에 가입하세요"
                 theme={theme}
                 onPress={() => navigation.navigate('CreateTeam')}
               />
             )}
           </View>
 
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>정산</ThemedText>
-
-            <MenuItem
-              icon="card-outline"
-              label="정산 계좌"
-              description={profile?.bankName ? `${profile.bankName} ${profile.accountNumber?.slice(-4) || ''}` : '계좌를 등록해주세요'}
-              theme={theme}
-              onPress={() => navigation.navigate('PaymentSettings')}
-            />
-          </View>
-
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>이력</ThemedText>
-
-            <MenuItem
-              icon="document-text-outline"
-              label="수행 이력"
-              description="완료된 배송 업무를 확인하세요"
-              theme={theme}
-              onPress={() => navigation.navigate('HelperHistory')}
-            />
-          </View>
-
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>이의제기/사고</ThemedText>
-
-            <MenuItem
-              icon="warning-outline"
-              label="이의제기 접수"
-              description="정산 오류, 수량 차이 등 접수"
-              theme={theme}
-              onPress={() => navigation.navigate('HelperDisputeSubmit')}
-            />
-            <MenuItem
-              icon="list-outline"
-              label="이의제기 내역"
-              description="접수한 이의제기 현황 확인"
-              theme={theme}
-              onPress={() => navigation.navigate('HelperDisputeList')}
-            />
-            <MenuItem
-              icon="alert-circle-outline"
-              label="사고 내역"
-              description="접수된 화물사고 확인 및 응답"
-              theme={theme}
-              onPress={() => navigation.navigate('HelperIncidentList')}
-            />
-          </View>
-
         </>
       ) : (
         <>
           <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>사업자 정보</ThemedText>
+            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>협력업체</ThemedText>
 
             <MenuItem
-              icon="business-outline"
-              label="사업자정보 등록"
-              description={(requesterProfile as any)?.businessNumber ? `사업자번호: ${(requesterProfile as any).businessNumber}` : '세금계산서 발행을 위해 등록해주세요'}
+              icon="storefront-outline"
+              label="협력업체 등록"
+              description="사업자정보, 결제수단, 환불계좌 관리"
               theme={theme}
               badge={!(requesterProfile as any)?.businessNumber ? '미등록' : undefined}
               badgeColor="#EF4444"
-              onPress={() => navigation.navigate('BusinessRegistration')}
+              onPress={() => navigation.navigate('PartnerRegistration')}
             />
           </View>
 
@@ -445,25 +408,6 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
               description="헬퍼 출근 확인용 QR 코드"
               theme={theme}
               onPress={() => navigation.navigate('QRCheckin')}
-            />
-          </View>
-
-          <View style={styles.menuSection}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>결제</ThemedText>
-
-            <MenuItem
-              icon="card-outline"
-              label="결제 수단"
-              description="결제 카드 및 계좌를 관리하세요"
-              theme={theme}
-              onPress={() => navigation.navigate('PaymentSettings')}
-            />
-            <MenuItem
-              icon="refresh-outline"
-              label="환불 계좌"
-              description={profile?.bankName ? `${profile.bankName} ${profile.accountNumber?.slice(-4) || ''}` : '환불받을 계좌를 등록하세요'}
-              theme={theme}
-              onPress={() => navigation.navigate('RefundAccount')}
             />
           </View>
 

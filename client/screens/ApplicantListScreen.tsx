@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
 import { Icon } from "@/components/Icon";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -62,6 +63,7 @@ export default function ApplicantListScreen({ route, navigation }: Props) {
   const { orderId } = route.params as { orderId: number };
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
 
@@ -395,7 +397,7 @@ export default function ApplicantListScreen({ route, navigation }: Props) {
         ListEmptyComponent={isLoading ? null : ListEmptyComponent}
         contentContainerStyle={[
           styles.listContent,
-          { paddingBottom: insets.bottom + Spacing.xl }
+          { paddingBottom: tabBarHeight + Spacing.xl }
         ]}
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} />

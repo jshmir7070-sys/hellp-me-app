@@ -308,6 +308,211 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
     return unsubscribe;
   }, [navigation, isFocused, sysAlert, resetAllForms]);
 
+  // 이전 오더 불러오기
+  const [showImportModal, setShowImportModal] = useState(false);
+
+  const { data: previousOrders = [] } = useQuery<any[]>({
+    queryKey: ['/api/requester/orders'],
+  });
+
+  const recentOrders = useMemo(() => {
+    return (previousOrders || []).slice(0, 10);
+  }, [previousOrders]);
+
+  // deliveryArea → regionLarge/regionMedium/regionSmall 파싱 (다양한 형식 대응)
+  const parseDeliveryArea = useCallback((deliveryArea: string): { regionLarge: string; regionMedium: string; regionSmall: string } => {
+    const empty = { regionLarge: '', regionMedium: '', regionSmall: '' };
+    if (!deliveryArea) return empty;
+
+    // regionData에서 소분류 찾기 헬퍼
+    const findSmall = (large: string, medium: string, remaining: string): string => {
+      if (!remaining) return '';
+      const smallOptions = regionData[large]?.[medium] || [];
+      return smallOptions.find((s: string) => s === remaining) || remaining;
+    };
+
+    // 1) " > " 구분자가 있는 경우 (앱에서 생성한 정상 포맷: "대분류 > 중분류 > 소분류")
+    if (deliveryArea.includes(' > ')) {
+      const parts = deliveryArea.split(' > ');
+      return {
+        regionLarge: parts[0] || '',
+        regionMedium: parts[1] || '',
+        regionSmall: parts[2] || '',
+      };
+    }
+
+    // 2) 구분자 없는 경우 (시드 데이터 등) — regionData 키와 매칭 시도
+    const regionLargeKeys = Object.keys(regionData);
+
+    // 2-a) 정확히 대분류 키로 시작하는지 확인 (예: "서울특별시 강남구 역삼동")
+    for (const largeKey of regionLargeKeys) {
+      if (deliveryArea.startsWith(largeKey)) {
+        const rest = deliveryArea.slice(largeKey.length).trim();
+        if (!rest) return { regionLarge: largeKey, regionMedium: '', regionSmall: '' };
+        // rest에서 중분류 매칭
+        const mediumKeys = Object.keys(regionData[largeKey] || {});
+        for (const mk of mediumKeys) {
+          if (rest.startsWith(mk)) {
+            const smallPart = rest.slice(mk.length).trim();
+            return { regionLarge: largeKey, regionMedium: mk, regionSmall: findSmall(largeKey, mk, smallPart) };
+          }
+        }
+        // 정확 매칭 실패 시 rest 전체를 중분류로
+        return { regionLarge: largeKey, regionMedium: rest, regionSmall: '' };
+      }
+    }
+
+    // 2-b) 축약형 매칭 (예: "서울시 강남구 역삼동" → "서울특별시" + "강남구" + "역삼동")
+    const shortNameMap: Record<string, string> = {
+      '서울시': '서울특별시',
+      '서울': '서울특별시',
+      '경기': '경기도',
+      '인천시': '인천광역시',
+      '인천': '인천광역시',
+      '부산시': '부산광역시',
+      '부산': '부산광역시',
+      '대구시': '대구광역시',
+      '대구': '대구광역시',
+      '광주시': '광주광역시',
+      '광주': '광주광역시',
+      '대전시': '대전광역시',
+      '대전': '대전광역시',
+      '울산시': '울산광역시',
+      '울산': '울산광역시',
+      '세종시': '세종특별자치시',
+      '세종': '세종특별자치시',
+      '강원도': '강원특별자치도',
+      '강원': '강원특별자치도',
+      '전북': '전북특별자치도',
+      '전라북도': '전북특별자치도',
+      '제주도': '제주특별자치도',
+      '제주': '제주특별자치도',
+    };
+
+    for (const [shortName, fullName] of Object.entries(shortNameMap)) {
+      if (deliveryArea.startsWith(shortName + ' ') || deliveryArea === shortName) {
+        const rest = deliveryArea.slice(shortName.length).trim();
+        if (!rest) return { regionLarge: fullName, regionMedium: '', regionSmall: '' };
+
+        const mediumKeys = Object.keys(regionData[fullName] || {});
+        // 중분류 키로 시작하는지 확인 (예: rest="강남구 역삼동" → "강남구" 매칭, 나머지="역삼동")
+        for (const mk of mediumKeys) {
+          if (rest.startsWith(mk)) {
+            const smallPart = rest.slice(mk.length).trim();
+            return { regionLarge: fullName, regionMedium: mk, regionSmall: findSmall(fullName, mk, smallPart) };
+          }
+        }
+        // 정확 매칭 안 되면 rest에서 중분류 부분 포함 매칭
+        const partialMatch = mediumKeys.find(k => rest.includes(k));
+        if (partialMatch) {
+          const idx = rest.indexOf(partialMatch);
+          const smallPart = rest.slice(idx + partialMatch.length).trim();
+          return { regionLarge: fullName, regionMedium: partialMatch, regionSmall: findSmall(fullName, partialMatch, smallPart) };
+        }
+        return { regionLarge: fullName, regionMedium: rest, regionSmall: '' };
+      }
+    }
+
+    // 3) 어떤 매칭도 안 되면 전체를 대분류에 넣음
+    return { regionLarge: deliveryArea, regionMedium: '', regionSmall: '' };
+  }, []);
+
+  const handleImportOrder = useCallback((order: any) => {
+    const { regionLarge, regionMedium, regionSmall } = parseDeliveryArea(order.deliveryArea || '');
+    const category = order.courierCategory || 'parcel';
+
+    if (category === 'parcel') {
+      setActiveTab('택배사');
+      setCourierForm({
+        company: order.companyName || '',
+        avgQuantity: String(order.averageQuantity || ''),
+        unitPrice: String(order.pricePerUnit || ''),
+        vehicleType: order.vehicleType || '',
+        managerContact: order.contactPhone || '',
+        campAddress: order.campAddress || '',
+        campAddressDetail: order.campAddressDetail || '',
+        deliveryGuide: order.deliveryGuide || '',
+        regionLarge,
+        regionMedium,
+        regionSmall,
+        requestDate: '',
+        requestDateEnd: '',
+        arrivalHour: '',
+        arrivalMinute: '',
+        isUrgent: false,
+        agreeToSubmit: false,
+      });
+    } else if (category === 'other') {
+      setActiveTab('기타택배');
+      setOtherCourierForm({
+        companyName: order.companyName || '',
+        boxCount: String(order.averageQuantity || ''),
+        unitPrice: String(order.pricePerUnit || ''),
+        vehicleType: order.vehicleType || '',
+        contact: order.contactPhone || '',
+        campAddress: order.campAddress || '',
+        campAddressDetail: order.campAddressDetail || '',
+        deliveryGuide: order.deliveryGuide || '',
+        isPerBox: order.pricingType === 'per_box',
+        isPerDrop: order.pricingType === 'per_drop',
+        isDayDelivery: false,
+        isNightDelivery: false,
+        regionLarge,
+        regionMedium,
+        regionSmall,
+        requestDate: '',
+        requestDateEnd: '',
+        arrivalHour: '',
+        arrivalMinute: '',
+        isUrgent: false,
+        agreeToSubmit: false,
+      });
+    } else {
+      // cold
+      setActiveTab('냉탑전용');
+      setColdTruckForm({
+        company: order.companyName || '',
+        vehicleType: order.vehicleType || '',
+        contact: order.contactPhone || '',
+        loadingPoint: order.campAddress || '',
+        loadingPointDetail: order.campAddressDetail || '',
+        freight: String(order.freight || ''),
+        recommendedFee: String(order.recommendedFee || '200000'),
+        waypoints: order.waypoints?.length ? order.waypoints : [''],
+        hasTachometer: order.hasTachometer || false,
+        hasPartition: order.hasPartition || false,
+        deliveryGuide: order.deliveryGuide || '',
+        requestDate: '',
+        requestDateEnd: '',
+        arrivalHour: '',
+        arrivalMinute: '',
+        isUrgent: false,
+        agreeToSubmit: false,
+      });
+    }
+
+    setCurrentStep(1);
+    setShowImportModal(false);
+  }, []);
+
+  const getCategoryLabel = (category: string) => {
+    switch (category) {
+      case 'parcel': return '택배사';
+      case 'other': return '기타택배';
+      case 'cold': return '냉탑전용';
+      default: return '택배사';
+    }
+  };
+
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'parcel': return '#3B82F6';
+      case 'other': return '#F59E0B';
+      case 'cold': return '#06B6D4';
+      default: return '#3B82F6';
+    }
+  };
+
   // API 쿼리
   const { data: couriers } = useQuery({
     queryKey: ['/api/meta/couriers'],
@@ -418,7 +623,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
         carrierCode: courierForm.company,
         courierCompany: courierForm.company,
         courierCategory: "parcel",
-        deliveryArea: `${courierForm.regionLarge} > ${courierForm.regionMedium}`,
+        deliveryArea: [courierForm.regionLarge, courierForm.regionMedium, courierForm.regionSmall].filter(Boolean).join(' > '),
         campAddress: courierForm.campAddress,
         campAddressDetail: courierForm.campAddressDetail,
         averageQuantity: courierForm.avgQuantity,
@@ -439,7 +644,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
         companyName: otherCourierForm.companyName,
         courierCategory: "other",
         pricingType: otherCourierForm.isPerDrop ? "per_drop" : "per_box",
-        deliveryArea: `${otherCourierForm.regionLarge} > ${otherCourierForm.regionMedium}`,
+        deliveryArea: [otherCourierForm.regionLarge, otherCourierForm.regionMedium, otherCourierForm.regionSmall].filter(Boolean).join(' > '),
         campAddress: otherCourierForm.campAddress,
         campAddressDetail: otherCourierForm.campAddressDetail,
         averageQuantity: otherCourierForm.boxCount,
@@ -601,6 +806,7 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
             courierOptions={courierOptions}
             coldTruckOptions={coldTruckOptions}
             onOpenSelectModal={openSelectModal}
+            onImportPreviousOrder={() => setShowImportModal(true)}
           />
         );
       case 2:
@@ -738,6 +944,81 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
           </View>
         </View>
       </Modal>
+
+      {/* 이전 오더 불러오기 Modal */}
+      <Modal visible={showImportModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor: theme.backgroundDefault }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+                <Icon name="time-outline" size={20} color={BrandColors.requester} />
+                <ThemedText style={[styles.modalTitle, { color: theme.text }]}>
+                  이전 이력 불러오기
+                </ThemedText>
+              </View>
+              <Pressable onPress={() => setShowImportModal(false)}>
+                <Icon name="close-outline" size={24} color={theme.text} />
+              </Pressable>
+            </View>
+            {recentOrders.length === 0 ? (
+              <View style={{ padding: Spacing.xl, alignItems: 'center' }}>
+                <Icon name="document-outline" size={48} color={Colors.light.tabIconDefault} />
+                <ThemedText style={{ color: Colors.light.tabIconDefault, marginTop: Spacing.md, fontSize: 14 }}>
+                  이전 오더 이력이 없습니다
+                </ThemedText>
+              </View>
+            ) : (
+              <FlatList
+                data={recentOrders}
+                keyExtractor={(item) => String(item.id)}
+                renderItem={({ item }) => {
+                  const catLabel = getCategoryLabel(item.courierCategory);
+                  const catColor = getCategoryColor(item.courierCategory);
+                  const createdDate = item.createdAt
+                    ? new Date(item.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
+                    : '';
+                  return (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.importOrderItem,
+                        { borderBottomColor: isDark ? '#374151' : '#F3F4F6', opacity: pressed ? 0.7 : 1 },
+                      ]}
+                      onPress={() => handleImportOrder(item)}
+                    >
+                      <View style={{ flex: 1, gap: 4 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
+                          <ThemedText style={{ fontSize: 15, fontWeight: '600', color: theme.text }}>
+                            {item.companyName || '이름 없음'}
+                          </ThemedText>
+                          <View style={{
+                            paddingHorizontal: 6,
+                            paddingVertical: 2,
+                            borderRadius: 4,
+                            backgroundColor: catColor + '20',
+                          }}>
+                            <ThemedText style={{ fontSize: 11, fontWeight: '600', color: catColor }}>
+                              {catLabel}
+                            </ThemedText>
+                          </View>
+                        </View>
+                        <ThemedText style={{ fontSize: 13, color: Colors.light.tabIconDefault }} numberOfLines={1}>
+                          {item.deliveryArea || item.campAddress || '지역 미설정'}
+                        </ThemedText>
+                      </View>
+                      <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                        <ThemedText style={{ fontSize: 12, color: Colors.light.tabIconDefault }}>
+                          {createdDate}
+                        </ThemedText>
+                        <Icon name="chevron-forward-outline" size={16} color={Colors.light.tabIconDefault} />
+                      </View>
+                    </Pressable>
+                  );
+                }}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -834,5 +1115,13 @@ const styles = StyleSheet.create({
   },
   modalOptionText: {
     ...Typography.body,
+  },
+  importOrderItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderBottomWidth: 1,
   },
 });

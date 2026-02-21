@@ -16,6 +16,7 @@ import { Icon } from "@/components/Icon";
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CommonActions } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { getToken } from '@/utils/secure-token-storage';
@@ -51,6 +52,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
   const { width: screenWidth } = useWindowDimensions();
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const [step, setStep] = useState<PaymentStep>('contract');
 
   // 개별 동의 체크박스 (7개)
@@ -1062,7 +1064,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerHeight + Spacing.md, paddingBottom: insets.bottom + Spacing['2xl'] },
+          { paddingTop: headerHeight + Spacing.md, paddingBottom: tabBarHeight + Spacing['2xl'] },
         ]}
         showsVerticalScrollIndicator={false}
       >

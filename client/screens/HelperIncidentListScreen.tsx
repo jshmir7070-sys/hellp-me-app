@@ -57,15 +57,23 @@ const HELPER_STATUS_LABELS: Record<string, string> = {
   dispute: '이의제기',
 };
 
-export default function HelperIncidentListScreen() {
+export default function HelperIncidentListScreen({ route }: any) {
   const { theme, isDark } = useTheme();
   const colors = theme;
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const headerHeight = useHeaderHeight();
+  const filterOrderId = route?.params?.orderId;
 
-  const { data: incidents, isLoading, refetch, isRefetching } = useQuery<Incident[]>({
+  const { data: rawIncidents, isLoading, refetch, isRefetching } = useQuery<Incident[]>({
     queryKey: ['/api/helper/incidents'],
   });
+
+  // orderId 파라미터가 있으면 해당 오더만 필터
+  const incidents = React.useMemo(() => {
+    if (!rawIncidents) return [];
+    if (!filterOrderId) return rawIncidents;
+    return rawIncidents.filter(i => i.orderId === Number(filterOrderId));
+  }, [rawIncidents, filterOrderId]);
 
   const renderItem = ({ item }: { item: Incident }) => {
     const statusInfo = STATUS_LABELS[item.status] || { label: item.status, color: BrandColors.neutral };
@@ -136,7 +144,7 @@ export default function HelperIncidentListScreen() {
   return (
     <View style={[styles.container, { backgroundColor: colors.backgroundRoot }]}>
       <FlatList
-        data={incidents || []}
+        data={incidents}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderItem}
         contentContainerStyle={[styles.listContent, { paddingTop: headerHeight + Spacing.md }]}
@@ -147,10 +155,10 @@ export default function HelperIncidentListScreen() {
           <View style={styles.emptyContainer}>
             <Feather name="check-circle" size={48} color={BrandColors.success} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>
-              사고 내역이 없습니다
+              {filterOrderId ? '해당 오더 사고 내역 없음' : '사고 내역이 없습니다'}
             </Text>
             <Text style={[styles.emptyText, { color: colors.tabIconDefault }]}>
-              접수된 사고가 없습니다
+              {filterOrderId ? `오더 #${filterOrderId}에 접수된 사고가 없습니다` : '접수된 사고가 없습니다'}
             </Text>
           </View>
         }

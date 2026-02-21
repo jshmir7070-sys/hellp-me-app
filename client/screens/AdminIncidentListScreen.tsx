@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
 
@@ -92,6 +93,7 @@ export default function AdminIncidentListScreen({ navigation }: AdminIncidentLis
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const [selectedStatus, setSelectedStatus] = useState("all");
 
   const { data: incidents, isLoading, refetch, isRefetching } = useQuery<Incident[]>({
@@ -236,7 +238,7 @@ export default function AdminIncidentListScreen({ navigation }: AdminIncidentLis
           contentContainerStyle={{
             paddingHorizontal: Spacing.lg,
             paddingTop: Spacing.md,
-            paddingBottom: insets.bottom + Spacing.xl,
+            paddingBottom: tabBarHeight + Spacing.xl,
           }}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} />

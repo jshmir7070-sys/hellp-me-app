@@ -11,7 +11,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { apiRequest } from "@/lib/query-client";
 import { Spacing, BorderRadius, BrandColors, Typography } from "@/constants/theme";
-import type { OrderCardDTO } from "@/adapters/orderCardAdapter";
+import type { OrderCardDTO, CourierCategory } from "@/adapters/orderCardAdapter";
 
 interface ClosingSummary {
   orderId: string;
@@ -126,10 +126,41 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
     }
   };
 
-  const displayTitle = data.title || data.courierName || data.companyName || "오더";
-  const displayAddress = data.campAddress || data.pickupAddress || data.deliveryAddress || 
-    data.addressShort || data.deliveryArea || 
+  const displayTitle = data.companyName || data.courierName || data.title || "오더";
+  const displayAddress = data.campAddress || data.pickupAddress || data.deliveryAddress ||
+    data.addressShort || data.deliveryArea ||
     (data.region1 ? `${data.region1} ${data.region2 || ""}`.trim() : "위치 미정");
+
+  // 카테고리 기반 라벨
+  const courierCategory: CourierCategory = data.courierCategory || order?.courierCategory || "parcel";
+  const isCold = courierCategory === "cold";
+  const isOther = courierCategory === "other";
+  const unitPriceType = data.unitPriceType || data.pricingType;
+
+  const getPriceLabel = () => {
+    if (isCold) return "운임";
+    if (isOther && unitPriceType) {
+      if (unitPriceType === "per_drop") return "착지당";
+      if (unitPriceType === "per_box") return "박스당";
+    }
+    return "단가";
+  };
+
+  const getQuantityLabel = () => {
+    if (isCold) return "착수";
+    if (isOther && unitPriceType) {
+      if (unitPriceType === "per_drop") return "착수";
+      if (unitPriceType === "per_box") return "박스";
+    }
+    return "물량";
+  };
+
+  const getQuantityValue = () => {
+    const quantityUnit = isCold ? "착수" : isOther ? (unitPriceType === "per_drop" ? "착수" : "박스") : "건";
+    if (order?.averageQuantity) return `${order.averageQuantity} ${quantityUnit}`;
+    if (order?.expectedCount) return `${order.expectedCount}${quantityUnit}`;
+    return "-";
+  };
 
   const canApply = isHelper && 
     !order.hasApplied && 
@@ -173,7 +204,7 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
               <View style={styles.titleSection}>
                 {order.isUrgent ? (
                   <View style={styles.urgentBadge}>
-                    <Icon name="warning-outline" size={14} color="#fff" />
+                    <Icon name="warning-outline" size={12} color="#fff" />
                     <ThemedText style={styles.urgentText}>긴급</ThemedText>
                   </View>
                 ) : null}
@@ -184,81 +215,60 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
 
               <View style={styles.infoGrid}>
                 <View style={styles.infoRow}>
-                  <View style={styles.infoItem}>
-                    <Icon name="calendar-outline" size={16} color={theme.tabIconDefault} />
-                    <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>
-                      입차일
-                    </ThemedText>
-                    <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-                      {formatDate(order.startAt)}
-                      {order.endAt && order.endAt !== order.startAt ? ` ~ ${formatDate(order.endAt)}` : ""}
-                    </ThemedText>
-                  </View>
+                  <Icon name="calendar-outline" size={14} color={theme.tabIconDefault} />
+                  <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>입차일</ThemedText>
+                  <ThemedText style={[styles.infoValue, { color: theme.text }]}>
+                    {formatDate(order.startAt)}
+                    {order.endAt && order.endAt !== order.startAt ? ` ~ ${formatDate(order.endAt)}` : ""}
+                  </ThemedText>
                 </View>
 
                 <View style={styles.infoRow}>
-                  <View style={styles.infoItem}>
-                    <Icon name="car-outline" size={16} color={theme.tabIconDefault} />
-                    <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>
-                      차종
-                    </ThemedText>
-                    <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-                      {data.vehicleType || "-"}
-                    </ThemedText>
-                  </View>
+                  <Icon name="car-outline" size={14} color={theme.tabIconDefault} />
+                  <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>차종</ThemedText>
+                  <ThemedText style={[styles.infoValue, { color: theme.text }]}>
+                    {data.vehicleType || "-"}
+                  </ThemedText>
                 </View>
 
                 <View style={styles.infoRow}>
-                  <View style={styles.infoItem}>
-                    <Icon name="cash-outline" size={16} color={theme.tabIconDefault} />
-                    <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>
-                      단가
-                    </ThemedText>
-                    <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-                      {formatCurrency(order.unitPrice)}
-                      {order.includesVat !== false ? " (VAT포함)" : " (VAT별도)"}
-                    </ThemedText>
-                  </View>
+                  <Icon name="cash-outline" size={14} color={theme.tabIconDefault} />
+                  <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>
+                    {getPriceLabel()}
+                  </ThemedText>
+                  <ThemedText style={[styles.infoValue, { color: theme.text }]}>
+                    {formatCurrency(order.unitPrice)}
+                    {order.includesVat !== false ? " (VAT포함)" : " (VAT별도)"}
+                  </ThemedText>
                 </View>
 
                 <View style={styles.infoRow}>
-                  <View style={styles.infoItem}>
-                    <Icon name="cube-outline" size={16} color={theme.tabIconDefault} />
-                    <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>
-                      물량
-                    </ThemedText>
-                    <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-                      {order.averageQuantity ? `배송 ${order.averageQuantity}` : 
-                       order.expectedCount ? `${order.expectedCount}건` : "-"}
-                    </ThemedText>
-                  </View>
+                  <Icon name="cube-outline" size={14} color={theme.tabIconDefault} />
+                  <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>
+                    {getQuantityLabel()}
+                  </ThemedText>
+                  <ThemedText style={[styles.infoValue, { color: theme.text }]}>
+                    {getQuantityValue()}
+                  </ThemedText>
                 </View>
 
                 {order.applicantCount !== undefined ? (
                   <View style={styles.infoRow}>
-                    <View style={styles.infoItem}>
-                      <Icon name="people-outline" size={16} color={theme.tabIconDefault} />
-                      <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>
-                        지원자
-                      </ThemedText>
-                      <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-                        {order.applicantCount}명 / 3명
-                      </ThemedText>
-                    </View>
+                    <Icon name="people-outline" size={14} color={theme.tabIconDefault} />
+                    <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>지원자</ThemedText>
+                    <ThemedText style={[styles.infoValue, { color: theme.text }]}>
+                      {order.applicantCount}명 / 3명
+                    </ThemedText>
                   </View>
                 ) : null}
 
                 {order.requesterName ? (
                   <View style={styles.infoRow}>
-                    <View style={styles.infoItem}>
-                      <Icon name="person-outline" size={16} color={theme.tabIconDefault} />
-                      <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>
-                        요청자
-                      </ThemedText>
-                      <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-                        {order.requesterName}
-                      </ThemedText>
-                    </View>
+                    <Icon name="person-outline" size={14} color={theme.tabIconDefault} />
+                    <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>요청자</ThemedText>
+                    <ThemedText style={[styles.infoValue, { color: theme.text }]}>
+                      {order.requesterName}
+                    </ThemedText>
                   </View>
                 ) : null}
               </View>
@@ -266,9 +276,9 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
 
             <Card style={styles.addressCard}>
               <View style={styles.addressHeader}>
-                <Icon name="location-outline" size={18} color={BrandColors.helper} />
+                <Icon name="location-outline" size={16} color={BrandColors.helper} />
                 <ThemedText style={[styles.addressTitle, { color: theme.text }]}>
-                  캠프 및 터미널주소
+                  캠프 및 터미널
                 </ThemedText>
               </View>
               {data.campName ? (
@@ -653,7 +663,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
   },
   closeButton: {
@@ -664,56 +674,53 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.lg,
   },
   infoCard: {
-    padding: Spacing.lg,
-    marginBottom: Spacing.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   titleSection: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.md,
     gap: Spacing.sm,
   },
   urgentBadge: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#EF4444",
-    paddingHorizontal: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
     paddingVertical: 2,
     borderRadius: BorderRadius.sm,
-    gap: 4,
+    gap: 2,
   },
   urgentText: {
     color: "#fff",
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
   },
   orderTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "700",
     flex: 1,
   },
   infoGrid: {
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   infoRow: {
-    flexDirection: "row",
-  },
-  infoItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
   },
   infoLabel: {
-    fontSize: 14,
-    minWidth: 50,
+    fontSize: 13,
+    minWidth: 45,
   },
   infoValue: {
-    fontSize: 16,
-    fontWeight: "500",
+    fontSize: 14,
+    fontWeight: "600",
   },
   addressCard: {
-    padding: Spacing.lg,
-    marginBottom: Spacing.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   addressHeader: {
     flexDirection: "row",
@@ -722,22 +729,22 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.sm,
   },
   addressTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: "600",
   },
   campNameText: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: "600",
     marginBottom: Spacing.xs,
   },
   addressText: {
-    fontSize: 16,
-    lineHeight: 22,
+    fontSize: 13,
+    lineHeight: 20,
     marginBottom: Spacing.md,
   },
   mapCard: {
-    padding: Spacing.lg,
-    marginBottom: Spacing.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   mapPreview: {
     height: 120,
@@ -771,7 +778,7 @@ const styles = StyleSheet.create({
   },
   mapOverlayText: {
     color: "#fff",
-    fontSize: 14,
+    fontSize: 12,
   },
   expandedImageOverlay: {
     flex: 1,
@@ -802,7 +809,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   guideLinkText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "500",
   },
   addressActions: {
@@ -812,29 +819,29 @@ const styles = StyleSheet.create({
   addressButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.sm,
     gap: Spacing.xs,
   },
   addressButtonText: {
-    fontSize: 14,
+    fontSize: 12,
   },
   descriptionCard: {
-    padding: Spacing.lg,
-    marginBottom: Spacing.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   descriptionTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: "600",
     marginBottom: Spacing.sm,
   },
   descriptionText: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
   },
   requirementsTitle: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600",
     marginTop: Spacing.md,
     marginBottom: Spacing.xs,
@@ -844,28 +851,28 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
   },
   applyButton: {
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
     alignItems: "center",
   },
   applyButtonText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
   },
   requesterFooter: {
     flexDirection: "row",
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    gap: Spacing.md,
+    paddingTop: Spacing.sm,
+    gap: Spacing.sm,
   },
   requesterButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
   },
   editButton: {},
   deleteButton: {
@@ -873,21 +880,21 @@ const styles = StyleSheet.create({
   },
   requesterButtonText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "600",
   },
   closingReportCard: {
-    padding: Spacing.lg,
-    marginBottom: Spacing.md,
+    padding: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   closingReportHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm,
   },
   closingReportTitle: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: "600",
   },
   closingLoadingContainer: {
@@ -895,10 +902,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: Spacing.sm,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md,
   },
   closingLoadingText: {
-    fontSize: 14,
+    fontSize: 13,
   },
   closingCountsRow: {
     flexDirection: "row",
@@ -913,11 +920,11 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
   },
   closingCountValue: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: "700",
   },
   closingCountLabel: {
-    fontSize: 12,
+    fontSize: 11,
   },
   closingMemoSection: {
     marginBottom: Spacing.md,
@@ -927,8 +934,8 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
   },
   closingMemoText: {
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
   },
   closingImagesSection: {
     marginBottom: Spacing.md,
@@ -959,7 +966,7 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   closingEmptyText: {
-    fontSize: 14,
+    fontSize: 13,
     textAlign: "center" as const,
   },
 });

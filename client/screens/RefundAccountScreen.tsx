@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { View, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Platform, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
@@ -32,6 +33,7 @@ const BANKS = [
 export default function RefundAccountScreen() {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
   const queryClient = useQueryClient();
   const primaryColor = BrandColors.requester;
@@ -94,7 +96,7 @@ export default function RefundAccountScreen() {
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.xl,
-        paddingBottom: insets.bottom + Spacing.xl,
+        paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
     >

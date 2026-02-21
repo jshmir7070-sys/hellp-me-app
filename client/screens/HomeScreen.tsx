@@ -1,9 +1,11 @@
-import React, { useState, useMemo, useRef } from "react";
-import { View, FlatList, Pressable, StyleSheet, RefreshControl, ActivityIndicator, ScrollView, Dimensions, Modal, Alert, Platform, Image } from "react-native";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { View, FlatList, Pressable, StyleSheet, RefreshControl, ActivityIndicator, ScrollView, Dimensions, Modal, Alert, Platform, Image, Linking } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { LinearGradient } from "expo-linear-gradient";
+import { Image as ExpoImage } from "expo-image";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Icon } from "@/components/Icon";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -29,10 +31,13 @@ interface Applicant {
   helperNickname?: string | null;
   helperPhone?: string;
   category?: string;
+  teamName?: string | null;
+  completedJobs?: number;
   reviewCount: number;
   averageRating: number | null;
   status: string;
   profileImageUrl?: string | null;
+  profileImage?: string | null;
   appliedAt?: string;
   message?: string;
   expectedArrival?: string;
@@ -82,6 +87,17 @@ type HomeScreenProps = {
   navigation: NativeStackNavigationProp<any>;
 };
 
+interface PopupAnnouncement {
+  id: number;
+  title: string;
+  content: string;
+  imageUrl?: string | null;
+  linkUrl?: string | null;
+  isPopup: boolean;
+  priority?: string;
+  createdAt: string;
+}
+
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function HomeScreen({ navigation }: HomeScreenProps) {
@@ -96,6 +112,11 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const [selectedOrder, setSelectedOrder] = useState<OrderCardDTO | null>(null);
   const [selectedRawOrder, setSelectedRawOrder] = useState<any>(null);
   const [modalVisible, setModalVisible] = useState(false);
+
+  // 팝업 공지 상태
+  const [popupVisible, setPopupVisible] = useState(false);
+  const [currentPopupIndex, setCurrentPopupIndex] = useState(0);
+  const [dismissedToday, setDismissedToday] = useState<Record<number, boolean>>({});
 
   const isHelper = user?.role === 'helper';
   const primaryColor = isHelper ? BrandColors.helper : BrandColors.requester;
@@ -155,6 +176,87 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     queryKey: ['/api/contracts?limit=3'],
     enabled: !isHelper,
   });
+
+  // ===== 팝업 공지사항 =====
+  const { data: popupAnnouncements = [] } = useQuery<PopupAnnouncement[]>({
+    queryKey: ['/api/announcements/popups'],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const getTodayDate = useCallback(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
+
+  // AsyncStorage에서 오늘 dismiss한 공지 ID 로드
+  useEffect(() => {
+    const loadDismissed = async () => {
+      try {
+        const key = `popup_dismissed_${getTodayDate()}`;
+        const stored = await AsyncStorage.getItem(key);
+        if (stored) {
+          setDismissedToday(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.error("Failed to load dismissed popups:", e);
+      }
+    };
+    loadDismissed();
+  }, [getTodayDate]);
+
+  // 표시할 팝업이 있으면 모달 표시
+  const visiblePopups = useMemo(() => {
+    return popupAnnouncements.filter(a => !dismissedToday[a.id]);
+  }, [popupAnnouncements, dismissedToday]);
+
+  useEffect(() => {
+    if (visiblePopups.length > 0 && !popupVisible) {
+      setCurrentPopupIndex(0);
+      setPopupVisible(true);
+    }
+  }, [visiblePopups.length]);
+
+  const currentPopup: PopupAnnouncement | null = visiblePopups.length > 0 && currentPopupIndex < visiblePopups.length
+    ? visiblePopups[currentPopupIndex]
+    : null;
+
+  const handleDismissToday = useCallback(async (announcementId: number) => {
+    try {
+      const key = `popup_dismissed_${getTodayDate()}`;
+      const newDismissed = { ...dismissedToday, [announcementId]: true };
+      setDismissedToday(newDismissed);
+      await AsyncStorage.setItem(key, JSON.stringify(newDismissed));
+    } catch (e) {
+      console.error("Failed to save dismissed popup:", e);
+    }
+    // 다음 팝업으로 이동 or 닫기
+    if (currentPopupIndex < visiblePopups.length - 1) {
+      setCurrentPopupIndex(prev => prev + 1);
+    } else {
+      setPopupVisible(false);
+    }
+  }, [dismissedToday, getTodayDate, currentPopupIndex, visiblePopups.length]);
+
+  const handleClosePopup = useCallback(() => {
+    // 다음 팝업으로 이동 or 닫기
+    if (currentPopupIndex < visiblePopups.length - 1) {
+      setCurrentPopupIndex(prev => prev + 1);
+    } else {
+      setPopupVisible(false);
+    }
+  }, [currentPopupIndex, visiblePopups.length]);
+
+  const handlePopupImagePress = useCallback((popup: PopupAnnouncement) => {
+    if (popup.linkUrl) {
+      if (popup.linkUrl.startsWith('http')) {
+        Linking.openURL(popup.linkUrl);
+      } else {
+        navigation.navigate(popup.linkUrl as any);
+      }
+      setPopupVisible(false);
+    }
+  }, [navigation]);
+  // ===== 팝업 공지사항 끝 =====
 
   const formatCurrency = (amount?: number) => {
     if (!amount) return '0원';
@@ -335,6 +437,84 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           }
         } : undefined}
       />
+
+      {/* 팝업 공지사항 모달 */}
+      {currentPopup ? (
+        <Modal
+          visible={popupVisible}
+          transparent
+          animationType="fade"
+          statusBarTranslucent
+          onRequestClose={handleClosePopup}
+        >
+          <View style={popupStyles.overlay}>
+            <View style={popupStyles.container}>
+              {currentPopup.imageUrl ? (
+                <Pressable
+                  onPress={() => handlePopupImagePress(currentPopup)}
+                  style={popupStyles.imageWrap}
+                >
+                  <ExpoImage
+                    source={{ uri: `${getApiUrl()}${currentPopup.imageUrl}` }}
+                    style={popupStyles.image}
+                    contentFit="cover"
+                    transition={300}
+                  />
+                  {currentPopup.linkUrl ? (
+                    <View style={popupStyles.linkBadge}>
+                      <Icon name="open-outline" size={14} color="#fff" />
+                      <ThemedText style={popupStyles.linkBadgeText}>자세히 보기</ThemedText>
+                    </View>
+                  ) : null}
+                </Pressable>
+              ) : (
+                <Pressable
+                  onPress={() => handlePopupImagePress(currentPopup)}
+                  style={popupStyles.textOnlyWrap}
+                >
+                  <View style={[popupStyles.textOnlyIcon, { backgroundColor: primaryColor + '15' }]}>
+                    <Icon name="megaphone-outline" size={32} color={primaryColor} />
+                  </View>
+                  <ThemedText style={popupStyles.textOnlyTitle}>{currentPopup.title}</ThemedText>
+                  <ThemedText style={popupStyles.textOnlyContent}>{currentPopup.content}</ThemedText>
+                  {currentPopup.linkUrl ? (
+                    <View style={[popupStyles.linkRow, { backgroundColor: primaryColor + '10' }]}>
+                      <Icon name="open-outline" size={14} color={primaryColor} />
+                      <ThemedText style={[popupStyles.linkRowText, { color: primaryColor }]}>자세히 보기</ThemedText>
+                    </View>
+                  ) : null}
+                </Pressable>
+              )}
+
+              {/* 팝업 카운터 */}
+              {visiblePopups.length > 1 ? (
+                <View style={popupStyles.counter}>
+                  <ThemedText style={popupStyles.counterText}>
+                    {currentPopupIndex + 1} / {visiblePopups.length}
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              {/* 하단 버튼 */}
+              <View style={popupStyles.footer}>
+                <Pressable
+                  onPress={() => handleDismissToday(currentPopup.id)}
+                  style={popupStyles.dismissBtn}
+                >
+                  <Icon name="time-outline" size={14} color="#999" />
+                  <ThemedText style={popupStyles.dismissText}>오늘 하루 안보기</ThemedText>
+                </Pressable>
+                <Pressable
+                  onPress={handleClosePopup}
+                  style={popupStyles.closeBtn}
+                >
+                  <ThemedText style={popupStyles.closeText}>닫기</ThemedText>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
     </>
   );
 }
@@ -841,44 +1021,83 @@ function RequesterDashboard({
         </Card>
       )}
 
-      {/* 헬퍼 지원자 카드 - 매칭중 상태일 때 */}
+      {/* 헬퍼 지원자 카드 - 등록중/매칭중 상태일 때 최대 3명 세로 정렬 */}
       {applicants.length > 0 && currentOrder && (
-        ['MATCHING', 'OPEN'].includes((currentOrder.status || '').toUpperCase())
+        ['REGISTERED', 'MATCHING', 'OPEN'].includes((currentOrder.status || '').toUpperCase())
       ) ? (
         <View style={styles.helperCardsContainer}>
           <View style={styles.helperCardsHeader}>
             <ThemedText style={[styles.helperCardsTitle, { color: theme.text }]}>
               지원한 헬퍼 ({applicants.length}명)
             </ThemedText>
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {applicants.map((applicant: Applicant) => (
-              <Pressable
-                key={applicant.helperId}
-                style={styles.helperApplicantCard}
-                onPress={() => handleApplicantPress(applicant, currentOrder.id)}
-              >
-                <View style={styles.helperApplicantAvatar}>
-                  <Icon name="person" size={24} color={BrandColors.helper} />
-                </View>
-                <ThemedText
-                  style={[styles.helperApplicantName, { color: theme.text }]}
-                  numberOfLines={1}
-                >
-                  {applicant.helperNickname || applicant.helperName}
-                </ThemedText>
-                <View style={styles.helperApplicantRating}>
-                  <Icon name="star" size={12} color={BrandColors.warning} />
-                  <ThemedText style={[styles.helperApplicantRatingText, { color: theme.text }]}>
-                    {applicant.averageRating ? applicant.averageRating.toFixed(1) : '-'}
-                  </ThemedText>
-                </View>
-                <ThemedText style={[styles.helperApplicantReviewCount, { color: theme.tabIconDefault }]}>
-                  리뷰 {applicant.reviewCount}개
+            {applicants.length > 3 ? (
+              <Pressable onPress={() => navigation.navigate('ApplicantList', { orderId: currentOrder.id })}>
+                <ThemedText style={[styles.helperCardsMore, { color: primaryColor }]}>
+                  전체보기
                 </ThemedText>
               </Pressable>
-            ))}
-          </ScrollView>
+            ) : null}
+          </View>
+          <View style={styles.helperCardsList}>
+            {applicants.slice(0, 3).map((applicant: Applicant) => {
+              const imgUrl = applicant.profileImageUrl || applicant.profileImage;
+              const displayName = applicant.helperNickname || applicant.helperName || '헬퍼';
+              const rating = applicant.averageRating || 0;
+              return (
+                <Pressable
+                  key={applicant.helperId}
+                  style={({ pressed }) => [
+                    styles.helperCompactCard,
+                    { opacity: pressed ? 0.85 : 1 },
+                  ]}
+                  onPress={() => handleApplicantPress(applicant, currentOrder.id)}
+                >
+                  {/* 아바타 */}
+                  <View style={styles.helperCompactAvatar}>
+                    {imgUrl ? (
+                      imgUrl.startsWith('avatar:') ? (
+                        <Avatar uri={imgUrl} size={44} isHelper={true} />
+                      ) : (
+                        <Image
+                          source={{ uri: imgUrl.startsWith('/') ? `${getApiUrl()}${imgUrl}` : imgUrl }}
+                          style={styles.helperCompactAvatarImage}
+                        />
+                      )
+                    ) : (
+                      <Icon name="person" size={22} color={BrandColors.helper} />
+                    )}
+                  </View>
+                  {/* 정보 */}
+                  <View style={styles.helperCompactInfo}>
+                    <View style={styles.helperCompactNameRow}>
+                      <ThemedText style={[styles.helperCompactName, { color: theme.text }]} numberOfLines={1}>
+                        {displayName}
+                      </ThemedText>
+                      {applicant.teamName ? (
+                        <View style={styles.helperCompactTeamBadge}>
+                          <ThemedText style={styles.helperCompactTeamText}>{applicant.teamName}</ThemedText>
+                        </View>
+                      ) : null}
+                    </View>
+                    <View style={styles.helperCompactStatsRow}>
+                      <Icon name="star" size={12} color={BrandColors.warning} />
+                      <ThemedText style={[styles.helperCompactStatText, { color: theme.text }]}>
+                        {rating.toFixed(1)}
+                      </ThemedText>
+                      <View style={styles.helperCompactDivider} />
+                      <ThemedText style={[styles.helperCompactStatText, { color: theme.tabIconDefault }]}>
+                        수행 {applicant.completedJobs || 0}건
+                      </ThemedText>
+                      <View style={styles.helperCompactDivider} />
+                      <ThemedText style={[styles.helperCompactStatText, { color: theme.tabIconDefault }]}>
+                        리뷰 {applicant.reviewCount || 0}
+                      </ThemedText>
+                    </View>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       ) : null}
 
@@ -921,18 +1140,16 @@ function RequesterDashboard({
                   <View style={styles.fbProfileSection}>
                     <View style={styles.fbAvatarWrapper}>
                       <View style={styles.fbAvatarCircle}>
-                        {selectedApplicant.profileImageUrl ? (
-                          selectedApplicant.profileImageUrl.startsWith('avatar:') ? (
-                            <Avatar uri={selectedApplicant.profileImageUrl} size={80} isHelper={true} />
-                          ) : (
-                            <Image
-                              source={{ uri: `${getApiUrl()}${selectedApplicant.profileImageUrl}` }}
-                              style={styles.fbAvatarImage}
-                            />
-                          )
-                        ) : (
-                          <Icon name="person" size={50} color={BrandColors.helper} />
-                        )}
+                        <Avatar
+                          uri={(() => {
+                            const img = selectedApplicant.profileImageUrl || selectedApplicant.profileImage;
+                            if (!img) return undefined;
+                            if (img.startsWith('avatar:')) return img;
+                            return img.startsWith('http') ? img : `${getApiUrl()}${img}`;
+                          })()}
+                          size={80}
+                          isHelper={true}
+                        />
                       </View>
                     </View>
 
@@ -1538,6 +1755,73 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
   },
+  helperCardsList: {
+    gap: Spacing.xs,
+  },
+  helperCompactCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
+    gap: Spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  helperCompactAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: BrandColors.helperLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  helperCompactAvatarImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  helperCompactInfo: {
+    flex: 1,
+  },
+  helperCompactNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginBottom: 2,
+  },
+  helperCompactName: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  helperCompactTeamBadge: {
+    backgroundColor: BrandColors.helperLight,
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 1,
+    borderRadius: BorderRadius.xs,
+  },
+  helperCompactTeamText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: BrandColors.helper,
+  },
+  helperCompactStatsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  helperCompactStatText: {
+    fontSize: 11,
+  },
+  helperCompactDivider: {
+    width: 1,
+    height: 10,
+    backgroundColor: '#E5E7EB',
+  },
   helperApplicantCard: {
     padding: Spacing.lg,
     alignItems: 'center',
@@ -1911,5 +2195,127 @@ const styles = StyleSheet.create({
   },
   fbMiniRatingText: {
     fontSize: 11,
+  },
+});
+
+const popupStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+  },
+  container: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: '#fff',
+    borderRadius: BorderRadius.xl,
+    overflow: 'hidden',
+  },
+  imageWrap: {
+    width: '100%',
+    aspectRatio: 9 / 14,
+    position: 'relative',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
+  },
+  linkBadge: {
+    position: 'absolute',
+    bottom: Spacing.md,
+    right: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.full,
+  },
+  linkBadgeText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  textOnlyWrap: {
+    padding: Spacing['2xl'],
+    alignItems: 'center',
+    minHeight: 240,
+    justifyContent: 'center',
+  },
+  textOnlyIcon: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  textOnlyTitle: {
+    ...Typography.body,
+    fontWeight: '700',
+    fontSize: 18,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
+    color: '#1A1A1A',
+  },
+  textOnlyContent: {
+    ...Typography.body,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  linkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: Spacing.lg,
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+  },
+  linkRowText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  counter: {
+    alignItems: 'center',
+    paddingVertical: Spacing.xs,
+  },
+  counterText: {
+    fontSize: 12,
+    color: '#999',
+  },
+  footer: {
+    flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: '#F0F0F0',
+  },
+  dismissBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: Spacing.lg,
+    borderRightWidth: 1,
+    borderRightColor: '#F0F0F0',
+  },
+  dismissText: {
+    fontSize: 13,
+    color: '#999',
+  },
+  closeBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.lg,
+  },
+  closeText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
   },
 });

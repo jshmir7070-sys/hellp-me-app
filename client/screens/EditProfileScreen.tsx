@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { View, StyleSheet, TextInput, Pressable, ActivityIndicator, Alert, Image, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as ImagePicker from 'expo-image-picker';
@@ -24,6 +25,7 @@ type EditProfileScreenProps = {
 export default function EditProfileScreen({ navigation }: EditProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
   const { user, refreshUser } = useAuth();
 
@@ -263,7 +265,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: insets.bottom + Spacing.xl,
+        paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
     >

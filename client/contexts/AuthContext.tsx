@@ -16,9 +16,11 @@ interface User {
   id: string;
   email: string;
   name: string;
+  nickname?: string;
   role: UserRole;
   phoneNumber?: string;
   profileImageUrl?: string;
+  teamName?: string;
   onboardingStatus?: 'pending' | 'submitted' | 'approved' | 'rejected';
   helperVerified?: boolean;
 }

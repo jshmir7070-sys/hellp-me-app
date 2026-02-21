@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
 
@@ -64,11 +65,12 @@ const getStatusColor = (status: string) => {
 
 const getDisputeTypeLabel = (type: string) => {
   const map: Record<string, string> = {
-    settlement_error: "정산 금액 오류",
+    settlement_error: "정산오류",
     invoice_error: "세금계산서 오류",
-    contract_dispute: "계약 조건 분쟁",
-    service_complaint: "서비스 불만",
-    delay: "일정 관련",
+    contract_dispute: "계약조건분쟁",
+    service_complaint: "서비스불만",
+    delay: "일정관련",
+    no_show: "노쇼",
     other: "기타",
   };
   return map[type] || type;
@@ -78,6 +80,7 @@ export default function AdminDisputeListScreen({ navigation }: AdminDisputeListS
   const { theme } = useTheme();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const [selectedStatus, setSelectedStatus] = useState("all");
 
   const { data: disputes, isLoading, refetch, isRefetching } = useQuery<Dispute[]>({
@@ -196,7 +199,7 @@ export default function AdminDisputeListScreen({ navigation }: AdminDisputeListS
           contentContainerStyle={{
             paddingHorizontal: Spacing.lg,
             paddingTop: Spacing.md,
-            paddingBottom: insets.bottom + Spacing.xl,
+            paddingBottom: tabBarHeight + Spacing.xl,
           }}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} />

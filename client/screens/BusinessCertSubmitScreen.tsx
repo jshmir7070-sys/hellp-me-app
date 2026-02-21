@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, Pressable, ScrollView, ActivityIndicator, Alert, Platform, Image, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
@@ -37,6 +38,7 @@ interface DocumentData {
 export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSubmitScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
   const queryClient = useQueryClient();
 
@@ -209,7 +211,7 @@ export default function BusinessCertSubmitScreen({ navigation }: BusinessCertSub
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.md,
-        paddingBottom: insets.bottom + 120,
+        paddingBottom: tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
       }}
     >

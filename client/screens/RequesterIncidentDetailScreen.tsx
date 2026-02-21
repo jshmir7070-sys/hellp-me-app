@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, BrandColors, Spacing, BorderRadius, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
@@ -97,6 +98,7 @@ export default function RequesterIncidentDetailScreen() {
   const { theme } = useTheme();
   const route = useRoute<RouteProp<{ params: { incidentId: number } }, 'params'>>();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const insets = useSafeAreaInsets();
   const { incidentId } = route.params;
 
@@ -143,7 +145,7 @@ export default function RequesterIncidentDetailScreen() {
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: headerHeight + Spacing.md, paddingBottom: insets.bottom + Spacing.xl }
+        { paddingTop: headerHeight + Spacing.md, paddingBottom: tabBarHeight + Spacing.xl }
       ]}
     >
       <Card style={styles.card}>

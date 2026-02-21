@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, TextInput, Alert, Platform, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
@@ -42,6 +43,7 @@ const PLATE_LETTERS = ['아', '바', '사', '자'];
 export default function HelperOnboardingScreen({ navigation }: HelperOnboardingScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
+  const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
   const { user, refreshUser } = useAuth();
 
@@ -388,7 +390,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
           styles.content, 
           { 
             paddingTop: headerHeight + Spacing.md,
-            paddingBottom: insets.bottom + 100,
+            paddingBottom: tabBarHeight + Spacing.xl,
           }
         ]}
         showsVerticalScrollIndicator={true}
@@ -596,7 +598,7 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
 
       </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.md, backgroundColor: theme.backgroundRoot }]}>
+      <View style={[styles.bottomBar, { paddingBottom: tabBarHeight + Spacing.md, backgroundColor: theme.backgroundRoot }]}>
         <Pressable
           style={[
             styles.submitButton,

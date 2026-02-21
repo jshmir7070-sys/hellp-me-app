@@ -43,13 +43,19 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
 
   const inProgressOrders = React.useMemo(() => {
     return orders
-      .filter(order => ['in_progress', 'scheduled'].includes(order.status?.toLowerCase() || ''))
+      .filter(order => ['in_progress', 'scheduled', 'checked_in'].includes(order.status?.toLowerCase() || ''))
       .map(order => adaptHelperMyOrder(order));
   }, [orders]);
 
   const closingSubmittedOrders = React.useMemo(() => {
     return orders
       .filter(order => order.status?.toLowerCase() === 'closing_submitted')
+      .map(order => adaptHelperMyOrder(order));
+  }, [orders]);
+
+  const closingCompletedOrders = React.useMemo(() => {
+    return orders
+      .filter(order => ['final_amount_confirmed', 'balance_paid', 'settlement_paid', 'closed', 'completed'].includes(order.status?.toLowerCase() || ''))
       .map(order => adaptHelperMyOrder(order));
   }, [orders]);
 
@@ -97,10 +103,18 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
             </View>
             <View style={styles.summaryItem}>
               <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>
+                마감 제출
+              </ThemedText>
+              <ThemedText style={[styles.summaryValue, { color: BrandColors.helper }]}>
+                {closingSubmittedOrders.length}건
+              </ThemedText>
+            </View>
+            <View style={styles.summaryItem}>
+              <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>
                 마감 완료
               </ThemedText>
               <ThemedText style={[styles.summaryValue, { color: BrandColors.success }]}>
-                {closingSubmittedOrders.length}건
+                {closingCompletedOrders.length}건
               </ThemedText>
             </View>
           </View>
@@ -129,22 +143,40 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
       {closingSubmittedOrders.length > 0 && (
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
-            <View style={[styles.statusDot, { backgroundColor: BrandColors.success }]} />
+            <View style={[styles.statusDot, { backgroundColor: BrandColors.helper }]} />
             <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
-              마감 (요청자 확인 대기)
+              마감 제출 (요청자 확인 대기)
             </ThemedText>
           </View>
           {closingSubmittedOrders.map((order) => (
             <OrderCard
               key={order.orderId}
-              data={{ ...order, statusLabel: '마감', statusColor: BrandColors.success }}
+              data={order}
               context="helper_my_orders"
             />
           ))}
         </View>
       )}
 
-      {inProgressOrders.length === 0 && closingSubmittedOrders.length === 0 && (
+      {closingCompletedOrders.length > 0 && (
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <View style={[styles.statusDot, { backgroundColor: BrandColors.success }]} />
+            <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
+              마감 완료
+            </ThemedText>
+          </View>
+          {closingCompletedOrders.map((order) => (
+            <OrderCard
+              key={order.orderId}
+              data={order}
+              context="helper_my_orders"
+            />
+          ))}
+        </View>
+      )}
+
+      {inProgressOrders.length === 0 && closingSubmittedOrders.length === 0 && closingCompletedOrders.length === 0 && (
         <Card style={styles.emptyCard}>
           <View style={[styles.emptyIcon, { backgroundColor: BrandColors.helperLight }]}>
             <Icon name="checkmark-circle-outline" size={32} color={BrandColors.helper} />
