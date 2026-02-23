@@ -12778,6 +12778,9 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
           description: incidentReports.description,
           deductionAmount: incidentReports.deductionAmount,
           status: incidentReports.status,
+          helperStatus: incidentReports.helperStatus,
+          helperActionAt: incidentReports.helperActionAt,
+          helperResponseDeadline: incidentReports.helperResponseDeadline,
           createdAt: incidentReports.createdAt,
         })
         .from(incidentReports)
@@ -12798,6 +12801,9 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         amount: inc.deductionAmount || 0,
         reason: inc.description || '',
         status: inc.status || 'pending',
+        helperStatus: inc.helperStatus || null,
+        helperActionAt: inc.helperActionAt || null,
+        helperResponseDeadline: inc.helperResponseDeadline || null,
         createdAt: inc.createdAt,
       }));
 
@@ -12811,12 +12817,21 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
   // POST /api/admin/incidents - 사고 등록
   app.post("/api/admin/incidents", adminAuth, requirePermission("orders.edit"), async (req: AuthenticatedRequest, res) => {
     try {
-      const { orderId, type, amount, reason, images, helperResponseHours = 48 } = req.body;
+      const { orderId, type, amount, reason, images, helperResponseHours } = req.body;
       const adminId = req.user?.id;
 
-      // 헬퍼 응답 기한 계산 (기본 48시간)
+      // 대응 시간: 요청값 > system_settings > 기본 48시간
+      let responseHours = 48;
+      if (helperResponseHours) {
+        responseHours = Number(helperResponseHours);
+      } else {
+        const setting = await storage.getSystemSetting('incident_response_hours');
+        if (setting?.settingValue) {
+          responseHours = Number(setting.settingValue) || 48;
+        }
+      }
       const helperResponseDeadline = new Date();
-      helperResponseDeadline.setHours(helperResponseDeadline.getHours() + helperResponseHours);
+      helperResponseDeadline.setHours(helperResponseDeadline.getHours() + responseHours);
 
       const [incident] = await db.insert(incidentReports).values({
         orderId,

@@ -1,5 +1,6 @@
 import React, { useState, useLayoutEffect } from "react";
-import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, Linking, Image, Modal } from "react-native";
+import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, Linking, Image } from "react-native";
+import { ZoomableImageModal } from "@/components/ZoomableImageModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
@@ -10,6 +11,7 @@ import * as Clipboard from "expo-clipboard";
 import { useTheme } from "@/hooks/useTheme";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAuthImage } from "@/hooks/useAuthImage";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { OrderCard } from "@/components/order/OrderCard";
@@ -98,6 +100,8 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
   const queryClient = useQueryClient();
   const [mapModalVisible, setMapModalVisible] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
+  const [mapLoadError, setMapLoadError] = useState(false);
+  const { getImageUrl } = useAuthImage();
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
@@ -105,7 +109,8 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
 
   const resolveUrl = (url?: string | null) => {
     if (!url) return '';
-    return url.startsWith('/') ? `${getApiUrl()}${url}` : url;
+    // useAuthImage의 getImageUrl 사용 (인증 토큰 자동 추가)
+    return getImageUrl(url);
   };
 
   const isHelper = user?.role === 'helper';
@@ -559,12 +564,13 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
             <Icon name="map-outline" size={16} color={theme.tabIconDefault} />
             <ThemedText style={[styles.detailLabel, { color: theme.tabIconDefault }]}>배송지역지도</ThemedText>
           </View>
-          {(order.regionMapUrl || order.mapImageUrl) ? (
+          {(order.regionMapUrl || order.mapImageUrl) && !mapLoadError ? (
             <Pressable onPress={() => setMapModalVisible(true)}>
               <Image
                 source={{ uri: resolveUrl(order.regionMapUrl || order.mapImageUrl) }}
                 style={styles.mapPreview}
                 resizeMode="cover"
+                onError={() => setMapLoadError(true)}
               />
               <View style={styles.mapOverlay}>
                 <Icon name="arrow-expand" size={20} color="#FFFFFF" />
@@ -575,7 +581,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
             <View style={styles.mapEmpty}>
               <Icon name="image-outline" size={32} color={theme.tabIconDefault} />
               <ThemedText style={[styles.mapEmptyText, { color: theme.tabIconDefault }]}>
-                배송지도 없음
+                {mapLoadError ? '이미지 로드 실패' : '배송지도 없음'}
               </ThemedText>
             </View>
           )}
@@ -785,33 +791,11 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
         )}
       </View>
 
-      <Modal
+      <ZoomableImageModal
         visible={mapModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setMapModalVisible(false)}
-      >
-        <Pressable 
-          style={styles.modalOverlay}
-          onPress={() => setMapModalVisible(false)}
-        >
-          <View style={[styles.modalContent, { width: contentWidth - Spacing['2xl'] * 2, height: contentWidth - Spacing['2xl'] * 2 }]}>
-            {(order?.regionMapUrl || order?.mapImageUrl) ? (
-              <Image
-                source={{ uri: resolveUrl(order.regionMapUrl || order.mapImageUrl) }}
-                style={styles.modalMapImage}
-                resizeMode="contain"
-              />
-            ) : null}
-            <Pressable
-              style={styles.modalCloseButton}
-              onPress={() => setMapModalVisible(false)}
-            >
-              <Icon name="close-outline" size={24} color="#FFFFFF" />
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
+        imageUri={(order?.regionMapUrl || order?.mapImageUrl) ? resolveUrl(order.regionMapUrl || order.mapImageUrl) : null}
+        onClose={() => setMapModalVisible(false)}
+      />
 
       {/* 요청자 오더 수정 모달 (단가/날짜만 변경) */}
       <EditOrderModal

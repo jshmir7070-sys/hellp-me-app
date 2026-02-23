@@ -11,7 +11,7 @@ export interface ClosingData {
   etcCount: number;
   unitPrice: number;
   etcPricePerUnit: number;
-  extraCosts: Array<{ code?: string; name?: string; amount: number; memo?: string }>;
+  extraCosts: Array<{ code?: string; name?: string; amount?: number; unitPrice?: number; quantity?: number; memo?: string }>;
 }
 
 export interface SettlementResult {
@@ -60,10 +60,13 @@ export function calculateSettlement(data: ClosingData, depositRate: number = 10)
   const unitPrice = data.unitPrice || 0;
   const etcPricePerUnit = data.etcPricePerUnit != null ? data.etcPricePerUnit : 1800;
 
-  // 기타비용 합계
+  // 기타비용 합계 (amount 우선, 없으면 unitPrice × quantity fallback)
   let extraCostsTotal = 0;
   if (data.extraCosts && Array.isArray(data.extraCosts)) {
-    extraCostsTotal = data.extraCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+    extraCostsTotal = data.extraCosts.reduce((sum, c) => {
+      const amt = c.amount || ((c.unitPrice || 0) * (c.quantity || 0)) || 0;
+      return sum + amt;
+    }, 0);
   }
 
   // 금액 계산
@@ -130,7 +133,7 @@ export function calculateHelperPayout(
  * DB 마감 보고서에서 ClosingData 추출
  */
 export function parseClosingReport(closingReport: any, order: any): ClosingData {
-  let extraCosts: Array<{ code?: string; name?: string; amount: number; memo?: string }> = [];
+  let extraCosts: ClosingData['extraCosts'] = [];
 
   if (closingReport.extraCostsJson) {
     try {

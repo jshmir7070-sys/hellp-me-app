@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,6 +32,7 @@ import {
   Image as ImageIcon,
   Eye,
   ExternalLink,
+  Timer,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -188,6 +189,54 @@ function formatOrderNumber(orderNumber: string | null | undefined, orderId: numb
     return orderNumber;
   }
   return `#${orderId}`;
+}
+
+// ============ 대응 타이머 컴포넌트 ============
+
+function IncidentTimer({ deadline }: { deadline: string }) {
+  const [remaining, setRemaining] = useState('');
+  const [isOverdue, setIsOverdue] = useState(false);
+
+  useEffect(() => {
+    const update = () => {
+      const now = new Date().getTime();
+      const deadlineTime = new Date(deadline).getTime();
+      const diff = deadlineTime - now;
+
+      if (diff <= 0) {
+        // 기한 초과
+        const overMs = Math.abs(diff);
+        const overHours = Math.floor(overMs / (1000 * 60 * 60));
+        const overMins = Math.floor((overMs % (1000 * 60 * 60)) / (1000 * 60));
+        setRemaining(`-${overHours}시간 ${overMins}분`);
+        setIsOverdue(true);
+      } else {
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const secs = Math.floor((diff % (1000 * 60)) / 1000);
+        if (hours > 0) {
+          setRemaining(`${hours}시간 ${mins}분`);
+        } else {
+          setRemaining(`${mins}분 ${secs}초`);
+        }
+        setIsOverdue(false);
+      }
+    };
+
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [deadline]);
+
+  return (
+    <div className={cn(
+      'flex items-center gap-1 text-xs font-medium',
+      isOverdue ? 'text-red-600' : 'text-orange-600'
+    )}>
+      <Timer className="w-3 h-3" />
+      <span>{remaining}</span>
+    </div>
+  );
 }
 
 // ============ 메인 컴포넌트 ============
@@ -596,6 +645,37 @@ export default function IncidentsPageV2() {
           {STATUS_LABELS[value] || value}
         </Badge>
       ),
+    },
+    {
+      key: 'helperStatus',
+      header: '헬퍼대응',
+      width: 90,
+      render: (value: string | null) => {
+        if (!value) return <span className="text-xs text-orange-500 font-medium">미응답</span>;
+        return (
+          <Badge className={cn(
+            'text-xs',
+            value === 'confirmed' || value === 'recovered' || value === 'redelivered' ? 'bg-green-100 text-green-700' :
+            value === 'dispute' ? 'bg-red-100 text-red-700' :
+            'bg-blue-100 text-blue-700'
+          )}>
+            {HELPER_STATUS_LABELS[value] || value}
+          </Badge>
+        );
+      },
+    },
+    {
+      key: 'helperResponseDeadline' as any,
+      header: '대응시간',
+      width: 110,
+      render: (_value: any, row: Incident) => {
+        // 이미 대응 완료했거나 종료된 건은 표시 안 함
+        if (row.helperStatus) return <span className="text-xs text-green-600">대응완료</span>;
+        const completedStatuses = ['resolved', 'closed', 'rejected', 'completed'];
+        if (completedStatuses.includes(row.status)) return <span className="text-xs text-gray-400">종료</span>;
+        if (!row.helperResponseDeadline) return <span className="text-xs text-gray-400">-</span>;
+        return <IncidentTimer deadline={row.helperResponseDeadline} />;
+      },
     },
     {
       key: 'createdAt',
@@ -1422,13 +1502,21 @@ export default function IncidentsPageV2() {
                         <div>
                           <p className="text-xs text-muted-foreground">응답 기한</p>
                           <p className="font-medium">{displayIncident.helperResponseDeadline ? new Date(displayIncident.helperResponseDeadline).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'}</p>
+                          {displayIncident.helperResponseDeadline && !displayIncident.helperStatus && (
+                            <div className="mt-1">
+                              <IncidentTimer deadline={displayIncident.helperResponseDeadline} />
+                            </div>
+                          )}
                         </div>
-                        {displayIncident.helperNote && (
-                          <div className="col-span-2">
-                            <p className="text-xs text-muted-foreground">헬퍼 메모</p>
-                            <p className="text-sm mt-1">{displayIncident.helperNote}</p>
-                          </div>
-                        )}
+                        <div>
+                          <p className="text-xs text-muted-foreground">응답 시간</p>
+                          <p className="font-medium">
+                            {displayIncident.helperActionAt
+                              ? new Date(displayIncident.helperActionAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
+                              : <span className="text-orange-500">미응답</span>
+                            }
+                          </p>
+                        </div>
                         <div>
                           <p className="text-xs text-muted-foreground">차감 적용</p>
                           <span className={cn(
@@ -1438,6 +1526,12 @@ export default function IncidentsPageV2() {
                             {displayIncident.helperDeductionApplied ? '차감됨' : '미적용'}
                           </span>
                         </div>
+                        {displayIncident.helperNote && (
+                          <div className="col-span-2">
+                            <p className="text-xs text-muted-foreground">헬퍼 메모</p>
+                            <p className="text-sm mt-1 bg-white rounded p-2 border">{displayIncident.helperNote}</p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   Alert,
   Image,
 } from 'react-native';
+import { ZoomableImageModal } from '@/components/ZoomableImageModal';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { useRoute, RouteProp } from '@react-navigation/native';
@@ -39,6 +40,7 @@ interface IncidentDetail {
   helperStatus: string | null;
   helperActionAt: string | null;
   helperNote: string | null;
+  helperResponseDeadline: string | null;
   createdAt: string;
   resolvedAt: string | null;
   trackingNumber: string | null;
@@ -164,6 +166,9 @@ export default function HelperIncidentDetailScreen() {
   const [note, setNote] = useState('');
   const [evidencePhotos, setEvidencePhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [timerText, setTimerText] = useState('');
+  const [timerOverdue, setTimerOverdue] = useState(false);
+  const [selectedEvidence, setSelectedEvidence] = useState<string | null>(null);
 
   const { data: incident, isLoading } = useQuery<IncidentDetail>({
     queryKey: ['/api/helper/incidents', incidentId],
@@ -187,6 +192,41 @@ export default function HelperIncidentDetailScreen() {
       Alert.alert('오류', error.message || '대응 전송에 실패했습니다');
     },
   });
+
+  // 대응 타이머 (사고접수 시간부터 적용)
+  useEffect(() => {
+    if (!incident?.helperResponseDeadline || incident?.helperStatus) return;
+    const completedStatuses = ['resolved', 'closed', 'rejected', 'completed'];
+    if (completedStatuses.includes(incident.status)) return;
+
+    const update = () => {
+      const now = new Date().getTime();
+      const deadlineTime = new Date(incident.helperResponseDeadline!).getTime();
+      const diff = deadlineTime - now;
+
+      if (diff <= 0) {
+        const overMs = Math.abs(diff);
+        const overHours = Math.floor(overMs / (1000 * 60 * 60));
+        const overMins = Math.floor((overMs % (1000 * 60 * 60)) / (1000 * 60));
+        setTimerText(`기한 초과 ${overHours}시간 ${overMins}분`);
+        setTimerOverdue(true);
+      } else {
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const secs = Math.floor((diff % (1000 * 60)) / 1000);
+        if (hours > 0) {
+          setTimerText(`${hours}시간 ${mins}분 ${secs}초 남음`);
+        } else {
+          setTimerText(`${mins}분 ${secs}초 남음`);
+        }
+        setTimerOverdue(false);
+      }
+    };
+
+    update();
+    const interval = setInterval(update, 1000);
+    return () => clearInterval(interval);
+  }, [incident?.helperResponseDeadline, incident?.helperStatus, incident?.status]);
 
   const evidenceUploadMutation = useMutation({
     mutationFn: async () => {
@@ -305,6 +345,7 @@ export default function HelperIncidentDetailScreen() {
   const typeLabel = INCIDENT_TYPE_LABELS[incident.incidentType] || incident.incidentType;
 
   return (
+    <>
     <ScrollView
       style={[styles.container, { backgroundColor: colors.backgroundRoot }]}
       contentContainerStyle={[styles.content, {
@@ -396,6 +437,55 @@ export default function HelperIncidentDetailScreen() {
         ) : null}
       </View>
 
+      {/* 대응 타이머 */}
+      {incident.helperResponseDeadline && !incident.helperStatus && !['resolved', 'closed', 'rejected', 'completed'].includes(incident.status) && (
+        <View style={[styles.card, {
+          backgroundColor: timerOverdue ? '#FEF2F2' : '#FFF7ED',
+          borderWidth: 1,
+          borderColor: timerOverdue ? '#FECACA' : '#FED7AA',
+        }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Feather name="clock" size={20} color={timerOverdue ? '#DC2626' : '#EA580C'} />
+            <Text style={{ fontSize: 15, fontWeight: '700', color: timerOverdue ? '#DC2626' : '#EA580C' }}>
+              대응 기한
+            </Text>
+          </View>
+          <Text style={{ fontSize: 24, fontWeight: '800', color: timerOverdue ? '#DC2626' : '#EA580C', textAlign: 'center', marginVertical: 8 }}>
+            {timerText}
+          </Text>
+          <Text style={{ fontSize: 12, color: timerOverdue ? '#991B1B' : '#9A3412', textAlign: 'center' }}>
+            접수일: {new Date(incident.createdAt).toLocaleString('ko-KR')}
+          </Text>
+          <Text style={{ fontSize: 12, color: timerOverdue ? '#991B1B' : '#9A3412', textAlign: 'center', marginTop: 2 }}>
+            기한: {new Date(incident.helperResponseDeadline).toLocaleString('ko-KR')}
+          </Text>
+          {timerOverdue && (
+            <View style={{ backgroundColor: '#DC2626', borderRadius: 6, paddingVertical: 6, paddingHorizontal: 12, marginTop: 8, alignSelf: 'center' }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '600' }}>
+                ⚠️ 기한이 초과되었습니다. 즉시 대응해주세요.
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* 대응 완료 표시 */}
+      {incident.helperStatus && (
+        <View style={[styles.card, { backgroundColor: '#F0FDF4', borderWidth: 1, borderColor: '#BBF7D0' }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Feather name="check-circle" size={20} color="#16A34A" />
+            <Text style={{ fontSize: 14, fontWeight: '600', color: '#16A34A' }}>
+              대응 완료: {HELPER_ACTION_LABELS[incident.helperStatus] || incident.helperStatus}
+            </Text>
+          </View>
+          {incident.helperActionAt && (
+            <Text style={{ fontSize: 12, color: '#15803D', marginTop: 4, marginLeft: 28 }}>
+              {new Date(incident.helperActionAt).toLocaleString('ko-KR')}
+            </Text>
+          )}
+        </View>
+      )}
+
       {/* 오더 정보 */}
       {incident.order ? (
         <View style={[styles.card, { backgroundColor: colors.backgroundSecondary }]}>
@@ -477,16 +567,24 @@ export default function HelperIncidentDetailScreen() {
             증빙 자료 ({incident.evidence.length}건)
           </Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {incident.evidence.map((ev) => (
-              <View key={ev.id} style={styles.evidenceItem}>
-                <Image source={{ uri: getEvidenceImageUrl(ev.fileUrl) }} style={styles.evidenceImage} />
-                {ev.description ? (
-                  <Text style={[styles.evidenceDesc, { color: colors.tabIconDefault }]}>
-                    {ev.description}
-                  </Text>
-                ) : null}
-              </View>
-            ))}
+            {incident.evidence.map((ev) => {
+              const imageUrl = getEvidenceImageUrl(ev.fileUrl);
+              return (
+                <Pressable key={ev.id} style={styles.evidenceItem} onPress={() => setSelectedEvidence(imageUrl)}>
+                  <Image
+                    source={{ uri: imageUrl }}
+                    style={styles.evidenceImage}
+                    resizeMode="cover"
+                    onError={() => console.warn('Evidence image load failed:', ev.fileUrl)}
+                  />
+                  {ev.description ? (
+                    <Text style={[styles.evidenceDesc, { color: colors.tabIconDefault }]}>
+                      {ev.description}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              );
+            })}
           </ScrollView>
         </View>
       ) : null}
@@ -721,6 +819,13 @@ export default function HelperIncidentDetailScreen() {
         </View>
       ) : null}
     </ScrollView>
+
+      <ZoomableImageModal
+        visible={!!selectedEvidence}
+        imageUri={selectedEvidence}
+        onClose={() => setSelectedEvidence(null)}
+      />
+    </>
   );
 }
 

@@ -1229,8 +1229,8 @@ export async function registerHelperRoutes(ctx: RouteContext): Promise<void> {
 
   // workproof는 관리자, 업로드한 헬퍼만 접근 가능 (DB에서 소유권 검증)
   // 마감 이미지 서빙 (closing reports)
-  // closing 이미지는 디스크에 저장되므로 fs로 직접 서빙 (PII 아님, 공개 서빙)
-  app.get("/uploads/closing/:filename", requireAuth, async (req: AuthenticatedRequest, res) => {
+  // closing 이미지는 공개 접근 허용 (index.ts의 express.static과 일관성 유지)
+  app.get("/uploads/closing/:filename", async (req: any, res) => {
     try {
       const filename = req.params.filename;
       if (!filename || filename.includes("..") || filename.includes("/")) {
@@ -1295,40 +1295,24 @@ export async function registerHelperRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  // orders 이미지는 관리자 또는 해당 오더의 의뢰인만 접근 가능 (DB에서 소유권 검증)
-  app.get("/uploads/orders/:filename", requireAuth, async (req: AuthenticatedRequest, res) => {
+  // orders 이미지는 공개 접근 허용 (index.ts의 express.static과 일관성 유지)
+  // 배송지역지도 등 헬퍼/요청자 모두 접근 필요
+  app.get("/uploads/orders/:filename", async (req: any, res) => {
     try {
-      const userId = req.user!.id;
-      const user = req.user!;
-
-      const isAdmin = user.isHqStaff === true;
-      const requestedUrl = `/uploads/orders/${req.params.filename}`;
-
-      if (!isAdmin) {
-        // DB에서 해당 URL을 가진 오더 조회하여 소유권 확인
-        const { pool } = await import("../db");
-        const result = await pool.query(
-          `SELECT requester_id FROM orders WHERE image_url = $1 LIMIT 1`,
-          [requestedUrl]
-        );
-
-        if (result.rows.length === 0) {
-          return res.status(404).json({ message: "파일을 찾을 수 없습니다" });
-        }
-
-        if (result.rows[0].requester_id !== userId) {
-          return res.status(403).json({ message: "접근 권한이 없습니다" });
-        }
+      const filename = req.params.filename;
+      if (!filename || filename.includes("..") || filename.includes("/")) {
+        return res.status(400).json({ message: "잘못된 파일명입니다" });
       }
 
-      const filePath = path.join(process.cwd(), "uploads", "orders", req.params.filename);
+      const filePath = path.join(process.cwd(), "uploads", "orders", filename);
       if (!fs.existsSync(filePath)) {
         return res.status(404).json({ message: "파일을 찾을 수 없습니다" });
       }
 
       res.sendFile(filePath);
     } catch (err: any) {
-      res.status(401).json({ message: "Unauthorized" });
+      console.error("Error serving order image:", err);
+      res.status(500).send("Error loading image");
     }
   });
 

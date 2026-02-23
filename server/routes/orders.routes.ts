@@ -24,6 +24,7 @@ import {
   auditLogs,
   incidentActions,
   settlementRecords,
+  deductions,
 } from "@shared/schema";
 import {
   calculateSettlement,
@@ -1573,6 +1574,15 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         return res.status(400).json({ code: "INVALID_INPUT", message: "수하인 연락처를 입력해주세요" });
       }
 
+      // 대응 시간: system_settings에서 조회, 없으면 기본 48시간
+      let responseHours = 48;
+      const incidentHoursSetting = await storage.getSystemSetting('incident_response_hours');
+      if (incidentHoursSetting?.settingValue) {
+        responseHours = Number(incidentHoursSetting.settingValue) || 48;
+      }
+      const helperResponseDeadline = new Date();
+      helperResponseDeadline.setHours(helperResponseDeadline.getHours() + responseHours);
+
       const incident = await storage.createIncidentReport({
         orderId,
         reporterId: user.id,
@@ -1587,6 +1597,8 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
         status: "requested",
+        helperResponseDeadline,
+        helperResponseRequired: true,
       });
       // 마감 시 첨부된 집배송 이력 이미지를 사고 증빙으로 저장
       if (Array.isArray(attachedImages) && attachedImages.length > 0) {
@@ -5215,14 +5227,24 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         closingSupplyAmount += supplyAmount;
         closingVatAmount += vatAmount;
 
-        // 차감액 계산 (확정된 사고보고서만 - helperDeductionApplied가 true인 것)
+        // 차감액 계산: 1) 사고차감 + 2) 관리자 수동 조정 (관리자와 동일 로직)
+        let orderDeductions = 0;
+        // 1. 확정된 사고보고서 차감
         const incidentReportsForOrder = await db.select()
           .from(incidentReports)
           .where(and(
             eq(incidentReports.orderId, report.orderId),
             eq(incidentReports.helperDeductionApplied, true)
           ));
-        const orderDeductions = incidentReportsForOrder.reduce((sum, ir) => sum + (ir.deductionAmount || 0), 0);
+        orderDeductions += incidentReportsForOrder.reduce((sum, ir) => sum + (ir.deductionAmount || 0), 0);
+        // 2. 관리자 수동 차감 (ADMIN_ADJUSTMENT)
+        const adminDeductionsForOrder = await db.select()
+          .from(deductions)
+          .where(and(
+            eq(deductions.orderId, report.orderId),
+            eq(deductions.category, "ADMIN_ADJUSTMENT")
+          ));
+        orderDeductions += adminDeductionsForOrder.reduce((sum, d) => sum + (d.amount || 0), 0);
         closingDeductions += orderDeductions;
 
         closingWorkDays.push({
@@ -5486,21 +5508,34 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         ? JSON.parse(closingReport.dynamicFieldsJson)
         : {};
 
-      // 사고보고서에서 차감액 조회
-      // 차감액 조회 (확정된 사고보고서만 - helperDeductionApplied가 true인 것)
+      // 차감액 조회: 1) 사고차감 + 2) 관리자 수동 조정 (관리자와 동일 로직)
       const orderIdToCheck = closingReport?.orderId || settlement?.orderId;
       let deductionAmount = 0;
       let deductionReason = '';
       if (orderIdToCheck) {
+        // 1. 확정된 사고보고서 차감
         const orderIncidents = await db.select()
           .from(incidentReports)
           .where(and(
             eq(incidentReports.orderId, orderIdToCheck),
             eq(incidentReports.helperDeductionApplied, true)
           ));
-        deductionAmount = orderIncidents.reduce((sum, ir) => sum + (ir.deductionAmount || 0), 0);
+        deductionAmount += orderIncidents.reduce((sum, ir) => sum + (ir.deductionAmount || 0), 0);
         if (orderIncidents.length > 0) {
           deductionReason = orderIncidents.map(ir => ir.incidentType).join(', ');
+        }
+        // 2. 관리자 수동 차감 (ADMIN_ADJUSTMENT)
+        const adminDeductionsForWork = await db.select()
+          .from(deductions)
+          .where(and(
+            eq(deductions.orderId, orderIdToCheck),
+            eq(deductions.category, "ADMIN_ADJUSTMENT")
+          ));
+        const adminDeductionTotal = adminDeductionsForWork.reduce((sum, d) => sum + (d.amount || 0), 0);
+        if (adminDeductionTotal > 0) {
+          deductionAmount += adminDeductionTotal;
+          const adminReasons = adminDeductionsForWork.map(d => d.reason || '관리자 조정').join(', ');
+          deductionReason = deductionReason ? `${deductionReason}, ${adminReasons}` : adminReasons;
         }
       }
 
@@ -5902,6 +5937,7 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         createdAt: incident.createdAt?.toISOString() || null,
         resolvedAt: incident.resolvedAt?.toISOString() || null,
         helperActionAt: incident.helperActionAt?.toISOString() || null,
+        helperResponseDeadline: incident.helperResponseDeadline?.toISOString() || null,
       };
 
       res.json({
@@ -5953,11 +5989,16 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
       }
 
       // Update incident with helper action
+      // 헬퍼 대응 시 메인 상태도 자동 전환: requested/submitted → reviewing (검토중)
+      const autoTransitionStatuses = ['requested', 'submitted', 'pending'];
+      const shouldTransition = autoTransitionStatuses.includes(incident.status || '');
+
       await db.update(incidentReports)
         .set({
           helperStatus: action,
           helperActionAt: new Date(),
           helperNote: note || null,
+          ...(shouldTransition ? { status: 'reviewing', reviewStartedAt: new Date() } : {}),
           updatedAt: new Date(),
         })
         .where(eq(incidentReports.id, id));
@@ -5968,6 +6009,8 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         actorId: user.id,
         actorRole: 'helper',
         actionType: `helper_${action}`,
+        previousStatus: incident.status || null,
+        newStatus: shouldTransition ? 'reviewing' : (incident.status || null),
         notes: category ? `[${category}] ${note || ''}`.trim() : (note || null),
       });
 

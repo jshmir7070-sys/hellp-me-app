@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { View, Modal, ScrollView, Pressable, StyleSheet, Dimensions, Platform, Alert, Linking, Image, ActivityIndicator } from "react-native";
+import { ZoomableImageModal } from "@/components/ZoomableImageModal";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "@/components/Icon";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -8,6 +9,7 @@ import * as Clipboard from "expo-clipboard";
 import { useTheme } from "@/hooks/useTheme";
 import { useResponsive } from "@/hooks/useResponsive";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAuthImage } from "@/hooks/useAuthImage";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
@@ -42,17 +44,19 @@ interface JobDetailModalProps {
 export function JobDetailModal({ visible, onClose, order, fullOrderData, hideButtons = false, isRequester = false, onEdit, onDelete, onHide }: JobDetailModalProps) {
   const [mapExpanded, setMapExpanded] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [mapLoadError, setMapLoadError] = useState(false);
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
   const { showDesktopLayout } = useResponsive();
   const { user } = useAuth();
+  const { getImageUrl } = useAuthImage();
   const queryClient = useQueryClient();
 
   const isHelper = user?.role === "helper";
 
   // Fetch closing summary for completed/closed orders
   const showClosingReport = order?.orderStatus && ['COMPLETED', 'CLOSED', 'completed', 'closed', 'pending_close', 'PENDING_CLOSE'].includes(order.orderStatus);
-  
+
   const { data: closingSummary, isLoading: isLoadingClosing } = useQuery<ClosingSummary>({
     queryKey: ['/api/orders', order?.orderId, 'closing-summary'],
     enabled: visible && !!order?.orderId && !!showClosingReport,
@@ -88,11 +92,10 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
 
   const data = fullOrderData || order;
 
-  // 이미지 URL 해석: 상대 경로를 절대 URL로 변환
+  // 이미지 URL 해석: 인증 토큰 포함 절대 URL로 변환
   const resolveImageUrl = (url?: string | null) => {
     if (!url) return '';
-    if (url.startsWith('http')) return url;
-    return url.startsWith('/') ? `${getApiUrl()}${url}` : `${getApiUrl()}/${url}`;
+    return getImageUrl(url);
   };
 
   const formatCurrency = (amount?: number) => {
@@ -326,7 +329,7 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
               </View>
             </Card>
 
-            {data.regionMapUrl ? (
+            {data.regionMapUrl && !mapLoadError ? (
               <Card style={styles.mapCard}>
                 <View style={styles.addressHeader}>
                   <Icon name="image-outline" size={18} color={BrandColors.helper} />
@@ -339,6 +342,7 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
                     source={{ uri: resolveImageUrl(data.regionMapUrl) }}
                     style={styles.mapImage}
                     resizeMode="cover"
+                    onError={() => setMapLoadError(true)}
                   />
                   <View style={styles.mapOverlay}>
                     <Icon name="fullscreen" size={20} color="#fff" />
@@ -348,31 +352,28 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
                   </View>
                 </Pressable>
               </Card>
+            ) : data.regionMapUrl && mapLoadError ? (
+              <Card style={styles.mapCard}>
+                <View style={styles.addressHeader}>
+                  <Icon name="image-outline" size={18} color={BrandColors.helper} />
+                  <ThemedText style={[styles.addressTitle, { color: theme.text }]}>
+                    배송지 이미지
+                  </ThemedText>
+                </View>
+                <View style={{ height: 120, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f3f4f6', borderRadius: 8 }}>
+                  <Icon name="image-off-outline" size={32} color="#ccc" />
+                  <ThemedText style={{ color: '#999', fontSize: 12, marginTop: 4 }}>
+                    이미지 로드 실패
+                  </ThemedText>
+                </View>
+              </Card>
             ) : null}
 
-            <Modal
+            <ZoomableImageModal
               visible={mapExpanded}
-              animationType="fade"
-              transparent
-              onRequestClose={() => setMapExpanded(false)}
-            >
-              <Pressable 
-                style={styles.expandedImageOverlay} 
-                onPress={() => setMapExpanded(false)}
-              >
-                <Image 
-                  source={{ uri: resolveImageUrl(data.regionMapUrl) }}
-                  style={styles.expandedImage}
-                  resizeMode="contain"
-                />
-                <Pressable 
-                  style={styles.closeExpandedButton}
-                  onPress={() => setMapExpanded(false)}
-                >
-                  <Icon name="close-circle-outline" size={36} color="#fff" />
-                </Pressable>
-              </Pressable>
-            </Modal>
+              imageUri={resolveImageUrl(data.regionMapUrl)}
+              onClose={() => setMapExpanded(false)}
+            />
 
             {data.deliveryGuide || data.deliveryGuideUrl ? (
               <Card style={styles.descriptionCard}>

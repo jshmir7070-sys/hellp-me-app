@@ -140,6 +140,10 @@ export default function RatesPage() {
   const [depositSettings, setDepositSettings] = useState({
     depositRate: '10',
   });
+  const [incidentSettings, setIncidentSettings] = useState({
+    incidentResponseHours: '48',
+  });
+  const [incidentSchedule, setIncidentSchedule] = useState({ effectiveFrom: '', changeReason: '' });
 
   // 예약 적용 공통 state
   const [courierSchedule, setCourierSchedule] = useState({ effectiveFrom: '', changeReason: '' });
@@ -320,6 +324,10 @@ export default function RatesPage() {
       setDepositSettings({
         depositRate: depRate?.settingValue || '10',
       });
+      const incResponseHours = systemSettings.find(s => s.settingKey === 'incident_response_hours');
+      setIncidentSettings({
+        incidentResponseHours: incResponseHours?.settingValue || '48',
+      });
     }
   }, [systemSettings]);
 
@@ -400,6 +408,30 @@ export default function RatesPage() {
       const msg = scheduled ? '계약금 설정이 예약되었습니다.' : '계약금 설정이 저장되었습니다.';
       toast({ title: msg });
       setDepositSchedule({ effectiveFrom: '', changeReason: '' });
+    } catch {
+      toast({ title: '저장 실패', variant: 'destructive' });
+    }
+  };
+
+  const saveIncidentSettings = async () => {
+    const hours = Number(incidentSettings.incidentResponseHours);
+    if (isNaN(hours) || hours < 1 || hours > 720) {
+      toast({ title: '대응 시간은 1~720시간 사이로 입력해주세요.', variant: 'destructive' });
+      return;
+    }
+    const scheduled = formatScheduleDate(incidentSchedule.effectiveFrom);
+    const desc = scheduled ? `사고 대응 시간 설정을 ${incidentSchedule.effectiveFrom}에 예약 적용하시겠습니까?` : '사고 대응 시간 설정을 저장하시겠습니까?';
+    if (!await confirm({ title: '설정 저장', description: desc })) return;
+    try {
+      await saveSystemSettingMutation.mutateAsync({
+        key: 'incident_response_hours',
+        value: incidentSettings.incidentResponseHours,
+        effectiveFrom: scheduled,
+        changeReason: incidentSchedule.changeReason || undefined,
+      });
+      const msg = scheduled ? '사고 대응 시간이 예약되었습니다.' : '사고 대응 시간이 저장되었습니다.';
+      toast({ title: msg });
+      setIncidentSchedule({ effectiveFrom: '', changeReason: '' });
     } catch {
       toast({ title: '저장 실패', variant: 'destructive' });
     }
@@ -1505,6 +1537,62 @@ export default function RatesPage() {
               <Button onClick={saveDepositSettings} disabled={saveSystemSettingMutation.isPending}>
                 <Check className="h-4 w-4 mr-2" />
                 {saveSystemSettingMutation.isPending ? '저장중...' : depositSchedule.effectiveFrom ? '예약 저장' : '저장'}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {mainTab === 'deposit' && (
+        <Card className="mt-4">
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm">화물사고 대응 시간 설정</CardTitle>
+            <CardDescription className="text-xs">
+              화물사고 접수 시 헬퍼에게 부여되는 대응 기한을 설정합니다. 사고 접수 시간부터 카운트됩니다.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="py-2 space-y-4">
+            <div>
+              <label className="text-sm font-medium">사고 대응 시간 (시간)</label>
+              <div className="flex items-center gap-3 mt-2">
+                <Input
+                  type="number"
+                  value={incidentSettings.incidentResponseHours}
+                  onChange={(e) => setIncidentSettings({ ...incidentSettings, incidentResponseHours: e.target.value })}
+                  placeholder="예: 48"
+                  className="max-w-[120px]"
+                  min={1}
+                  max={720}
+                />
+                <span className="text-sm text-muted-foreground">시간</span>
+                <span className="text-xs text-muted-foreground">
+                  ({Math.floor(Number(incidentSettings.incidentResponseHours) / 24)}일 {Number(incidentSettings.incidentResponseHours) % 24}시간)
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">사고 접수 시간부터 지정된 시간 내에 헬퍼가 대응해야 합니다. (기본: 48시간 = 2일)</p>
+            </div>
+
+            {/* 적용 예시 */}
+            <div className="bg-orange-50 border border-orange-200 rounded p-3 text-sm space-y-1">
+              <p className="font-medium text-orange-800">⏱ 대응 타이머 적용 안내</p>
+              <p className="text-orange-700 text-xs">• 사고 접수 시 헬퍼에게 <strong>{incidentSettings.incidentResponseHours}시간</strong> 대응 기한이 부여됩니다</p>
+              <p className="text-orange-700 text-xs">• 관리자/헬퍼 화면에 남은 시간이 타이머로 표시됩니다</p>
+              <p className="text-orange-700 text-xs">• 기한 초과 시 관리자가 강제 처리할 수 있습니다</p>
+            </div>
+
+            {/* 예약 적용 필드 */}
+            <div className="border-t pt-4">
+              <ScheduleFields
+                effectiveFrom={incidentSchedule.effectiveFrom}
+                setEffectiveFrom={v => setIncidentSchedule(s => ({ ...s, effectiveFrom: v }))}
+                changeReason={incidentSchedule.changeReason}
+                setChangeReason={v => setIncidentSchedule(s => ({ ...s, changeReason: v }))}
+              />
+            </div>
+
+            <div className="flex justify-end">
+              <Button onClick={saveIncidentSettings} disabled={saveSystemSettingMutation.isPending}>
+                <Check className="h-4 w-4 mr-2" />
+                {saveSystemSettingMutation.isPending ? '저장중...' : incidentSchedule.effectiveFrom ? '예약 저장' : '저장'}
               </Button>
             </div>
           </CardContent>

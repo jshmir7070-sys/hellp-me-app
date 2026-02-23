@@ -15,7 +15,9 @@ import {
   ORDER_STATUS,
 } from "../../constants/order-status";
 import {
-  calculateVat
+  calculateVat,
+  calculateSettlement,
+  parseClosingReport,
 } from "../../lib/settlement-calculator";
 
 export async function registerSettlementRoutes(ctx: RouteContext): Promise<void> {
@@ -390,17 +392,11 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         const enterprise = order?.enterpriseId ? enterpriseMap.get(order.enterpriseId) : null;
         const requester = order?.requesterId ? userMap.get(order.requesterId) : null;
 
-        const deliveredCount = cr.deliveredCount || 0;
-        const returnedCount = cr.returnedCount || 0;
-        const etcCount = cr.etcCount || 0;
         const pricePerBox = order?.pricePerUnit || 0;
-        const etcPricePerUnit = cr.etcPricePerUnit || 0;
-
         const extraCostsJson = cr.extraCostsJson ? (typeof cr.extraCostsJson === "string" ? JSON.parse(cr.extraCostsJson) : cr.extraCostsJson) : null;
-        const extraTotal = extraCostsJson?.reduce((sum: number, item: any) => sum + (item.amount || item.unitPrice * item.quantity || 0), 0) || 0;
 
-        // 스냅샷 값이 있으면 사용 (월간 정산과 동일)
-        let supplyPrice, vat, finalTotal, platformFee, driverPayout;
+        // SSOT: 스냅샷 우선, 없으면 calculateSettlement 사용
+        let supplyPrice: number, vat: number, finalTotal: number, platformFee: number, driverPayout: number;
         if (cr.supplyAmount) {
           supplyPrice = Number(cr.supplyAmount) || 0;
           vat = Number(cr.vatAmount) || 0;
@@ -408,11 +404,11 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
           platformFee = Number(cr.platformFee) || 0;
           driverPayout = Number(cr.netAmount) || 0;
         } else {
-          const baseAmount = (deliveredCount + returnedCount) * pricePerBox + etcCount * etcPricePerUnit;
-          supplyPrice = baseAmount + extraTotal;
-          vat = calculateVat(supplyPrice);
-          finalTotal = supplyPrice + vat;
-          // 운임설정에서 설정된 수수료만 사용 (설정 없으면 0)
+          const closingData = parseClosingReport(cr, order || { pricePerUnit: 0 });
+          const settlement = calculateSettlement(closingData);
+          supplyPrice = settlement.supplyAmount;
+          vat = settlement.vatAmount;
+          finalTotal = settlement.totalAmount;
           const platformFeeRate = cr.platformFeeRate ? Number(cr.platformFeeRate) / 10000 : 0;
           platformFee = Math.round(finalTotal * platformFeeRate);
           driverPayout = finalTotal - platformFee;
@@ -429,9 +425,9 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
           enterpriseName: enterprise?.name || null,
           category: "parcel",
           courierCompany: order?.courierCompany || order?.companyName || null,
-          deliveredCount,
-          returnedCount,
-          etcCount,
+          deliveredCount: cr.deliveredCount || 0,
+          returnedCount: cr.returnedCount || 0,
+          etcCount: cr.etcCount || 0,
           etcPricePerUnit: cr.etcPricePerUnit || 0,
           extraCostsJson,
           closingMemo: cr.memo || "",
@@ -526,7 +522,7 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         existing.helperEmail = helper?.email || "";
         existing.orderCount += 1;
 
-        // 정산 스냅샷이 있으면 사용, 없으면 일정산과 동일한 방식으로 계산
+        // SSOT: 스냅샷 우선, 없으면 calculateSettlement 사용
         if (cr.supplyAmount) {
           existing.supplyPrice += Number(cr.supplyAmount) || 0;
           existing.vat += Number(cr.vatAmount) || 0;
@@ -534,29 +530,15 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
           existing.platformFee += Number(cr.platformFee) || 0;
           existing.driverPayout += Number(cr.netAmount) || 0;
         } else {
-          // 일정산과 동일한 계산 방식 적용
-          const deliveredCount = cr.deliveredCount || 0;
-          const returnedCount = cr.returnedCount || 0;
-          const etcCount = cr.etcCount || 0;
-          const pricePerBox = order?.pricePerUnit || 0;
-          const etcPricePerUnit = cr.etcPricePerUnit || 0;
-
-          // extraCosts 계산
-          const extraCostsJson = cr.extraCostsJson ? (typeof cr.extraCostsJson === "string" ? JSON.parse(cr.extraCostsJson) : cr.extraCostsJson) : null;
-          const extraTotal = extraCostsJson?.reduce((sum: number, item: any) => sum + (item.amount || item.unitPrice * item.quantity || 0), 0) || 0;
-
-          const baseAmount = (deliveredCount + returnedCount) * pricePerBox + etcCount * etcPricePerUnit;
-          const supplyPrice = baseAmount + extraTotal;
-          const vat = calculateVat(supplyPrice);
-          const totalAmount = supplyPrice + vat;
-          // 운임설정에서 설정된 수수료만 사용 (설정 없으면 0)
+          const closingData = parseClosingReport(cr, order || { pricePerUnit: 0 });
+          const settlement = calculateSettlement(closingData);
           const platformFeeRate = cr.platformFeeRate ? Number(cr.platformFeeRate) / 10000 : 0;
-          const platformFee = Math.round(totalAmount * platformFeeRate);
-          const driverPayout = totalAmount - platformFee;
+          const platformFee = Math.round(settlement.totalAmount * platformFeeRate);
+          const driverPayout = settlement.totalAmount - platformFee;
 
-          existing.supplyPrice += supplyPrice;
-          existing.vat += vat;
-          existing.totalAmount += totalAmount;
+          existing.supplyPrice += settlement.supplyAmount;
+          existing.vat += settlement.vatAmount;
+          existing.totalAmount += settlement.totalAmount;
           existing.platformFee += platformFee;
           existing.driverPayout += driverPayout;
         }
@@ -667,26 +649,21 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         // 요청자 정보
         const requesterUser = order?.requesterId ? userMap.get(order.requesterId) : null;
 
-        // extraCosts 계산
-        const extraCostsJson = cr.extraCostsJson ? (typeof cr.extraCostsJson === "string" ? JSON.parse(cr.extraCostsJson) : cr.extraCostsJson) : null;
-        const extraTotal = extraCostsJson?.reduce((sum: number, item: any) => sum + (item.amount || item.unitPrice * item.quantity || 0), 0) || 0;
-
-        // 금액 계산 (스냅샷 우선)
-        let supplyAmount, vatAmount, total, platformFee, netAmount;
+        // SSOT: 스냅샷 우선, 없으면 calculateSettlement 사용
+        let supplyAmount: number, vatAmount: number, total: number, platformFee: number;
         if (cr.supplyAmount) {
           supplyAmount = Number(cr.supplyAmount) || 0;
           vatAmount = Number(cr.vatAmount) || 0;
           total = Number(cr.totalAmount) || 0;
           platformFee = Number(cr.platformFee) || 0;
-          netAmount = Number(cr.netAmount) || 0;
         } else {
-          const baseAmount = (deliveredCount + returnedCount) * pricePerBox + etcCount * etcPricePerUnit;
-          supplyAmount = baseAmount + extraTotal;
-          vatAmount = calculateVat(supplyAmount);
-          total = supplyAmount + vatAmount;
+          const closingData = parseClosingReport(cr, order || { pricePerUnit: 0 });
+          const settlement = calculateSettlement(closingData);
+          supplyAmount = settlement.supplyAmount;
+          vatAmount = settlement.vatAmount;
+          total = settlement.totalAmount;
           const feeRate = cr.platformFeeRate ? Number(cr.platformFeeRate) / 10000 : 0;
           platformFee = Math.round(total * feeRate);
-          netAmount = total - platformFee;
         }
 
         // 산재보험료 계산 (SSOT: totalAmount × insuranceRate% × 50%)
@@ -740,7 +717,8 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         totalDeduction += platformFee;
         totalInsurance += insurance;
         totalDamageDeduction += damageDeduction;
-        totalPayout += (total - insurance - damageDeduction);
+        // 지급액 = 총액 - 수수료 - 산재보험 - 차감액 (SSOT 공식 통일)
+        totalPayout += (total - platformFee - insurance - damageDeduction);
 
         // 차감 상세 내역
         const deductionDetails: string[] = [];
@@ -770,7 +748,8 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
           deductionBreakdown,
           adminMemo,
           deduction: platformFee,
-          payout: total - insurance - damageDeduction,
+          // 지급액 = 총액 - 수수료 - 산재보험 - 차감액 (SSOT 공식 통일)
+          payout: total - platformFee - insurance - damageDeduction,
           deductionDetails,
           memo: cr.memo || "",
         };
@@ -4260,33 +4239,38 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
             const order = await storage.getOrder(cr.orderId);
             if (!order) continue;
 
+            // SSOT: 스냅샷 우선, 없으면 calculateSettlement 사용
             let supplyAmount: number, vatAmount: number, total: number;
             if (cr.supplyAmount) {
               supplyAmount = Number(cr.supplyAmount) || 0;
               vatAmount = Number(cr.vatAmount) || 0;
               total = Number(cr.totalAmount) || 0;
             } else {
-              const deliveredCount = cr.deliveredCount || 0;
-              const returnedCount = cr.returnedCount || 0;
-              const pricePerBox = order.pricePerUnit || 0;
-              const extraCostsJson = cr.extraCostsJson ? (typeof cr.extraCostsJson === "string" ? JSON.parse(cr.extraCostsJson) : cr.extraCostsJson) : null;
-              const extraTotal = extraCostsJson?.reduce((sum: number, item: any) => sum + (item.amount || 0), 0) || 0;
-              supplyAmount = (deliveredCount + returnedCount) * pricePerBox + extraTotal;
-              vatAmount = calculateVat(supplyAmount);
-              total = supplyAmount + vatAmount;
+              const closingData = parseClosingReport(cr, order);
+              const settlement = calculateSettlement(closingData);
+              supplyAmount = settlement.supplyAmount;
+              vatAmount = settlement.vatAmount;
+              total = settlement.totalAmount;
             }
 
             totalSupply += supplyAmount;
             totalVat += vatAmount;
             totalAmount += total;
 
-            // 차감액 (화물사고)
+            // 차감액: 사고차감 + 관리자 수동 조정
+            let orderDeduction = 0;
             const incidents = await db.select().from(incidentReports)
               .where(and(
                 eq(incidentReports.orderId, cr.orderId),
                 eq(incidentReports.helperDeductionApplied, true)
               ));
-            const orderDeduction = incidents.reduce((sum, ir) => sum + (ir.deductionAmount || 0), 0);
+            orderDeduction += incidents.reduce((sum, ir) => sum + (ir.deductionAmount || 0), 0);
+            const adminDeds = await db.select().from(deductions)
+              .where(and(
+                eq(deductions.orderId, cr.orderId),
+                eq(deductions.category, "ADMIN_ADJUSTMENT")
+              ));
+            orderDeduction += adminDeds.reduce((sum, d) => sum + (d.amount || 0), 0);
             totalDeductions += orderDeduction;
 
             const dateStr = cr.createdAt ? new Date(cr.createdAt).toISOString().split('T')[0] : '';

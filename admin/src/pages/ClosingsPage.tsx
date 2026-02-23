@@ -5,7 +5,7 @@ import { adminFetch } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Eye, Image, FileText, RefreshCw, Download, Search, AlertTriangle, Edit, ExternalLink, X } from 'lucide-react';
+import { Eye, Image, FileText, RefreshCw, Download, Search, AlertTriangle, Edit, ExternalLink, X, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -412,21 +412,50 @@ export default function ClosingsPage() {
       align: 'center',
       render: (_, row) => {
         if (!row.hasAnyEvent) return <span className="text-xs text-muted-foreground">-</span>;
+
+        // 사고 건 중 완료 여부 판단
+        const incidentItems = row.incidents || [];
+        const completedStatuses = ['resolved', 'closed', 'rejected'];
+
+        const incidentList = incidentItems.filter((inc: IncidentInfo) =>
+          inc.incidentType === 'cargo_damage' || inc.incidentType === 'accident'
+        );
+        const disputeList = incidentItems.filter((inc: IncidentInfo) =>
+          inc.incidentType === 'dispute' || inc.incidentType === 'complaint'
+        );
+
+        const allIncidentsComplete = incidentList.length > 0 && incidentList.every((inc: IncidentInfo) => completedStatuses.includes(inc.status));
+        const allDisputesComplete = disputeList.length > 0 && disputeList.every((inc: IncidentInfo) => completedStatuses.includes(inc.status));
+
         return (
           <div className="flex flex-col gap-1 items-center">
-            {row.hasIncident && (
-              <Badge variant="destructive" className="text-xs px-1.5 py-0">
-                <AlertTriangle className="h-3 w-3 mr-0.5" />
-                사고접수
-              </Badge>
+            {incidentList.length > 0 && (
+              allIncidentsComplete ? (
+                <Badge variant="outline" className="text-xs px-1.5 py-0 border-green-300 text-green-700 bg-green-50">
+                  <CheckCircle className="h-3 w-3 mr-0.5" />
+                  사고완료
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="text-xs px-1.5 py-0">
+                  <AlertTriangle className="h-3 w-3 mr-0.5" />
+                  사고접수
+                </Badge>
+              )
             )}
-            {row.hasDispute && (
-              <Badge variant="destructive" className="text-xs px-1.5 py-0">
-                <AlertTriangle className="h-3 w-3 mr-0.5" />
-                이의제기
-              </Badge>
+            {disputeList.length > 0 && (
+              allDisputesComplete ? (
+                <Badge variant="outline" className="text-xs px-1.5 py-0 border-green-300 text-green-700 bg-green-50">
+                  <CheckCircle className="h-3 w-3 mr-0.5" />
+                  이의완료
+                </Badge>
+              ) : (
+                <Badge variant="destructive" className="text-xs px-1.5 py-0">
+                  <AlertTriangle className="h-3 w-3 mr-0.5" />
+                  이의제기
+                </Badge>
+              )
             )}
-            {!row.hasIncident && !row.hasDispute && row.incidents?.length > 0 && (
+            {incidentList.length === 0 && disputeList.length === 0 && incidentItems.length > 0 && (
               <Badge variant="destructive" className="text-xs px-1.5 py-0">
                 <AlertTriangle className="h-3 w-3 mr-0.5" />
                 이벤트
@@ -570,22 +599,44 @@ export default function ClosingsPage() {
                 <p className="text-2xl font-mono font-bold mt-2 text-primary">
                   {formatOrderNumber(selectedOrder.orderNumber, selectedOrder.orderId)}
                 </p>
-                {selectedOrder.hasAnyEvent && (
-                  <div className="flex items-center justify-center gap-2 mt-2">
-                    {selectedOrder.hasIncident && (
-                      <Badge variant="destructive" className="text-sm px-3 py-1">
-                        <AlertTriangle className="h-4 w-4 mr-1" />
-                        사고접수
-                      </Badge>
-                    )}
-                    {selectedOrder.hasDispute && (
-                      <Badge variant="destructive" className="text-sm px-3 py-1">
-                        <AlertTriangle className="h-4 w-4 mr-1" />
-                        이의제기
-                      </Badge>
-                    )}
-                  </div>
-                )}
+                {selectedOrder.hasAnyEvent && (() => {
+                  const completedStatuses = ['resolved', 'closed', 'rejected'];
+                  const incs = (selectedOrder.incidents || []) as IncidentInfo[];
+                  const incidentList = incs.filter(i => i.incidentType === 'cargo_damage' || i.incidentType === 'accident');
+                  const disputeList = incs.filter(i => i.incidentType === 'dispute' || i.incidentType === 'complaint');
+                  const allIncComplete = incidentList.length > 0 && incidentList.every(i => completedStatuses.includes(i.status));
+                  const allDispComplete = disputeList.length > 0 && disputeList.every(i => completedStatuses.includes(i.status));
+                  return (
+                    <div className="flex items-center justify-center gap-2 mt-2">
+                      {incidentList.length > 0 && (
+                        allIncComplete ? (
+                          <Badge variant="outline" className="text-sm px-3 py-1 border-green-300 text-green-700 bg-green-50">
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            사고완료
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive" className="text-sm px-3 py-1">
+                            <AlertTriangle className="h-4 w-4 mr-1" />
+                            사고접수
+                          </Badge>
+                        )
+                      )}
+                      {disputeList.length > 0 && (
+                        allDispComplete ? (
+                          <Badge variant="outline" className="text-sm px-3 py-1 border-green-300 text-green-700 bg-green-50">
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            이의완료
+                          </Badge>
+                        ) : (
+                          <Badge variant="destructive" className="text-sm px-3 py-1">
+                            <AlertTriangle className="h-4 w-4 mr-1" />
+                            이의제기
+                          </Badge>
+                        )
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* 요청자/헬퍼 정보 2컬럼 */}

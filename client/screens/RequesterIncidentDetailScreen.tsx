@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,9 @@ import {
   ScrollView,
   ActivityIndicator,
   Image,
+  Pressable,
 } from 'react-native';
+import { ZoomableImageModal } from '@/components/ZoomableImageModal';
 import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { useRoute, RouteProp } from '@react-navigation/native';
@@ -104,6 +106,7 @@ export default function RequesterIncidentDetailScreen() {
   const { theme } = useTheme();
   const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const { getImageUrl: getEvidenceImageUrl } = useAuthImage();
+  const [selectedEvidence, setSelectedEvidence] = useState<string | null>(null);
   const route = useRoute<RouteProp<{ params: { incidentId: number } }, 'params'>>();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
@@ -149,6 +152,7 @@ export default function RequesterIncidentDetailScreen() {
   const typeLabel = INCIDENT_TYPE_LABELS[incident.incidentType] || incident.incidentType;
 
   return (
+    <>
     <ScrollView
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
       contentContainerStyle={[
@@ -418,21 +422,29 @@ export default function RequesterIncidentDetailScreen() {
                 증빙 자료 ({incident.evidence.filter(ev => ev.evidenceType !== 'helper_photo').length}건)
               </Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {incident.evidence.filter(ev => ev.evidenceType !== 'helper_photo').map((ev) => (
-                  <View key={ev.id} style={styles.evidenceItem}>
-                    <Image source={{ uri: getEvidenceImageUrl(ev.fileUrl) }} style={styles.evidenceImage} />
-                    <View style={[styles.evidenceTypeBadge, { backgroundColor: BrandColors.requester + '20' }]}>
-                      <Text style={[styles.evidenceTypeText, { color: BrandColors.requester }]}>
-                        {ev.evidenceType === 'delivery_history' ? '배송이력' : ev.evidenceType === 'photo' ? '접수사진' : '증빙'}
-                      </Text>
-                    </View>
-                    {ev.description ? (
-                      <Text style={[styles.evidenceDesc, { color: theme.tabIconDefault }]}>
-                        {ev.description}
-                      </Text>
-                    ) : null}
-                  </View>
-                ))}
+                {incident.evidence.filter(ev => ev.evidenceType !== 'helper_photo').map((ev) => {
+                  const imgUrl = getEvidenceImageUrl(ev.fileUrl);
+                  return (
+                    <Pressable key={ev.id} style={styles.evidenceItem} onPress={() => setSelectedEvidence(imgUrl)}>
+                      <Image
+                        source={{ uri: imgUrl }}
+                        style={styles.evidenceImage}
+                        resizeMode="cover"
+                        onError={() => console.warn('Evidence image load failed:', ev.fileUrl)}
+                      />
+                      <View style={[styles.evidenceTypeBadge, { backgroundColor: BrandColors.requester + '20' }]}>
+                        <Text style={[styles.evidenceTypeText, { color: BrandColors.requester }]}>
+                          {ev.evidenceType === 'delivery_history' ? '배송이력' : ev.evidenceType === 'photo' ? '접수사진' : '증빙'}
+                        </Text>
+                      </View>
+                      {ev.description ? (
+                        <Text style={[styles.evidenceDesc, { color: theme.tabIconDefault }]}>
+                          {ev.description}
+                        </Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
             </Card>
           ) : null}
@@ -447,19 +459,27 @@ export default function RequesterIncidentDetailScreen() {
                 </Text>
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: Spacing.sm }}>
-                {incident.evidence.filter(ev => ev.evidenceType === 'helper_photo').map((ev) => (
-                  <View key={ev.id} style={styles.evidenceItem}>
-                    <Image source={{ uri: getEvidenceImageUrl(ev.fileUrl) }} style={styles.evidenceImage} />
-                    <View style={[styles.evidenceTypeBadge, { backgroundColor: BrandColors.helper + '20' }]}>
-                      <Text style={[styles.evidenceTypeText, { color: BrandColors.helper }]}>헬퍼 증빙</Text>
-                    </View>
-                    {ev.description ? (
-                      <Text style={[styles.evidenceDesc, { color: theme.tabIconDefault }]}>
-                        {ev.description}
-                      </Text>
-                    ) : null}
-                  </View>
-                ))}
+                {incident.evidence.filter(ev => ev.evidenceType === 'helper_photo').map((ev) => {
+                  const imgUrl = getEvidenceImageUrl(ev.fileUrl);
+                  return (
+                    <Pressable key={ev.id} style={styles.evidenceItem} onPress={() => setSelectedEvidence(imgUrl)}>
+                      <Image
+                        source={{ uri: imgUrl }}
+                        style={styles.evidenceImage}
+                        resizeMode="cover"
+                        onError={() => console.warn('Evidence image load failed:', ev.fileUrl)}
+                      />
+                      <View style={[styles.evidenceTypeBadge, { backgroundColor: BrandColors.helper + '20' }]}>
+                        <Text style={[styles.evidenceTypeText, { color: BrandColors.helper }]}>헬퍼 증빙</Text>
+                      </View>
+                      {ev.description ? (
+                        <Text style={[styles.evidenceDesc, { color: theme.tabIconDefault }]}>
+                          {ev.description}
+                        </Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
               </ScrollView>
             </Card>
           ) : null}
@@ -493,6 +513,13 @@ export default function RequesterIncidentDetailScreen() {
         </Card>
       ) : null}
     </ScrollView>
+
+      <ZoomableImageModal
+        visible={!!selectedEvidence}
+        imageUri={selectedEvidence}
+        onClose={() => setSelectedEvidence(null)}
+      />
+    </>
   );
 }
 
