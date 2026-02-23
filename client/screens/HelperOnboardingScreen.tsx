@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, TextInput, Alert, Platform, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useSafeTabBarHeight } from "@/hooks/useSafeTabBarHeight";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as ImagePicker from 'expo-image-picker';
@@ -12,8 +12,10 @@ import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
 import { useTheme } from '@/hooks/useTheme';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOrderWebSocket } from '@/hooks/useOrderWebSocket';
 import { Spacing, BorderRadius, BrandColors, Colors } from '@/constants/theme';
 import { getApiUrl } from '@/lib/query-client';
+import { useResponsive } from '@/hooks/useResponsive';
 
 type HelperOnboardingScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -43,9 +45,13 @@ const PLATE_LETTERS = ['아', '바', '사', '자'];
 export default function HelperOnboardingScreen({ navigation }: HelperOnboardingScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeTabBarHeight();
   const { theme, isDark } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const { user, refreshUser } = useAuth();
+
+  // 실시간 온보딩 승인 감지 (관리자 승인 시 자동 새로고침)
+  useOrderWebSocket({ onOnboardingUpdate: refreshUser });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -387,10 +393,15 @@ export default function HelperOnboardingScreen({ navigation }: HelperOnboardingS
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       <ScrollView
         contentContainerStyle={[
-          styles.content, 
-          { 
+          styles.content,
+          {
             paddingTop: headerHeight + Spacing.md,
-            paddingBottom: tabBarHeight + Spacing.xl,
+            paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
+            ...(showDesktopLayout && {
+              maxWidth: containerMaxWidth,
+              alignSelf: 'center' as const,
+              width: '100%' as any,
+            }),
           }
         ]}
         showsVerticalScrollIndicator={true}

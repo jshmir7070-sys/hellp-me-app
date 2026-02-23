@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   ScrollView,
@@ -16,7 +16,7 @@ import { Icon } from "@/components/Icon";
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CommonActions } from '@react-navigation/native';
 import { useHeaderHeight } from '@react-navigation/elements';
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useSafeTabBarHeight } from "@/hooks/useSafeTabBarHeight";
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { getToken } from '@/utils/secure-token-storage';
@@ -30,9 +30,21 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { SignaturePad } from '@/components/SignaturePad';
 import { useTheme } from '@/hooks/useTheme';
+import { useResponsive } from '@/hooks/useResponsive';
 import { Colors, Spacing, BorderRadius, Typography, BrandColors } from '@/constants/theme';
 import { apiRequest, getApiUrl } from '@/lib/query-client';
 import type { RootStackParamList } from '@/navigation/RootStackNavigator';
+import {
+  REQUESTER_ORDER_CONTRACT_TERMS,
+  REQUESTER_ORDER_CHECKBOX_KEYS,
+  createRequesterOrderContractState,
+  createRequesterOrderContractReadState,
+  isAllRequiredAgreed,
+  getRequesterContractTerms,
+  type ContractCheckboxState,
+  type ContractReadState,
+  type ContractSettings,
+} from '@/constants/contracts';
 
 type PaymentStep = 'contract' | 'signature' | 'payment' | 'complete';
 
@@ -49,22 +61,48 @@ export default function CreateContractScreen({ route, navigation }: Props) {
   const { orderId } = route.params;
   const { theme, isDark } = useTheme();
   const queryClient = useQueryClient();
+  const { showDesktopLayout, containerMaxWidth, contentWidth } = useResponsive();
   const { width: screenWidth } = useWindowDimensions();
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeTabBarHeight();
   const [step, setStep] = useState<PaymentStep>('contract');
 
-  // 개별 동의 체크박스 (7개)
-  const [agreements, setAgreements] = useState<boolean[]>([false, false, false, false, false, false, false]);
-  const allAgreed = agreements.every(Boolean);
-  const toggleAgreement = (index: number) => {
-    setAgreements(prev => prev.map((v, i) => i === index ? !v : v));
+  // 동적 설정값 기반 계약서 생성
+  const { data: contractSettings } = useQuery<Partial<ContractSettings>>({
+    queryKey: ['/api/settings/contract-values'],
+  });
+  const requesterTerms = getRequesterContractTerms(contractSettings || {});
+
+  // contracts.ts 기반 동의 상태
+  const [agreements, setAgreements] = useState<ContractCheckboxState>(() => createRequesterOrderContractState());
+  const [readState, setReadState] = useState<ContractReadState>(() => createRequesterOrderContractReadState());
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  const [termModalVisible, setTermModalVisible] = useState(false);
+  const [termModalContent, setTermModalContent] = useState<{ title: string; content: string } | null>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
+  const termItemRefs = useRef<Record<string, number>>({});
+
+  const allAgreed = isAllRequiredAgreed(agreements, REQUESTER_ORDER_CHECKBOX_KEYS.required);
+
+  const toggleAgreement = (key: string) => {
+    setAgreements(prev => ({ ...prev, [key]: !prev[key] }));
   };
+
   const toggleAllAgreements = () => {
-    const newValue = !allAgreed;
-    setAgreements(new Array(7).fill(newValue));
+    const newVal = !allAgreed;
+    const updated = { ...agreements };
+    if (newVal) {
+      const readUpdated = { ...readState };
+      [...REQUESTER_ORDER_CHECKBOX_KEYS.required, ...REQUESTER_ORDER_CHECKBOX_KEYS.optional]
+        .forEach(k => { readUpdated[k] = true; });
+      setReadState(readUpdated);
+    }
+    [...REQUESTER_ORDER_CHECKBOX_KEYS.required, ...REQUESTER_ORDER_CHECKBOX_KEYS.optional]
+      .forEach(k => { updated[k] = newVal; });
+    setAgreements(updated);
   };
+
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   // 서명
@@ -83,7 +121,6 @@ export default function CreateContractScreen({ route, navigation }: Props) {
   // 계약서
   const [balancePaymentDate, setBalancePaymentDate] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [requestTaxInvoice, setRequestTaxInvoice] = useState(false);
 
   // 결제
   const [depositAgreed, setDepositAgreed] = useState(false);
@@ -125,7 +162,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
     enabled: !!orderId,
   });
 
-  const depositRate = breakdown?.depositRate || 20;
+  const depositRate = breakdown?.depositRate || 10;
   const balanceRate = 100 - depositRate;
   const amounts = breakdown ? {
     total: breakdown.supplyAmount,
@@ -139,9 +176,10 @@ export default function CreateContractScreen({ route, navigation }: Props) {
     mutationFn: async () => {
       const res = await apiRequest('POST', `/api/orders/${orderId}/confirm-contract`, {
         agreed: true,
+        agreedTerms: agreements,
         depositAmount: amounts.deposit,
         balancePaymentDate: format(balancePaymentDate, 'yyyy-MM-dd'),
-        requestTaxInvoice,
+        requestTaxInvoice: agreements.autoTaxInvoice || false,
         signatureData: signatureData || undefined,
       });
       return res.json();
@@ -149,6 +187,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
       queryClient.invalidateQueries({ queryKey: ['/api/orders/my'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/requester/orders'] });
       queryClient.invalidateQueries({ queryKey: ['/api/contracts'] });
       setStep('complete');
       setIsProcessingPayment(false);
@@ -321,9 +360,26 @@ export default function CreateContractScreen({ route, navigation }: Props) {
   };
 
   // 등록 (계약 확정)
-  const handleRegister = async () => {
+  const executeRegister = () => {
     setIsProcessingPayment(true);
     confirmMutation.mutate();
+  };
+
+  const handleRegister = () => {
+    if (Platform.OS === 'web') {
+      if (confirm('계약을 확인하고 오더를 등록하시겠습니까?')) {
+        executeRegister();
+      }
+    } else {
+      Alert.alert(
+        '계약 확인',
+        '계약 내용을 확인하고 오더를 등록하시겠습니까?',
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '등록하기', onPress: () => executeRegister() },
+        ]
+      );
+    }
   };
 
   // 계좌번호 복사
@@ -381,6 +437,87 @@ export default function CreateContractScreen({ route, navigation }: Props) {
 
   const currentGlobalStep = getGlobalStepNumber(step);
   const globalProgressPercentage = (currentGlobalStep / TOTAL_WORKFLOW_STEPS) * 100;
+
+  // 개별 계약 항목 렌더링
+  const renderTermItem = (key: string, term: { title: string; content: string; required?: boolean }) => {
+    const isRead = readState[key];
+    const isAgreedItem = agreements[key];
+    const isExpanded = expandedItem === key;
+
+    return (
+      <View
+        key={key}
+        onLayout={(e) => {
+          termItemRefs.current[key] = e.nativeEvent.layout.y;
+        }}
+        style={[
+          styles.termItemContainer,
+          {
+            borderColor: isAgreedItem ? BrandColors.requester : (isDark ? '#4A5568' : '#E0E0E0'),
+            backgroundColor: isAgreedItem ? (isDark ? '#1a2e1a' : '#F0FFF4') : 'transparent',
+          }
+        ]}
+      >
+        {/* 제목 행 — 탭하면 전체화면 모달로 내용 표시 */}
+        <Pressable
+          style={styles.termHeader}
+          onPress={() => {
+            setTermModalContent({ title: term.title, content: term.content });
+            setTermModalVisible(true);
+            if (!isRead) {
+              setReadState(prev => ({ ...prev, [key]: true }));
+            }
+          }}
+        >
+          <Icon
+            name="document-text-outline"
+            size={18}
+            color={BrandColors.requester}
+          />
+          <ThemedText style={[styles.termTitle, { color: theme.text, flex: 1 }]}>
+            {term.title}
+          </ThemedText>
+          {isRead && !isAgreedItem && (
+            <View style={[styles.readBadgeSmall, { backgroundColor: isDark ? '#2d3748' : '#FEF3C7' }]}>
+              <ThemedText style={{ fontSize: 10, color: '#D97706' }}>열람완료</ThemedText>
+            </View>
+          )}
+          {isAgreedItem && (
+            <Icon name="checkmark-circle" size={20} color={BrandColors.success} />
+          )}
+          <Icon name="chevron-forward" size={16} color={isDark ? '#888' : '#999'} />
+        </Pressable>
+
+        {/* 동의 체크박스 */}
+        <Pressable
+          style={[
+            styles.termAgreeRow,
+            { borderTopColor: isDark ? '#4A5568' : '#E0E0E0' },
+            !isRead && styles.disabledRow,
+          ]}
+          disabled={!isRead}
+          onPress={() => toggleAgreement(key)}
+        >
+          <View style={[
+            styles.checkboxSmall,
+            {
+              backgroundColor: isAgreedItem ? BrandColors.requester : 'transparent',
+              borderColor: isAgreedItem ? BrandColors.requester : (isRead ? Colors.light.tabIconDefault : '#ccc'),
+            },
+            !isRead && { opacity: 0.4 },
+          ]}>
+            {isAgreedItem ? <Icon name="checkmark-outline" size={14} color="#fff" /> : null}
+          </View>
+          <ThemedText style={[
+            styles.termAgreeText,
+            { color: isRead ? theme.text : (isDark ? '#666' : '#aaa') },
+          ]}>
+            {isRead ? '동의합니다' : '내용을 열람해주세요'}
+          </ThemedText>
+        </Pressable>
+      </View>
+    );
+  };
 
   const renderStepIndicator = () => (
     <View style={[styles.stepIndicator, { backgroundColor: isDark ? '#1a365d' : '#EBF8FF' }]}>
@@ -447,25 +584,14 @@ export default function CreateContractScreen({ route, navigation }: Props) {
     </View>
   );
 
-  // ─── Step 8: 계약서 (단일 문서) ───
-  const agreementTexts = [
-    `플랫폼이 "운송주선 사업자"이며, 직접 운송이 아닌 기사(헬퍼)가 수행함을 이해하고 동의합니다.`,
-    `본 오더의 결제 구조가 "계약금 ${depositRate}% + 잔금 ${balanceRate}%"임에 동의합니다.`,
-    `잔금이 "마감자료(증빙) 기준"으로 재산정될 수 있음에 동의합니다.`,
-    `환불 정책에 동의합니다. (매칭 전: 100% 환불 / 매칭 후: 환불 불가)`,
-    `잔금결제일(${format(balancePaymentDate, 'yyyy년 M월 d일', { locale: ko })})까지 잔금을 납부할 것에 동의합니다.`,
-    `매칭 완료 시 기사에게 업무 수행 목적의 연락처가 제공될 수 있음에 동의합니다.`,
-    `플랫폼 외 직거래 금지 및 위반 시 이용제한/손해배상에 동의합니다.`,
-  ];
-
+  // ─── Step 8: 계약서 ───
   const renderContractStep = () => (
     <>
-      {/* ── 하나의 계약서 문서 ── */}
       <Card style={[styles.card, { padding: Spacing.xl }]}>
         {/* 계약서 제목 + 생성일시 */}
         <View style={styles.contractHeader}>
           <ThemedText style={[styles.contractTitle, { color: theme.text }]}>
-            화물운송 위탁배송 계약서
+            {requesterTerms.contractOverview.title}
           </ThemedText>
           <ThemedText style={[styles.signDateText, { color: isDark ? '#A0AEC0' : Colors.light.tabIconDefault }]}>
             작성일시: {format(contractCreatedAt, 'yyyy년 M월 d일 HH:mm', { locale: ko })}
@@ -585,87 +711,36 @@ export default function CreateContractScreen({ route, navigation }: Props) {
           </Pressable>
         </View>
 
-        {/* 세금계산서 */}
-        <View style={[styles.amountRow, { borderTopWidth: 1, borderTopColor: '#E0E0E0', paddingTop: Spacing.md }]}>
-          <View style={{ flex: 1 }}>
-            <ThemedText style={[styles.label, { color: theme.text, fontWeight: '600' }]}>세금계산서 발행 요청</ThemedText>
-            <ThemedText style={[styles.hint, { color: Colors.light.tabIconDefault }]}>정산 완료 후 세금계산서를 받으시겠습니까?</ThemedText>
-          </View>
-          <Pressable
-            style={[styles.checkboxContainer, { borderColor: requestTaxInvoice ? BrandColors.requester : (isDark ? '#4A5568' : '#E0E0E0') }]}
-            onPress={() => setRequestTaxInvoice(!requestTaxInvoice)}
-          >
-            {requestTaxInvoice
-              ? <Icon name="checkbox" size={24} color={BrandColors.requester} />
-              : <Icon name="square-outline" size={24} color={isDark ? '#4A5568' : '#9CA3AF'} />
-            }
-          </Pressable>
-        </View>
-
-        {requestTaxInvoice && !requesterProfile?.businessNumber && (
-          <View style={[styles.warningBox, { backgroundColor: isDark ? '#7C2D12' : '#FEF3C7' }]}>
-            <Icon name="warning-outline" size={20} color="#D97706" />
-            <View style={{ flex: 1, marginLeft: Spacing.sm }}>
-              <ThemedText style={[styles.warningText, { color: '#92400E' }]}>사업자정보가 등록되지 않았습니다</ThemedText>
-              <ThemedText style={[styles.warningHint, { color: '#B45309' }]}>세금계산서 발행을 위해 나의정보에서 사업자정보를 등록해주세요</ThemedText>
-            </View>
-          </View>
-        )}
-
         <View style={[styles.contractDivider, { borderColor: isDark ? '#4A5568' : '#E0E0E0' }]} />
 
-        {/* ── 화물운송 위탁배송 법적조항 ── */}
+        {/* ── 계약 개요 ── */}
         <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>
-          화물운송 위탁배송 계약 조항
+          계약 개요
         </ThemedText>
-        <View style={styles.legalClausesList}>
-          <View style={styles.legalClause}>
-            <ThemedText style={[styles.clauseNumber, { color: BrandColors.requester }]}>제1조</ThemedText>
-            <ThemedText style={[styles.clauseText, { color: theme.text }]}>
-              본 플랫폼(헬프미)은 화물자동차 운수사업법상 "운송주선사업자"로서, 화주(요청자)와 기사(헬퍼) 간 운송을 주선하며, 직접 운송 행위를 수행하지 않습니다.
+        <Pressable
+          style={[styles.overviewBox, { backgroundColor: isDark ? '#1a1a2e' : '#F8F9FA' }]}
+          onPress={() => {
+            setTermModalContent({
+              title: requesterTerms.contractOverview.title,
+              content: requesterTerms.contractOverview.content,
+            });
+            setTermModalVisible(true);
+          }}
+        >
+          <View style={{ maxHeight: 100, overflow: 'hidden' }}>
+            <ThemedText style={[styles.overviewText, { color: theme.text }]} numberOfLines={5}>
+              {requesterTerms.contractOverview.content}
             </ThemedText>
           </View>
-          <View style={styles.legalClause}>
-            <ThemedText style={[styles.clauseNumber, { color: BrandColors.requester }]}>제2조</ThemedText>
-            <ThemedText style={[styles.clauseText, { color: theme.text }]}>
-              본 계약에 따른 위탁배송 업무는 기사(헬퍼)가 독립사업자 자격으로 수행하며, 플랫폼과 기사 간에는 고용관계가 존재하지 않습니다.
-            </ThemedText>
+          <View style={styles.overviewOpenRow}>
+            <ThemedText style={{ fontSize: 12, color: BrandColors.requester }}>전체 내용 보기</ThemedText>
+            <Icon name="open-outline" size={16} color={BrandColors.requester} />
           </View>
-          <View style={styles.legalClause}>
-            <ThemedText style={[styles.clauseNumber, { color: BrandColors.requester }]}>제3조</ThemedText>
-            <ThemedText style={[styles.clauseText, { color: theme.text }]}>
-              환불 규정: 기사(헬퍼) 매칭 전 계약 취소 시 계약금 100% 환불 / 매칭 완료 후 취소 시 환불 불가.
-            </ThemedText>
-          </View>
-          <View style={styles.legalClause}>
-            <ThemedText style={[styles.clauseNumber, { color: BrandColors.requester }]}>제4조</ThemedText>
-            <ThemedText style={[styles.clauseText, { color: theme.text }]}>
-              결제 구조는 계약금(총 금액의 {depositRate}%)을 계약 시 납부하고, 잔금({balanceRate}%)은 설정한 잔금결제일까지 납부합니다.
-            </ThemedText>
-          </View>
-          <View style={styles.legalClause}>
-            <ThemedText style={[styles.clauseNumber, { color: BrandColors.requester }]}>제5조</ThemedText>
-            <ThemedText style={[styles.clauseText, { color: theme.text }]}>
-              잔금은 마감자료(증빙) 기준으로 재산정될 수 있으며, 실제 배송 수량에 따라 정산 금액이 변동될 수 있습니다.
-            </ThemedText>
-          </View>
-          <View style={styles.legalClause}>
-            <ThemedText style={[styles.clauseNumber, { color: BrandColors.requester }]}>제6조</ThemedText>
-            <ThemedText style={[styles.clauseText, { color: theme.text }]}>
-              매칭 완료 시 업무 수행 목적으로 기사(헬퍼)에게 요청자의 연락처가 제공될 수 있습니다.
-            </ThemedText>
-          </View>
-          <View style={styles.legalClause}>
-            <ThemedText style={[styles.clauseNumber, { color: BrandColors.requester }]}>제7조</ThemedText>
-            <ThemedText style={[styles.clauseText, { color: theme.text }]}>
-              플랫폼 외 직거래는 엄격히 금지되며, 위반 시 이용제한 및 손해배상 청구 대상이 됩니다.
-            </ThemedText>
-          </View>
-        </View>
+        </Pressable>
 
         <View style={[styles.contractDivider, { borderColor: isDark ? '#4A5568' : '#E0E0E0' }]} />
 
-        {/* ── 필수 동의사항 (개별 체크박스) ── */}
+        {/* ── 필수 동의사항 (contracts.ts 기반) ── */}
         <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>필수 동의사항</ThemedText>
 
         {/* 전체 동의 */}
@@ -685,27 +760,31 @@ export default function CreateContractScreen({ route, navigation }: Props) {
           </ThemedText>
         </Pressable>
 
-        {/* 개별 동의 항목 */}
-        <View style={styles.agreementsList}>
-          {agreementTexts.map((text, index) => (
-            <Pressable
-              key={index}
-              style={styles.agreementItem}
-              onPress={() => toggleAgreement(index)}
-            >
-              <View style={[
-                styles.checkbox,
-                { borderColor: agreements[index] ? BrandColors.requester : Colors.light.tabIconDefault },
-                agreements[index] && { backgroundColor: BrandColors.requester }
-              ]}>
-                {agreements[index] ? <Icon name="checkmark-outline" size={14} color="#fff" /> : null}
-              </View>
-              <ThemedText style={[styles.agreementText, { color: theme.text }]}>
-                {text}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
+        {/* 필수 항목 (10개) */}
+        {REQUESTER_ORDER_CHECKBOX_KEYS.required.map((key) => {
+          const term = requesterTerms[key];
+          return renderTermItem(key, term);
+        })}
+
+        {/* 선택 항목 */}
+        <View style={[styles.contractDivider, { borderColor: isDark ? '#4A5568' : '#E0E0E0' }]} />
+        <ThemedText style={[styles.contractSectionTitle, { color: theme.text }]}>선택 동의사항</ThemedText>
+
+        {REQUESTER_ORDER_CHECKBOX_KEYS.optional.map((key) => {
+          const term = requesterTerms[key];
+          return renderTermItem(key, term);
+        })}
+
+        {/* 세금계산서 경고 (사업자정보 미등록) */}
+        {agreements.autoTaxInvoice && !requesterProfile?.businessNumber && (
+          <View style={[styles.warningBox, { backgroundColor: isDark ? '#7C2D12' : '#FEF3C7' }]}>
+            <Icon name="warning-outline" size={20} color="#D97706" />
+            <View style={{ flex: 1, marginLeft: Spacing.sm }}>
+              <ThemedText style={[styles.warningText, { color: '#92400E' }]}>사업자정보가 등록되지 않았습니다</ThemedText>
+              <ThemedText style={[styles.warningHint, { color: '#B45309' }]}>세금계산서 발행을 위해 나의정보에서 사업자정보를 등록해주세요</ThemedText>
+            </View>
+          </View>
+        )}
       </Card>
 
       <View style={styles.buttonContainer}>
@@ -751,7 +830,7 @@ export default function CreateContractScreen({ route, navigation }: Props) {
         <View style={styles.signatureContainer}>
           <SignaturePad
             onSignatureChange={handleSignatureChange}
-            width={Math.min(screenWidth - 80, 320)}
+            width={Math.min(contentWidth - 80, 320)}
             height={150}
             primaryColor={BrandColors.requester}
           />
@@ -805,7 +884,9 @@ export default function CreateContractScreen({ route, navigation }: Props) {
               disabled={isSendingCode || phoneNumber.length < 12}
               style={{
                 backgroundColor: phoneNumber.length >= 12 ? BrandColors.requester : Colors.light.tabIconDefault,
-                minWidth: 100,
+                minWidth: 120,
+                minHeight: 52,
+                paddingHorizontal: Spacing.md,
               }}
             >
               {isSendingCode ? '발송중...' : isCodeSent ? '재발송' : '인증요청'}
@@ -838,7 +919,9 @@ export default function CreateContractScreen({ route, navigation }: Props) {
                   disabled={isVerifying || verificationCode.length !== 6 || isVerified}
                   style={{
                     backgroundColor: isVerified ? BrandColors.success : (verificationCode.length === 6 ? BrandColors.requester : Colors.light.tabIconDefault),
-                    minWidth: 100,
+                    minWidth: 120,
+                    minHeight: 52,
+                    paddingHorizontal: Spacing.md,
                   }}
                 >
                   {isVerifying ? '확인중...' : isVerified ? '인증완료' : '확인'}
@@ -1059,12 +1142,22 @@ export default function CreateContractScreen({ route, navigation }: Props) {
   );
 
   return (
+    <>
     <ThemedView style={styles.container}>
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: headerHeight + Spacing.md, paddingBottom: tabBarHeight + Spacing['2xl'] },
+          {
+            paddingTop: headerHeight + Spacing.md,
+            paddingBottom: showDesktopLayout ? Spacing['2xl'] : tabBarHeight + Spacing['2xl'],
+            ...(showDesktopLayout && {
+              maxWidth: containerMaxWidth,
+              alignSelf: 'center' as const,
+              width: '100%' as any,
+            }),
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -1177,6 +1270,45 @@ export default function CreateContractScreen({ route, navigation }: Props) {
         )
       ) : null}
     </ThemedView>
+
+    {/* 약관 본문 전체화면 모달 */}
+    <Modal
+      visible={termModalVisible}
+      animationType="slide"
+      onRequestClose={() => setTermModalVisible(false)}
+    >
+      <View style={[styles.termModalContainer, { backgroundColor: theme.backgroundRoot }]}>
+        <View style={[styles.termModalHeader, { backgroundColor: theme.backgroundSecondary, borderBottomColor: isDark ? '#4A5568' : '#E0E0E0' }]}>
+          <ThemedText style={[styles.termModalTitle, { color: theme.text }]} numberOfLines={2}>
+            {termModalContent?.title}
+          </ThemedText>
+          <Pressable
+            style={styles.termModalClose}
+            onPress={() => setTermModalVisible(false)}
+          >
+            <Icon name="close" size={24} color={theme.text} />
+          </Pressable>
+        </View>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.termModalBody}
+          showsVerticalScrollIndicator={true}
+        >
+          <ThemedText style={[styles.termModalText, { color: theme.text }]}>
+            {termModalContent?.content}
+          </ThemedText>
+        </ScrollView>
+        <View style={[styles.termModalFooter, { backgroundColor: theme.backgroundSecondary, borderTopColor: isDark ? '#4A5568' : '#E0E0E0' }]}>
+          <Pressable
+            style={[styles.termModalConfirmBtn, { backgroundColor: BrandColors.requester }]}
+            onPress={() => setTermModalVisible(false)}
+          >
+            <ThemedText style={styles.termModalConfirmText}>확인</ThemedText>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -1254,31 +1386,70 @@ const styles = StyleSheet.create({
     ...Typography.small,
     marginTop: 2,
   },
-  termsList: {
-    gap: Spacing.sm,
+  // 계약 항목 카드
+  termItemContainer: {
+    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    overflow: 'hidden',
   },
-  termItem: {
+  termHeader: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    padding: Spacing.md,
     gap: Spacing.sm,
   },
-  termText: {
-    ...Typography.small,
-    flex: 1,
+  termTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
   },
-  legalClausesList: {
-    gap: Spacing.md,
+  termContentContainer: {
+    borderTopWidth: 1,
   },
-  legalClause: {
-    gap: Spacing.xs,
+  termContent: {
+    maxHeight: 400,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
   },
-  clauseNumber: {
-    ...Typography.small,
-    fontWeight: '700',
+  termContentText: {
+    fontSize: 12,
+    lineHeight: 18,
   },
-  clauseText: {
-    ...Typography.small,
-    lineHeight: 20,
+  termAgreeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.sm,
+    borderTopWidth: 1,
+  },
+  termAgreeText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  disabledRow: {
+    opacity: 0.5,
+  },
+  readBadgeSmall: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
+  },
+  overviewBox: {
+    padding: Spacing.md,
+    borderRadius: BorderRadius.sm,
+  },
+  overviewText: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  overviewOpenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    marginTop: Spacing.sm,
   },
   partySection: {
     padding: Spacing.md,
@@ -1348,26 +1519,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     flex: 1,
   },
-  agreementsList: {
-    gap: Spacing.md,
-  },
-  agreementItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.sm,
-  },
-  agreementText: {
-    ...Typography.small,
-    flex: 1,
-    lineHeight: 20,
-  },
-  agreeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginVertical: Spacing.lg,
-    paddingHorizontal: Spacing.sm,
-  },
   checkbox: {
     width: 22,
     height: 22,
@@ -1375,6 +1526,21 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  checkboxSmall: {
+    width: 22,
+    height: 22,
+    borderRadius: 4,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  agreeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginVertical: Spacing.lg,
+    paddingHorizontal: Spacing.sm,
   },
   agreeText: {
     ...Typography.small,
@@ -1389,9 +1555,6 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     ...Typography.body,
-  },
-  checkboxContainer: {
-    padding: Spacing.xs,
   },
   warningBox: {
     flexDirection: 'row',
@@ -1605,14 +1768,6 @@ const styles = StyleSheet.create({
   nextStepDesc: {
     ...Typography.small,
   },
-  retryPaymentButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing.lg,
-    borderRadius: BorderRadius.md,
-    marginTop: Spacing.md,
-  },
   signatureContainer: {
     alignItems: 'center',
     marginVertical: Spacing.md,
@@ -1630,11 +1785,11 @@ const styles = StyleSheet.create({
   phoneInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
+    gap: Spacing.md,
   },
   phoneInput: {
     flex: 1,
-    height: 48,
+    height: 52,
     borderWidth: 1,
     borderRadius: BorderRadius.sm,
     paddingHorizontal: Spacing.md,
@@ -1700,5 +1855,49 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
     fontSize: 16,
+  },
+  termModalContainer: {
+    flex: 1,
+  },
+  termModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 50,
+    paddingBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderBottomWidth: 1,
+  },
+  termModalTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    marginRight: Spacing.md,
+  },
+  termModalClose: {
+    padding: Spacing.xs,
+  },
+  termModalBody: {
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xl * 2,
+  },
+  termModalText: {
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  termModalFooter: {
+    padding: Spacing.lg,
+    borderTopWidth: 1,
+  },
+  termModalConfirmBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  termModalConfirmText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

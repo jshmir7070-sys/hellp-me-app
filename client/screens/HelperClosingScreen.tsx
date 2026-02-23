@@ -9,12 +9,14 @@ import { Icon } from "@/components/Icon";
 import * as ImagePicker from 'expo-image-picker';
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { OrderCard } from "@/components/order/OrderCard";
 import { adaptHelperMyOrder, type OrderCardDTO } from "@/adapters/orderCardAdapter";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 import { apiRequest, getApiUrl, getAuthToken } from "@/lib/query-client";
+import { formatOrderNumber } from "@/lib/format-order-number";
 
 type ClosingStackParamList = {
   HelperClosing: undefined;
@@ -30,12 +32,16 @@ interface UploadedImage {
   fileKey?: string;
 }
 
+type FilterTab = 'all' | 'in_progress' | 'closing_submitted' | 'closing_completed';
+
 export default function HelperClosingScreen({ navigation }: HelperClosingScreenProps) {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const queryClient = useQueryClient();
+  const [activeFilter, setActiveFilter] = useState<FilterTab>('all');
 
   const { data: orders = [], isLoading, refetch, isRefetching } = useQuery<any[]>({
     queryKey: ['/api/helper/my-orders'],
@@ -58,6 +64,19 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
       .filter(order => ['final_amount_confirmed', 'balance_paid', 'settlement_paid', 'closed', 'completed'].includes(order.status?.toLowerCase() || ''))
       .map(order => adaptHelperMyOrder(order));
   }, [orders]);
+
+  const filteredSections = React.useMemo(() => {
+    switch (activeFilter) {
+      case 'in_progress':
+        return { inProgress: inProgressOrders, submitted: [], completed: [] };
+      case 'closing_submitted':
+        return { inProgress: [], submitted: closingSubmittedOrders, completed: [] };
+      case 'closing_completed':
+        return { inProgress: [], submitted: [], completed: closingCompletedOrders };
+      default:
+        return { inProgress: inProgressOrders, submitted: closingSubmittedOrders, completed: closingCompletedOrders };
+    }
+  }, [activeFilter, inProgressOrders, closingSubmittedOrders, closingCompletedOrders]);
 
   const handleCloseOrder = useCallback((item: OrderCardDTO) => {
     navigation.navigate('ClosingInput', { orderId: Number(item.orderId) });
@@ -84,44 +103,100 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
         flexGrow: 1,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
       scrollIndicatorInsets={{ bottom: insets.bottom }}
     >
       <View style={styles.header}>
         <Card style={styles.summaryCard}>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryItem}>
-              <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>
+          <View style={styles.filterRow}>
+            <Pressable
+              style={[
+                styles.filterTab,
+                activeFilter === 'all' && { backgroundColor: isDark ? '#2d3748' : '#EDF2F7' },
+              ]}
+              onPress={() => setActiveFilter('all')}
+            >
+              <ThemedText style={[
+                styles.filterLabel,
+                { color: activeFilter === 'all' ? theme.text : theme.tabIconDefault },
+                activeFilter === 'all' && { fontWeight: '700' },
+              ]}>
+                전체
+              </ThemedText>
+              <ThemedText style={[
+                styles.filterValue,
+                { color: activeFilter === 'all' ? BrandColors.helper : theme.tabIconDefault },
+              ]}>
+                {inProgressOrders.length + closingSubmittedOrders.length + closingCompletedOrders.length}건
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.filterTab,
+                activeFilter === 'in_progress' && { backgroundColor: isDark ? '#2d3320' : '#FFFBEB' },
+              ]}
+              onPress={() => setActiveFilter('in_progress')}
+            >
+              <ThemedText style={[
+                styles.filterLabel,
+                { color: activeFilter === 'in_progress' ? BrandColors.warning : theme.tabIconDefault },
+                activeFilter === 'in_progress' && { fontWeight: '700' },
+              ]}>
                 업무중
               </ThemedText>
-              <ThemedText style={[styles.summaryValue, { color: BrandColors.warning }]}>
+              <ThemedText style={[styles.filterValue, { color: BrandColors.warning }]}>
                 {inProgressOrders.length}건
               </ThemedText>
-            </View>
-            <View style={styles.summaryItem}>
-              <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.filterTab,
+                activeFilter === 'closing_submitted' && { backgroundColor: isDark ? '#1a2940' : '#EBF5FF' },
+              ]}
+              onPress={() => setActiveFilter('closing_submitted')}
+            >
+              <ThemedText style={[
+                styles.filterLabel,
+                { color: activeFilter === 'closing_submitted' ? BrandColors.helper : theme.tabIconDefault },
+                activeFilter === 'closing_submitted' && { fontWeight: '700' },
+              ]}>
                 마감 제출
               </ThemedText>
-              <ThemedText style={[styles.summaryValue, { color: BrandColors.helper }]}>
+              <ThemedText style={[styles.filterValue, { color: BrandColors.helper }]}>
                 {closingSubmittedOrders.length}건
               </ThemedText>
-            </View>
-            <View style={styles.summaryItem}>
-              <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>
+            </Pressable>
+            <Pressable
+              style={[
+                styles.filterTab,
+                activeFilter === 'closing_completed' && { backgroundColor: isDark ? '#1a2e1a' : '#F0FFF4' },
+              ]}
+              onPress={() => setActiveFilter('closing_completed')}
+            >
+              <ThemedText style={[
+                styles.filterLabel,
+                { color: activeFilter === 'closing_completed' ? BrandColors.success : theme.tabIconDefault },
+                activeFilter === 'closing_completed' && { fontWeight: '700' },
+              ]}>
                 마감 완료
               </ThemedText>
-              <ThemedText style={[styles.summaryValue, { color: BrandColors.success }]}>
+              <ThemedText style={[styles.filterValue, { color: BrandColors.success }]}>
                 {closingCompletedOrders.length}건
               </ThemedText>
-            </View>
+            </Pressable>
           </View>
         </Card>
       </View>
 
-      {inProgressOrders.length > 0 && (
+      {filteredSections.inProgress.length > 0 && (
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <View style={[styles.statusDot, { backgroundColor: BrandColors.warning }]} />
@@ -129,7 +204,7 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
               업무중 (마감 대기)
             </ThemedText>
           </View>
-          {inProgressOrders.map((order) => (
+          {filteredSections.inProgress.map((order) => (
             <OrderCard
               key={order.orderId}
               data={order}
@@ -140,7 +215,7 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
         </View>
       )}
 
-      {closingSubmittedOrders.length > 0 && (
+      {filteredSections.submitted.length > 0 && (
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <View style={[styles.statusDot, { backgroundColor: BrandColors.helper }]} />
@@ -148,7 +223,7 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
               마감 제출 (요청자 확인 대기)
             </ThemedText>
           </View>
-          {closingSubmittedOrders.map((order) => (
+          {filteredSections.submitted.map((order) => (
             <OrderCard
               key={order.orderId}
               data={order}
@@ -158,7 +233,7 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
         </View>
       )}
 
-      {closingCompletedOrders.length > 0 && (
+      {filteredSections.completed.length > 0 && (
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <View style={[styles.statusDot, { backgroundColor: BrandColors.success }]} />
@@ -166,7 +241,7 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
               마감 완료
             </ThemedText>
           </View>
-          {closingCompletedOrders.map((order) => (
+          {filteredSections.completed.map((order) => (
             <OrderCard
               key={order.orderId}
               data={order}
@@ -176,16 +251,22 @@ export default function HelperClosingScreen({ navigation }: HelperClosingScreenP
         </View>
       )}
 
-      {inProgressOrders.length === 0 && closingSubmittedOrders.length === 0 && closingCompletedOrders.length === 0 && (
+      {filteredSections.inProgress.length === 0 && filteredSections.submitted.length === 0 && filteredSections.completed.length === 0 && (
         <Card style={styles.emptyCard}>
           <View style={[styles.emptyIcon, { backgroundColor: BrandColors.helperLight }]}>
             <Icon name="checkmark-circle-outline" size={32} color={BrandColors.helper} />
           </View>
           <ThemedText style={[styles.emptyTitle, { color: theme.text }]}>
-            마감할 오더가 없습니다
+            {activeFilter === 'all' ? '마감할 오더가 없습니다' :
+             activeFilter === 'in_progress' ? '업무중인 오더가 없습니다' :
+             activeFilter === 'closing_submitted' ? '마감 제출한 오더가 없습니다' :
+             '마감 완료된 오더가 없습니다'}
           </ThemedText>
           <ThemedText style={[styles.emptySubtitle, { color: theme.tabIconDefault }]}>
-            진행 중인 오더가 완료되면 여기서 마감할 수 있습니다
+            {activeFilter === 'all' ? '진행 중인 오더가 완료되면 여기서 마감할 수 있습니다' :
+             activeFilter === 'in_progress' ? '현재 진행 중인 오더가 없습니다' :
+             activeFilter === 'closing_submitted' ? '마감 제출 대기 중인 오더가 없습니다' :
+             '아직 마감 완료된 오더가 없습니다'}
           </ThemedText>
         </Card>
       )}
@@ -206,6 +287,7 @@ interface ClosingField {
 
 export function ClosingInputScreen({ route, navigation }: any) {
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const queryClient = useQueryClient();
@@ -215,6 +297,7 @@ export function ClosingInputScreen({ route, navigation }: any) {
   const [deliveredCount, setDeliveredCount] = useState('');
   const [returnedCount, setReturnedCount] = useState('');
   const [etcCount, setEtcCount] = useState('');
+  const [extraCosts, setExtraCosts] = useState<{ code: string; amount: number; memo: string }[]>([]);
   const [deliveryHistoryImages, setDeliveryHistoryImages] = useState<UploadedImage[]>([]);
   const [etcImages, setEtcImages] = useState<UploadedImage[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -298,6 +381,39 @@ export function ClosingInputScreen({ route, navigation }: any) {
     }
   };
 
+  // 추가비용 관련 함수
+  const addExtraCost = () => {
+    setExtraCosts(prev => [...prev, { code: '', amount: 0, memo: '' }]);
+  };
+
+  const updateExtraCost = (index: number, field: 'code' | 'amount' | 'memo', value: string | number) => {
+    const updated = [...extraCosts];
+    if (field === 'amount') {
+      updated[index][field] = Number(value) || 0;
+    } else {
+      updated[index][field] = value as string;
+    }
+    setExtraCosts(updated);
+  };
+
+  const removeExtraCost = (index: number) => {
+    setExtraCosts(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // 예상 정산금액 계산 (공급가 + 부가세)
+  const estimatedSupply = (() => {
+    const unitPrice = orderDetail?.pricePerUnit || 0;
+    const delivered = parseInt(deliveredCount) || 0;
+    const returned = parseInt(returnedCount) || 0;
+    const etc = parseInt(etcCount) || 0;
+    const extraTotal = extraCosts.reduce((sum, c) => sum + (c.amount || 0), 0);
+    const deliveryReturnAmt = (delivered + returned) * unitPrice;
+    const etcAmt = etc * etcPricePerUnit;
+    return deliveryReturnAmt + etcAmt + extraTotal;
+  })();
+  const estimatedVat = Math.round(estimatedSupply * 0.1);
+  const estimatedAmount = estimatedSupply + estimatedVat;
+
   const uploadImages = async (images: UploadedImage[]): Promise<string[]> => {
     const fileKeys: string[] = [];
     const token = await getAuthToken();
@@ -362,6 +478,7 @@ export function ClosingInputScreen({ route, navigation }: any) {
         deliveredCount: parseInt(deliveredCount) || 0,
         returnedCount: parseInt(returnedCount) || 0,
         etcCount: parseInt(etcCount) || 0,
+        extraCosts: extraCosts.filter(c => c.code && c.amount > 0),
         deliveryHistoryImages: deliveryHistoryFileKeys,
         etcImages: etcFileKeys,
         dynamicFields: dynamicFieldValues,
@@ -449,11 +566,16 @@ export function ClosingInputScreen({ route, navigation }: any) {
         paddingTop: headerHeight + Spacing.lg,
         paddingBottom: insets.bottom + 100,
         paddingHorizontal: Spacing.lg,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
     >
       <Card style={styles.orderSummary}>
         <ThemedText style={[styles.orderTitle, { color: theme.text }]}>
-          오더 #{orderId}
+          {formatOrderNumber(orderDetail?.orderNumber, orderId)}
         </ThemedText>
       </Card>
 
@@ -557,6 +679,129 @@ export function ClosingInputScreen({ route, navigation }: any) {
           </ThemedText>
         </View>
       </Card>
+
+      {/* 추가비용 (선택) */}
+      <Card style={styles.inputCard}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <ThemedText style={[styles.inputLabel, { color: theme.text, marginBottom: 0 }]}>
+                추가비용 (선택)
+              </ThemedText>
+              <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 3 }}>
+                <ThemedText style={{ fontSize: 9, fontWeight: '600', color: '#92400E' }}>VAT별도</ThemedText>
+              </View>
+            </View>
+            <ThemedText style={[styles.inputHint, { color: theme.tabIconDefault }]}>
+              공급가액(VAT별도)으로 입력. 부가세 10%는 자동 계산됩니다.
+            </ThemedText>
+          </View>
+          <Pressable
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: BrandColors.helper,
+            }}
+            onPress={addExtraCost}
+          >
+            <Icon name="add-outline" size={16} color={BrandColors.helper} />
+            <ThemedText style={{ color: BrandColors.helper, fontSize: 13, marginLeft: 4, fontWeight: '600' }}>추가</ThemedText>
+          </Pressable>
+        </View>
+
+        {extraCosts.length === 0 ? (
+          <ThemedText style={{ color: theme.tabIconDefault, fontSize: 13, textAlign: 'center', paddingVertical: 12 }}>
+            추가비용이 없습니다
+          </ThemedText>
+        ) : (
+          extraCosts.map((cost, index) => (
+            <View key={index} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <View style={[styles.countInputWrapper, { backgroundColor: theme.backgroundDefault, borderColor: theme.tabIconDefault, flex: 1 }]}>
+                <TextInput
+                  style={[styles.countInput, { color: theme.text, flex: 1 }]}
+                  value={cost.code}
+                  onChangeText={(v) => updateExtraCost(index, 'code', v)}
+                  placeholder="항목명"
+                  placeholderTextColor={theme.tabIconDefault}
+                />
+              </View>
+              <View style={[styles.countInputWrapper, { backgroundColor: theme.backgroundDefault, borderColor: theme.tabIconDefault, flex: 1 }]}>
+                <TextInput
+                  style={[styles.countInput, { color: theme.text, flex: 1 }]}
+                  value={cost.amount ? String(cost.amount) : ''}
+                  onChangeText={(v) => updateExtraCost(index, 'amount', v)}
+                  keyboardType="number-pad"
+                  placeholder="금액"
+                  placeholderTextColor={theme.tabIconDefault}
+                />
+                <ThemedText style={[styles.countUnit, { color: theme.tabIconDefault }]}>원</ThemedText>
+              </View>
+              <Pressable onPress={() => removeExtraCost(index)} style={{ padding: 4 }}>
+                <Icon name="close-circle-outline" size={22} color={BrandColors.error} />
+              </Pressable>
+            </View>
+          ))
+        )}
+      </Card>
+
+      {/* 예상 정산금액 미리보기 */}
+      {(parseInt(deliveredCount) > 0 || parseInt(returnedCount) > 0) && (
+        <Card style={[styles.inputCard, { backgroundColor: theme.backgroundSecondary || '#F8F9FA' }]}>
+          <ThemedText style={[styles.inputLabel, { color: theme.text }]}>
+            예상 정산금액
+          </ThemedText>
+          <View style={{ gap: 4 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <ThemedText style={{ color: theme.tabIconDefault, fontSize: 13 }}>
+                배송+반품 ({parseInt(deliveredCount) || 0}+{parseInt(returnedCount) || 0}) × {(orderDetail?.pricePerUnit || 0).toLocaleString()}원
+              </ThemedText>
+              <ThemedText style={{ color: theme.text, fontSize: 13 }}>
+                {(((parseInt(deliveredCount) || 0) + (parseInt(returnedCount) || 0)) * (orderDetail?.pricePerUnit || 0)).toLocaleString()}원
+              </ThemedText>
+            </View>
+            {(parseInt(etcCount) || 0) > 0 && (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <ThemedText style={{ color: theme.tabIconDefault, fontSize: 13 }}>
+                  기타 ({parseInt(etcCount) || 0}) × {etcPricePerUnit.toLocaleString()}원
+                </ThemedText>
+                <ThemedText style={{ color: theme.text, fontSize: 13 }}>
+                  {((parseInt(etcCount) || 0) * etcPricePerUnit).toLocaleString()}원
+                </ThemedText>
+              </View>
+            )}
+            {extraCosts.filter(c => c.amount > 0).length > 0 && (
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <ThemedText style={{ color: theme.tabIconDefault, fontSize: 13 }}>추가비용</ThemedText>
+                <ThemedText style={{ color: theme.text, fontSize: 13 }}>
+                  {extraCosts.reduce((sum, c) => sum + (c.amount || 0), 0).toLocaleString()}원
+                </ThemedText>
+              </View>
+            )}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', borderTopWidth: 1, borderTopColor: theme.tabIconDefault + '33', paddingTop: 8, marginTop: 4 }}>
+              <ThemedText style={{ color: theme.text, fontSize: 13 }}>공급가액</ThemedText>
+              <ThemedText style={{ color: theme.text, fontSize: 13 }}>
+                {estimatedSupply.toLocaleString()}원
+              </ThemedText>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 }}>
+              <ThemedText style={{ color: theme.tabIconDefault, fontSize: 13 }}>부가세 (10%)</ThemedText>
+              <ThemedText style={{ color: theme.tabIconDefault, fontSize: 13 }}>
+                {estimatedVat.toLocaleString()}원
+              </ThemedText>
+            </View>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+              <ThemedText style={{ color: theme.text, fontSize: 15, fontWeight: '700' }}>예상 합계 (VAT 포함)</ThemedText>
+              <ThemedText style={{ color: BrandColors.helper, fontSize: 17, fontWeight: '700' }}>
+                {estimatedAmount.toLocaleString()}원
+              </ThemedText>
+            </View>
+          </View>
+        </Card>
+      )}
 
       {closingFields.length > 0 && (
         <Card style={styles.inputCard}>
@@ -751,27 +996,28 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   summaryCard: {
-    padding: Spacing.lg,
+    padding: Spacing.sm,
   },
-  summaryRow: {
+  filterRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 4,
   },
-  summaryItem: {
+  filterTab: {
     flex: 1,
     alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
   },
-  summaryDivider: {
-    width: 1,
-    height: 32,
-  },
-  summaryLabel: {
+  filterLabel: {
     ...Typography.small,
-    marginBottom: 4,
+    fontSize: 11,
+    marginBottom: 2,
   },
-  summaryValue: {
-    ...Typography.h4,
+  filterValue: {
+    ...Typography.body,
     fontWeight: '700',
+    fontSize: 16,
   },
   emptyCard: {
     padding: Spacing['3xl'],

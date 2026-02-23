@@ -91,6 +91,9 @@ export default function PlatformSettingsPage() {
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [hasChanges, setHasChanges] = useState(false);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [resetStep, setResetStep] = useState(0); // 0=hidden, 1=first confirm, 2=typing confirm
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
 
   const isSuperAdmin = user?.role === 'superadmin' || user?.role === 'SUPER_ADMIN';
 
@@ -302,6 +305,135 @@ export default function PlatformSettingsPage() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+      {/* 데이터 초기화 (Danger Zone) */}
+      <div className="bg-white rounded-lg border-2 border-red-200 overflow-hidden">
+        <div className="border-b bg-red-50 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">⚠️</span>
+            <div>
+              <h2 className="text-lg font-semibold text-red-900">데이터 초기화</h2>
+              <p className="text-sm text-red-600">오더, 정산, 계약, 사고, 이의제기 등 모든 운영 데이터를 삭제합니다</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-800 space-y-2">
+            <p className="font-bold">삭제 대상:</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-1 text-xs">
+              <span>• 오더/지원내역</span>
+              <span>• 계약서</span>
+              <span>• 마감보고서</span>
+              <span>• 정산내역</span>
+              <span>• 사고보고</span>
+              <span>• 이의제기</span>
+              <span>• 결제/환불</span>
+              <span>• 세금계산서</span>
+              <span>• 고객문의</span>
+              <span>• 리뷰/평점</span>
+              <span>• 알림/SMS 로그</span>
+              <span>• 감사 로그</span>
+            </div>
+            <p className="font-bold mt-2 text-red-900">유지 대상:</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-1 text-xs">
+              <span>• 사용자 계정</span>
+              <span>• 시스템 설정</span>
+              <span>• 택배사/운임 설정</span>
+              <span>• 수수료 정책</span>
+            </div>
+          </div>
+
+          {resetStep === 0 && (
+            <button
+              onClick={() => setResetStep(1)}
+              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium text-sm"
+            >
+              전체 운영 데이터 초기화
+            </button>
+          )}
+
+          {resetStep === 1 && (
+            <div className="border border-red-300 rounded-lg p-4 bg-red-50 space-y-3">
+              <p className="text-red-900 font-bold">정말 전체 데이터를 초기화하시겠습니까?</p>
+              <p className="text-red-700 text-sm">이 작업은 되돌릴 수 없습니다. 모든 운영 데이터가 영구적으로 삭제됩니다.</p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setResetStep(2)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium text-sm"
+                >
+                  네, 초기화합니다
+                </button>
+                <button
+                  onClick={() => { setResetStep(0); setResetConfirmText(''); }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium text-sm"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
+
+          {resetStep === 2 && (
+            <div className="border-2 border-red-400 rounded-lg p-4 bg-red-50 space-y-3">
+              <p className="text-red-900 font-bold">최종 확인: 아래에 "전체 초기화 확인"을 직접 입력하세요</p>
+              <input
+                type="text"
+                value={resetConfirmText}
+                onChange={(e) => setResetConfirmText(e.target.value)}
+                placeholder="전체 초기화 확인"
+                className="w-full border-2 border-red-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    if (resetConfirmText !== '전체 초기화 확인') {
+                      toast({ title: '확인 실패', description: '"전체 초기화 확인"을 정확히 입력하세요.', variant: 'error' });
+                      return;
+                    }
+                    setIsResetting(true);
+                    try {
+                      const res = await adminFetch('/api/admin/data-management/reset-all', {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ confirmCode: 'RESET_ALL_DATA', confirmText: '전체 초기화 확인' }),
+                      });
+                      const data = await res.json();
+                      if (res.ok) {
+                        toast({ title: '초기화 완료', description: data.message, variant: 'success' });
+                        queryClient.invalidateQueries();
+                      } else {
+                        toast({ title: '초기화 실패', description: data.message, variant: 'error' });
+                      }
+                    } catch (err: any) {
+                      toast({ title: '오류', description: err.message, variant: 'error' });
+                    } finally {
+                      setIsResetting(false);
+                      setResetStep(0);
+                      setResetConfirmText('');
+                    }
+                  }}
+                  disabled={resetConfirmText !== '전체 초기화 확인' || isResetting}
+                  className={`px-4 py-2 rounded-lg font-medium text-sm text-white ${
+                    resetConfirmText === '전체 초기화 확인' && !isResetting
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : 'bg-gray-300 cursor-not-allowed'
+                  }`}
+                >
+                  {isResetting ? '초기화 중...' : '최종 실행'}
+                </button>
+                <button
+                  onClick={() => { setResetStep(0); setResetConfirmText(''); }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-medium text-sm"
+                  disabled={isResetting}
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

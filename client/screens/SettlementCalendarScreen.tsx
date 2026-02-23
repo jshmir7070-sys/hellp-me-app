@@ -6,9 +6,11 @@ import { useQuery } from "@tanstack/react-query";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
+import { formatOrderNumber } from "@/lib/format-order-number";
 
 type SettlementCalendarScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -36,6 +38,8 @@ interface MonthlySettlement {
   totalAmount: number;
   commissionRate?: number;
   commissionAmount?: number;
+  insuranceRate?: number;
+  insuranceDeduction?: number;
   deductions: number;
   payoutAmount: number;
   workDays: WorkDay[];
@@ -46,6 +50,7 @@ const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 export default function SettlementCalendarScreen({ navigation }: SettlementCalendarScreenProps) {
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
 
   const today = new Date();
   const [currentYear, setCurrentYear] = useState(today.getFullYear());
@@ -189,6 +194,11 @@ export default function SettlementCalendarScreen({ navigation }: SettlementCalen
         paddingTop: headerHeight + Spacing.lg,
         paddingBottom: Spacing.xl + 100,
         paddingHorizontal: Spacing.lg,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
     >
       {/* ① 월 정산 요약 */}
@@ -219,10 +229,13 @@ export default function SettlementCalendarScreen({ navigation }: SettlementCalen
           </View>
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
+              <ThemedText style={[styles.summaryLabel, { color: '#EA580C' }]}>산재보험료 ({summaryData.insuranceRate || 0}%×50%)</ThemedText>
+              <ThemedText style={[styles.summaryValue, { color: '#EA580C' }]}>-{formatCurrency(summaryData.insuranceDeduction || 0)}</ThemedText>
+            </View>
+            <View style={styles.summaryItem}>
               <ThemedText style={[styles.summaryLabel, { color: '#EF4444' }]}>차감액</ThemedText>
               <ThemedText style={[styles.summaryValue, { color: '#EF4444' }]}>-{formatCurrency(summaryData.deductions)}</ThemedText>
             </View>
-            <View style={styles.summaryItem} />
           </View>
           <View style={[styles.divider, { backgroundColor: theme.backgroundSecondary }]} />
           <View style={styles.summaryRow}>
@@ -288,7 +301,7 @@ export default function SettlementCalendarScreen({ navigation }: SettlementCalen
                 <Card style={styles.workCard}>
                   <View style={styles.workCardHeader}>
                     <View style={styles.orderBadge}>
-                      <ThemedText style={styles.orderBadgeText}>O-{workDay.orderId}</ThemedText>
+                      <ThemedText style={styles.orderBadgeText}>{formatOrderNumber(workDay.orderNumber, workDay.orderId)}</ThemedText>
                     </View>
                     <ThemedText style={[styles.workCardStatus, { color: theme.tabIconDefault }]}>
                       {workDay.status === 'settlement_paid' ? '정산완료' : '확인중'}

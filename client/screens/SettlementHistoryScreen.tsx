@@ -7,6 +7,7 @@ import { Icon } from "@/components/Icon";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
@@ -35,6 +36,7 @@ export default function SettlementHistoryScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const queryClient = useQueryClient();
   const primaryColor = BrandColors.helper;
 
@@ -228,9 +230,14 @@ export default function SettlementHistoryScreen() {
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
         flexGrow: 1,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
       data={settlements}
       keyExtractor={(item) => String(item.id)}

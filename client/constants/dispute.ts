@@ -2,6 +2,7 @@
 export const DISPUTE_TYPE_LABELS: Record<string, string> = {
     settlement_error: "정산오류",
     invoice_error: "세금계산서 오류",
+    closing_data_mismatch: "마감자료불일치",
     contract_dispute: "계약조건분쟁",
     service_complaint: "서비스불만",
     delay: "일정관련",

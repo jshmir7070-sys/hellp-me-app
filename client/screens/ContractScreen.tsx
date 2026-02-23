@@ -2,18 +2,20 @@ import React, { useState, useCallback } from 'react';
 import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, TextInput, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useSafeTabBarHeight } from "@/hooks/useSafeTabBarHeight";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp, NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useTheme } from '@/hooks/useTheme';
+import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/contexts/AuthContext';
 import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
 import { SignaturePad } from '@/components/SignaturePad';
 import { Spacing, BorderRadius, Typography, BrandColors, Colors } from '@/constants/theme';
 import { apiRequest } from '@/lib/query-client';
+import { formatOrderNumber } from '@/lib/format-order-number';
 
 type ContractScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -52,8 +54,9 @@ interface Contract {
 export default function ContractScreen({ navigation, route }: ContractScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeTabBarHeight();
   const { theme, isDark } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -108,6 +111,101 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
     return new Date(dateString).toLocaleDateString('ko-KR');
   };
 
+  // 약관 텍스트를 조항별로 파싱하여 구조화된 렌더링
+  const renderFormattedTerms = (termsText: string) => {
+    // 줄단위로 분리
+    const lines = termsText.split('\n');
+    const elements: React.ReactNode[] = [];
+
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        // 빈 줄 → 간격
+        elements.push(<View key={`sp-${idx}`} style={{ height: Spacing.sm }} />);
+        return;
+      }
+
+      // 제N조 (제목) — 볼드 + 강조색
+      if (/^제\d+조/.test(trimmed)) {
+        elements.push(
+          <View key={`h-${idx}`} style={[fmtStyles.articleHeader, { borderLeftColor: brandColor }]}>
+            <ThemedText style={[fmtStyles.articleTitle, { color: theme.text }]}>
+              {trimmed}
+            </ThemedText>
+          </View>
+        );
+        return;
+      }
+
+      // ▪ 불릿 항목
+      if (trimmed.startsWith('▪') || trimmed.startsWith('•') || trimmed.startsWith('■')) {
+        elements.push(
+          <View key={`b-${idx}`} style={fmtStyles.bulletRow}>
+            <ThemedText style={[fmtStyles.bulletMark, { color: brandColor }]}>
+              {trimmed.charAt(0)}
+            </ThemedText>
+            <ThemedText style={[fmtStyles.bulletText, { color: theme.text }]}>
+              {trimmed.slice(1).trim()}
+            </ThemedText>
+          </View>
+        );
+        return;
+      }
+
+      // 숫자. 또는 숫자) 리스트 항목
+      if (/^\d+[.)]\s/.test(trimmed)) {
+        const match = trimmed.match(/^(\d+[.)]\s?)(.*)/);
+        if (match) {
+          elements.push(
+            <View key={`n-${idx}`} style={fmtStyles.numberedRow}>
+              <ThemedText style={[fmtStyles.numberMark, { color: theme.tabIconDefault }]}>
+                {match[1].trim()}
+              </ThemedText>
+              <ThemedText style={[fmtStyles.numberedText, { color: theme.text }]}>
+                {match[2]}
+              </ThemedText>
+            </View>
+          );
+          return;
+        }
+      }
+
+      // - 대시 리스트
+      if (trimmed.startsWith('- ') || trimmed.startsWith('– ')) {
+        elements.push(
+          <View key={`d-${idx}`} style={fmtStyles.dashRow}>
+            <ThemedText style={[fmtStyles.dashMark, { color: theme.tabIconDefault }]}>–</ThemedText>
+            <ThemedText style={[fmtStyles.dashText, { color: theme.text }]}>
+              {trimmed.slice(2).trim()}
+            </ThemedText>
+          </View>
+        );
+        return;
+      }
+
+      // ※ 참고사항
+      if (trimmed.startsWith('※')) {
+        elements.push(
+          <View key={`note-${idx}`} style={[fmtStyles.noteBox, { backgroundColor: isDark ? '#2d3748' : '#FEF3C7' }]}>
+            <ThemedText style={[fmtStyles.noteText, { color: isDark ? '#FCD34D' : '#92400E' }]}>
+              {trimmed}
+            </ThemedText>
+          </View>
+        );
+        return;
+      }
+
+      // 일반 텍스트
+      elements.push(
+        <ThemedText key={`t-${idx}`} style={[fmtStyles.normalText, { color: theme.text }]}>
+          {trimmed}
+        </ThemedText>
+      );
+    });
+
+    return elements;
+  };
+
   const handleSign = useCallback(() => {
     if (!isAgreed) {
       if (Platform.OS !== 'web') {
@@ -160,8 +258,13 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
       <ScrollView
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.md,
-          paddingBottom: tabBarHeight + Spacing.xl,
+          paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
           paddingHorizontal: Spacing.lg,
+          ...(showDesktopLayout && {
+            maxWidth: containerMaxWidth,
+            alignSelf: 'center' as const,
+            width: '100%' as any,
+          }),
         }}
       >
         <Card style={styles.contractHeader}>
@@ -182,7 +285,7 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
           <View style={styles.infoRow}>
             <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>주문명</ThemedText>
             <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-              {contract.orderTitle || `주문 #${contract.orderId}`}
+              {contract.orderTitle || formatOrderNumber(contract.orderNumber, contract.orderId)}
             </ThemedText>
           </View>
 
@@ -305,9 +408,9 @@ export default function ContractScreen({ navigation, route }: ContractScreenProp
         {contract.terms ? (
           <Card style={styles.section}>
             <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>약관</ThemedText>
-            <ThemedText style={[styles.terms, { color: theme.tabIconDefault }]}>
-              {contract.terms}
-            </ThemedText>
+            <View style={fmtStyles.termsContainer}>
+              {renderFormattedTerms(contract.terms)}
+            </View>
           </Card>
         ) : null}
 
@@ -467,8 +570,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   signatureImage: {
-    width: 120,
-    height: 60,
+    width: 160,
+    height: 80,
     marginTop: Spacing.sm,
     borderWidth: 1,
     borderColor: '#E0E0E0',
@@ -530,5 +633,90 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     ...Typography.body,
     fontWeight: '600',
+  },
+});
+
+// 약관 텍스트 포맷팅 스타일
+const fmtStyles = StyleSheet.create({
+  termsContainer: {
+    gap: 2,
+  },
+  articleHeader: {
+    borderLeftWidth: 3,
+    paddingLeft: Spacing.md,
+    paddingVertical: Spacing.sm,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.xs,
+  },
+  articleTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  bulletRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingLeft: Spacing.sm,
+    marginVertical: 2,
+  },
+  bulletMark: {
+    fontSize: 14,
+    fontWeight: '700',
+    width: 18,
+    lineHeight: 20,
+  },
+  bulletText: {
+    fontSize: 13,
+    lineHeight: 20,
+    flex: 1,
+  },
+  numberedRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingLeft: Spacing.md,
+    marginVertical: 2,
+  },
+  numberMark: {
+    fontSize: 13,
+    fontWeight: '600',
+    width: 24,
+    lineHeight: 20,
+  },
+  numberedText: {
+    fontSize: 13,
+    lineHeight: 20,
+    flex: 1,
+  },
+  dashRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingLeft: Spacing.lg,
+    marginVertical: 1,
+  },
+  dashMark: {
+    fontSize: 13,
+    width: 16,
+    lineHeight: 20,
+  },
+  dashText: {
+    fontSize: 13,
+    lineHeight: 20,
+    flex: 1,
+  },
+  noteBox: {
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.sm,
+    marginVertical: Spacing.xs,
+    marginLeft: Spacing.md,
+  },
+  noteText: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  normalText: {
+    fontSize: 13,
+    lineHeight: 20,
+    paddingVertical: 1,
   },
 });

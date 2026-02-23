@@ -9,11 +9,17 @@ type WebSocketEvent = {
   data: any;
 };
 
-export function useOrderWebSocket() {
+interface UseOrderWebSocketOptions {
+  onOnboardingUpdate?: () => void;
+}
+
+export function useOrderWebSocket(options?: UseOrderWebSocketOptions) {
   const queryClient = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isConnectingRef = useRef(false);
+  const onOnboardingUpdateRef = useRef(options?.onOnboardingUpdate);
+  onOnboardingUpdateRef.current = options?.onOnboardingUpdate;
 
   const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN || isConnectingRef.current) {
@@ -49,7 +55,7 @@ export function useOrderWebSocket() {
         .replace('http://', 'ws://')
         .replace(/\/$/, '');
       
-      const ws = new WebSocket(`${wsUrl}/ws/notifications?userId=${userId}`);
+      const ws = new WebSocket(`${wsUrl}/ws/notifications?userId=${userId}&token=${token}`);
 
       ws.onopen = () => {
         if (__DEV__) console.log('[WebSocket] Connected for real-time order updates');
@@ -63,13 +69,32 @@ export function useOrderWebSocket() {
           if (message.event === 'new_order') {
             if (__DEV__) console.log('[WebSocket] New order received:', message.data);
             queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/requester/orders'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/helper/work-history'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/orders/scheduled'] });
           } else if (message.event === 'order_status_updated') {
             if (__DEV__) console.log('[WebSocket] Order status updated:', message.data);
             queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/requester/orders'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/helper/work-history'] });
+            queryClient.invalidateQueries({ queryKey: ['/api/orders/scheduled'] });
             queryClient.invalidateQueries({ queryKey: ['/api/orders/my-applications'] });
           } else if (message.event === 'data_refresh') {
             if (message.data.type === 'order') {
               queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
+              queryClient.invalidateQueries({ queryKey: ['/api/requester/orders'] });
+              queryClient.invalidateQueries({ queryKey: ['/api/helper/work-history'] });
+              queryClient.invalidateQueries({ queryKey: ['/api/orders/scheduled'] });
+            } else if (message.data.type === 'onboarding') {
+              // 온보딩 승인/거절 시 사용자 데이터 새로고침
+              queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+              queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
+              onOnboardingUpdateRef.current?.();
+              if (__DEV__) console.log('[WebSocket] Onboarding status updated:', message.data);
+            } else if (message.data.type === 'settlement') {
+              queryClient.invalidateQueries({ queryKey: ['/api/settlements'] });
+            } else if (message.data.type === 'all') {
+              queryClient.invalidateQueries();
             }
           }
         } catch (e) {

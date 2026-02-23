@@ -174,8 +174,8 @@ export default function AdminUsersPage() {
       '역할': item.role || '',
       'HQ권한': item.isHqStaff ? 'Y' : 'N',
       '상태': item.status || 'active',
-      '가입일': item.createdAt ? new Date(item.createdAt).toLocaleDateString('ko-KR') : '',
-      '마지막로그인': item.lastLoginAt ? new Date(item.lastLoginAt).toLocaleString('ko-KR') : '',
+      '가입일': item.createdAt ? new Date(item.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
+      '마지막로그인': item.lastLoginAt ? new Date(item.lastLoginAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
     }));
     if (data.length === 0) return;
     const headers = Object.keys(data[0]);
@@ -286,7 +286,7 @@ export default function AdminUsersPage() {
       key: 'lastLoginAt',
       header: '마지막 로그인',
       width: 140,
-      render: (value) => value ? new Date(value).toLocaleString('ko-KR') : '-',
+      render: (value) => value ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-',
     },
     {
       key: 'id',
@@ -659,11 +659,11 @@ export default function AdminUsersPage() {
                 <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">가입일</Label>
-                    <p>{selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleDateString('ko-KR') : '-'}</p>
+                    <p>{selectedUser.createdAt ? new Date(selectedUser.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'}</p>
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs text-muted-foreground">마지막 로그인</Label>
-                    <p>{selectedUser.lastLoginAt ? new Date(selectedUser.lastLoginAt).toLocaleString('ko-KR') : '-'}</p>
+                    <p>{selectedUser.lastLoginAt ? new Date(selectedUser.lastLoginAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'}</p>
                   </div>
                 </div>
               </TabsContent>

@@ -14,6 +14,8 @@ interface ResponsiveInfo {
   columns: number;
   containerMaxWidth: number;
   sidebarWidth: number;
+  contentWidth: number;
+  showDesktopLayout: boolean;
 }
 
 const BREAKPOINTS = {
@@ -64,18 +66,30 @@ export function useResponsive(): ResponsiveInfo {
   }, []);
 
   const screenSize = getScreenSize(dimensions.width);
+  const isWeb = Platform.OS === 'web';
+  const isMobile = screenSize === 'mobile';
+  const sidebarWidth = getSidebarWidth(screenSize);
+  const containerMaxWidth = getContainerMaxWidth(screenSize);
+  const showDesktopLayout = isWeb && !isMobile;
+
+  // 사이드바를 제외한 실제 콘텐츠 영역 너비
+  const contentWidth = showDesktopLayout
+    ? Math.min(dimensions.width - sidebarWidth, containerMaxWidth)
+    : dimensions.width;
 
   return {
     width: dimensions.width,
     height: dimensions.height,
     screenSize,
-    isMobile: screenSize === 'mobile',
+    isMobile,
     isTablet: screenSize === 'tablet',
     isDesktop: screenSize === 'desktop',
-    isWeb: Platform.OS === 'web',
+    isWeb,
     columns: getColumns(screenSize),
-    containerMaxWidth: getContainerMaxWidth(screenSize),
-    sidebarWidth: getSidebarWidth(screenSize),
+    containerMaxWidth,
+    sidebarWidth,
+    contentWidth,
+    showDesktopLayout,
   };
 }
 

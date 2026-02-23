@@ -1,16 +1,20 @@
 import { BrandColors } from "@/constants/theme";
 
-export type OrderStatus = 
+export type OrderStatus =
   | "PENDING_APPROVAL"
   | "AWAITING_DEPOSIT"
-  | "OPEN" 
-  | "ASSIGNED" 
-  | "IN_PROGRESS" 
-  | "CLOSING_SUBMITTED" 
-  | "FINAL_AMOUNT_CONFIRMED" 
-  | "BALANCE_PAID" 
+  | "OPEN"
+  | "ASSIGNED"
+  | "IN_PROGRESS"
+  | "CLOSING_SUBMITTED"
+  | "FINAL_AMOUNT_CONFIRMED"
+  | "BALANCE_PAID"
   | "SETTLEMENT_PAID"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "DISPUTE_REVIEWING"
+  | "DISPUTE_RESOLVED"
+  | "DISPUTE_REJECTED"
+  | "SETTLED";
 
 export type ClosingReviewStatus = "PENDING" | "APPROVED" | "REJECTED";
 
@@ -74,6 +78,14 @@ export function getRequesterStatusLabel(
       return { text: "완료", color: BrandColors.success, bgColor: BrandColors.successLight };
     case "CANCELLED":
       return { text: "취소", color: BrandColors.error, bgColor: BrandColors.errorLight };
+    case "DISPUTE_REVIEWING":
+      return { text: "이의 심사중", color: BrandColors.warning, bgColor: BrandColors.warningLight };
+    case "DISPUTE_RESOLVED":
+      return { text: "이의 해결", color: BrandColors.success, bgColor: BrandColors.successLight };
+    case "DISPUTE_REJECTED":
+      return { text: "이의 반려", color: BrandColors.error, bgColor: BrandColors.errorLight };
+    case "SETTLED":
+      return { text: "정산완료", color: BrandColors.success, bgColor: BrandColors.successLight };
     default:
       return { text: orderStatus, color: BrandColors.neutral, bgColor: BrandColors.neutralLight };
   }
@@ -131,6 +143,14 @@ export function getHelperStatusLabel(
       return { text: "정산완료", color: BrandColors.success, bgColor: BrandColors.successLight };
     case "CANCELLED":
       return { text: "취소", color: BrandColors.error, bgColor: BrandColors.errorLight };
+    case "DISPUTE_REVIEWING":
+      return { text: "이의 심사중", color: BrandColors.warning, bgColor: BrandColors.warningLight };
+    case "DISPUTE_RESOLVED":
+      return { text: "이의 해결", color: BrandColors.success, bgColor: BrandColors.successLight };
+    case "DISPUTE_REJECTED":
+      return { text: "이의 반려", color: BrandColors.error, bgColor: BrandColors.errorLight };
+    case "SETTLED":
+      return { text: "정산완료", color: BrandColors.success, bgColor: BrandColors.successLight };
     default:
       return { text: orderStatus, color: BrandColors.neutral, bgColor: BrandColors.neutralLight };
   }

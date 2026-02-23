@@ -69,7 +69,11 @@ export const users = pgTable("users", {
   menuPermissions: text("menu_permissions"), // JSON string - 메뉴 접근 권한 배열
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => ({
+  idxUsersRole: sql`CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)`,
+  idxUsersIsTeamLeader: sql`CREATE INDEX IF NOT EXISTS idx_users_is_team_leader ON users(is_team_leader) WHERE is_team_leader = true`,
+  idxUsersCreatedAt: sql`CREATE INDEX IF NOT EXISTS idx_users_created_at ON users(created_at DESC)`,
+}));
 
 // Teams table (팀)
 export const teams = pgTable("teams", {
@@ -84,7 +88,10 @@ export const teams = pgTable("teams", {
   commissionRate: integer("commission_rate").default(0), // 팀장 수수료율 (%, 부가세 포함)
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  idxTeamsLeaderId: sql`CREATE INDEX IF NOT EXISTS idx_teams_leader_id ON teams(leader_id)`,
+  idxTeamsIsActive: sql`CREATE INDEX IF NOT EXISTS idx_teams_is_active ON teams(is_active) WHERE is_active = true`,
+}));
 
 // Team members table (팀원)
 export const teamMembers = pgTable("team_members", {
@@ -97,7 +104,11 @@ export const teamMembers = pgTable("team_members", {
     .references(() => users.id, { onDelete: "cascade" }),
   isActive: boolean("is_active").default(true),
   joinedAt: timestamp("joined_at").defaultNow(),
-});
+}, (table) => ({
+  idxTeamMembersTeamId: sql`CREATE INDEX IF NOT EXISTS idx_team_members_team_id ON team_members(team_id)`,
+  idxTeamMembersHelperId: sql`CREATE INDEX IF NOT EXISTS idx_team_members_helper_id ON team_members(helper_id)`,
+  idxTeamMembersTeamActive: sql`CREATE INDEX IF NOT EXISTS idx_team_members_team_active ON team_members(team_id, is_active)`,
+}));
 
 // Helper credentials table
 export const helperCredentials = pgTable("helper_credentials", {
@@ -451,6 +462,8 @@ export const orders = pgTable("orders", {
   deliveryLng: text("delivery_lng"), // 배송지 경도
   courierCompany: text("courier_company"), // 택배사명 (예: CJ대한통운, 로젠)
   courierCategory: text("courier_category").default("parcel"), // parcel, other, cold
+  enterpriseId: integer("enterprise_id").references(() => enterpriseAccounts.id, { onDelete: "set null" }), // 협력업체 ID
+  settlementDate: text("settlement_date"), // 협력업체 정산일
   requesterPhone: text("requester_phone"), // 담당자 연락처 (매칭 후 공유)
   helperPhoneShared: boolean("helper_phone_shared").default(false), // 헬퍼 전화번호 공유 여부
   matchedAt: timestamp("matched_at"), // 매칭 완료 시간
@@ -470,6 +483,7 @@ export const orders = pgTable("orders", {
   contractConfirmed: boolean("contract_confirmed").default(false), // 의뢰인 계약 동의 여부
   contractConfirmedAt: timestamp("contract_confirmed_at"), // 계약 확정 시간
   balancePaymentDueDate: text("balance_payment_due_date"), // 잔금 결제 예정일 (필수)
+  orderNumber: varchar("order_number", { length: 12 }).unique(), // 12자리 오더번호 (새 오더만, 기존 null)
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
@@ -480,6 +494,7 @@ export const orders = pgTable("orders", {
   idxOrdersScheduledDate: sql`CREATE INDEX IF NOT EXISTS idx_orders_scheduled_date ON orders(scheduled_date)`,
   idxOrdersCreatedAt: sql`CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at DESC)`,
   idxOrdersStatusCreated: sql`CREATE INDEX IF NOT EXISTS idx_orders_status_created ON orders(status, created_at DESC)`,
+  idxOrdersOrderNumber: sql`CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders(order_number) WHERE order_number IS NOT NULL`,
 }));
 
 // Order Start Tokens (QR 시작 토큰 - 1회성/만료)
@@ -536,7 +551,11 @@ export const checkInRecords = pgTable("check_in_records", {
   address: text("address"),
   status: text("status").default("checked_in"), // checked_in, checked_out
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  idxCheckinOrderId: sql`CREATE INDEX IF NOT EXISTS idx_checkin_order_id ON check_in_records(order_id)`,
+  idxCheckinHelperId: sql`CREATE INDEX IF NOT EXISTS idx_checkin_helper_id ON check_in_records(helper_id)`,
+  idxCheckinCreatedAt: sql`CREATE INDEX IF NOT EXISTS idx_checkin_created_at ON check_in_records(created_at DESC)`,
+}));
 
 export const insertCheckInRecordSchema = createInsertSchema(checkInRecords).omit({
   id: true,
@@ -621,7 +640,11 @@ export const orderCandidates = pgTable("order_candidates", {
   // 지원 당시 평점/완료율 스냅샷
   rankSnapshot: text("rank_snapshot"), // JSON: {avgRating, reviewCount, completionRate, last30dJobs}
   note: text("note"), // 기사 코멘트 (200자)
-});
+}, (table) => ({
+  idxOrderCandidatesOrderId: sql`CREATE INDEX IF NOT EXISTS idx_order_candidates_order_id ON order_candidates(order_id)`,
+  idxOrderCandidatesHelperId: sql`CREATE INDEX IF NOT EXISTS idx_order_candidates_helper_id ON order_candidates(helper_user_id)`,
+  idxOrderCandidatesOrderStatus: sql`CREATE INDEX IF NOT EXISTS idx_order_candidates_order_status ON order_candidates(order_id, status)`,
+}));
 
 // 헬퍼 평점 요약 테이블 (캐싱용)
 // 리뷰가 많아질 경우 실시간 계산 비용 절감
@@ -1049,6 +1072,7 @@ export const insertOrderSchema = createInsertSchema(orders)
     status: z.enum(orderStatuses).default("awaiting_deposit"),
     maxHelpers: z.number().default(3),  // A안: 최대 3명 지원자 제한
     currentHelpers: z.number().default(0),
+    orderNumber: z.string().max(12).nullable().optional(), // 12자리 오더번호
   });
 
 // Order application schema - 헬퍼 관점 상태
@@ -1170,7 +1194,11 @@ export const contracts = pgTable("contracts", {
   balanceStatus: text("balance_status").default("pending"), // pending, paid
   closingReportId: integer("closing_report_id"), // 연결된 마감자료 ID
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  idxContractsOrderId: sql`CREATE INDEX IF NOT EXISTS idx_contracts_order_id ON contracts(order_id)`,
+  idxContractsHelperId: sql`CREATE INDEX IF NOT EXISTS idx_contracts_helper_id ON contracts(helper_id)`,
+  idxContractsStatus: sql`CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status)`,
+}));
 
 // Closing Reports table (마감자료) - 헬퍼가 업무 종료 시 제출
 export const closingReports = pgTable("closing_reports", {
@@ -1261,7 +1289,11 @@ export const reviews = pgTable("reviews", {
   rating: integer("rating").notNull(), // 1-5 stars
   comment: text("comment"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  idxReviewsHelperId: sql`CREATE INDEX IF NOT EXISTS idx_reviews_helper_id ON reviews(helper_id)`,
+  idxReviewsOrderId: sql`CREATE INDEX IF NOT EXISTS idx_reviews_order_id ON reviews(order_id)`,
+  idxReviewsRequesterId: sql`CREATE INDEX IF NOT EXISTS idx_reviews_requester_id ON reviews(requester_id)`,
+}));
 
 // Contract schema
 const contractStatuses = ["pending", "deposit_paid", "completed", "cancelled"] as const;
@@ -1663,6 +1695,8 @@ export const announcements = pgTable("announcements", {
   imageUrl: text("image_url"),           // 팝업 이미지 URL
   linkUrl: text("link_url"),             // 이미지 탭 시 이동할 링크
   isPopup: boolean("is_popup").default(false),  // 홈 팝업 표시 여부
+  isBanner: boolean("is_banner").default(false), // 홈 인라인 배너 표시 여부
+  type: text("type").default("notice"),          // "notice" | "ad"
   priority: text("priority").default("normal"),  // normal, high, urgent
   expiresAt: timestamp("expires_at"),    // 만료일 (null=무기한)
 });
@@ -1693,6 +1727,8 @@ export const insertAnnouncementSchema = createInsertSchema(announcements)
     imageUrl: z.string().nullable().optional(),
     linkUrl: z.string().nullable().optional(),
     isPopup: z.boolean().optional(),
+    isBanner: z.boolean().optional().default(false),
+    type: z.enum(["notice", "ad"]).optional().default("notice"),
     priority: z.enum(["normal", "high", "urgent"]).optional(),
     expiresAt: z.string().nullable().optional(),
   });
@@ -1745,7 +1781,11 @@ export const payments = pgTable("payments", {
   userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => ({
+  idxPaymentsOrderId: sql`CREATE INDEX IF NOT EXISTS idx_payments_order_id ON payments(order_id)`,
+  idxPaymentsStatus: sql`CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)`,
+  idxPaymentsPayerId: sql`CREATE INDEX IF NOT EXISTS idx_payments_payer_id ON payments(payer_id)`,
+}));
 
 // 결제 상태 변경 이벤트 로그
 export const paymentStatusEvents = pgTable("payment_status_events", {
@@ -2087,6 +2127,20 @@ export const enterpriseAccounts = pgTable("enterprise_accounts", {
   contractEndDate: text("contract_end_date"), // 계약 종료일
   settlementModel: text("settlement_model").default("per_order"), // per_order, monthly, weekly
   taxType: text("tax_type").default("exclusive"), // inclusive(포함), exclusive(별도)
+  commissionRate: integer("commission_rate").default(10), // 업체별 수수료율 (%)
+  // 세금계산서 관련 상세정보
+  representativeName: text("representative_name"), // 대표자명
+  businessType: text("business_type"), // 업태
+  businessItem: text("business_item"), // 종목
+  address: text("address"), // 사업장 주소
+  faxNumber: text("fax_number"), // 팩스번호
+  taxEmail: text("tax_email"), // 세금계산서 이메일
+  // 정산 계좌 정보
+  bankName: text("bank_name"), // 은행명
+  accountNumber: text("account_number"), // 계좌번호
+  accountHolder: text("account_holder"), // 예금주
+  // 기타
+  memo: text("memo"), // 메모
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -2325,6 +2379,71 @@ export const qrScanLogs = pgTable("qr_scan_logs", {
 });
 
 // ============================================
+// 팀 CS 문의 (Team CS Inquiries)
+// ============================================
+
+export const teamCsInquiries = pgTable("team_cs_inquiries", {
+  id: serial("id").primaryKey(),
+  teamId: integer("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  reporterId: varchar("reporter_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  orderId: integer("order_id")
+    .references(() => orders.id),
+  category: text("category").default("other"), // order, payment, settlement, member, other
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  status: text("status").default("pending"), // pending, in_progress, resolved, closed
+  priority: text("priority").default("normal"), // low, normal, high, urgent
+  assignedTo: varchar("assigned_to")
+    .references(() => users.id),
+  adminNote: text("admin_note"),
+  response: text("response"),
+  respondedAt: timestamp("responded_at"),
+  respondedBy: varchar("responded_by")
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  idxTeamCsTeamId: sql`CREATE INDEX IF NOT EXISTS idx_team_cs_team_id ON team_cs_inquiries(team_id)`,
+  idxTeamCsTeamStatus: sql`CREATE INDEX IF NOT EXISTS idx_team_cs_team_status ON team_cs_inquiries(team_id, status)`,
+  idxTeamCsCreatedAt: sql`CREATE INDEX IF NOT EXISTS idx_team_cs_created_at ON team_cs_inquiries(created_at DESC)`,
+}));
+
+// ============================================
+// 팀 사고 관리 (Team Incidents)
+// ============================================
+
+export const teamIncidents = pgTable("team_incidents", {
+  id: serial("id").primaryKey(),
+  teamId: integer("team_id")
+    .notNull()
+    .references(() => teams.id, { onDelete: "cascade" }),
+  incidentReportId: integer("incident_report_id")
+    .references(() => incidentReports.id),
+  helperId: varchar("helper_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  orderId: integer("order_id")
+    .references(() => orders.id),
+  incidentType: text("incident_type").default("other"), // damage, loss, misdelivery, delay, accident, other
+  description: text("description").notNull(),
+  status: text("status").default("reported"), // reported, investigating, resolved, closed
+  severity: text("severity").default("medium"), // low, medium, high, critical
+  teamLeaderNote: text("team_leader_note"),
+  adminNote: text("admin_note"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  idxTeamIncidentsTeamId: sql`CREATE INDEX IF NOT EXISTS idx_team_incidents_team_id ON team_incidents(team_id)`,
+  idxTeamIncidentsTeamStatus: sql`CREATE INDEX IF NOT EXISTS idx_team_incidents_team_status ON team_incidents(team_id, status)`,
+  idxTeamIncidentsCreatedAt: sql`CREATE INDEX IF NOT EXISTS idx_team_incidents_created_at ON team_incidents(created_at DESC)`,
+}));
+
+// ============================================
 // RBAC 권한 관리 테이블 (Admin Permission System)
 // ============================================
 
@@ -2392,7 +2511,11 @@ export const auditLogs = pgTable("audit_logs", {
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  idxAuditLogsUserId: sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)`,
+  idxAuditLogsAction: sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action)`,
+  idxAuditLogsCreatedAt: sql`CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC)`,
+}));
 
 // 멱등성 키 테이블 (T-17: 중복 요청 방지)
 export const idempotencyKeys = pgTable("idempotency_keys", {
@@ -2452,6 +2575,12 @@ export const insertTeamQrCodeSchema = createInsertSchema(teamQrCodes)
   .omit({ id: true, createdAt: true });
 export const insertQrScanLogSchema = createInsertSchema(qrScanLogs)
   .omit({ id: true });
+
+// Team CS & Incident Insert Schemas
+export const insertTeamCsInquirySchema = createInsertSchema(teamCsInquiries)
+  .omit({ id: true, createdAt: true, updatedAt: true });
+export const insertTeamIncidentSchema = createInsertSchema(teamIncidents)
+  .omit({ id: true, createdAt: true, updatedAt: true });
 
 // RBAC Insert Schemas
 export const insertAdminRoleSchema = createInsertSchema(adminRoles)
@@ -2744,7 +2873,9 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   auth: text("auth").default(""), // 레거시 호환
   userAgent: text("user_agent"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  idxPushSubsUserId: sql`CREATE INDEX IF NOT EXISTS idx_push_subs_user_id ON push_subscriptions(user_id)`,
+}));
 
 export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({ id: true, createdAt: true });
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
@@ -2761,7 +2892,9 @@ export const fcmTokens = pgTable("fcm_tokens", {
   deviceInfo: text("device_info"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => ({
+  idxFcmTokensUserId: sql`CREATE INDEX IF NOT EXISTS idx_fcm_tokens_user_id ON fcm_tokens(user_id)`,
+}));
 
 export const insertFcmTokenSchema = createInsertSchema(fcmTokens).omit({ id: true, createdAt: true, updatedAt: true });
 export type FcmToken = typeof fcmTokens.$inferSelect;
@@ -3012,7 +3145,11 @@ export const authAuditLogs = pgTable("auth_audit_logs", {
   requestId: varchar("request_id", { length: 36 }),
   metadata: text("metadata"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  idxAuthAuditUserId: sql`CREATE INDEX IF NOT EXISTS idx_auth_audit_user_id ON auth_audit_logs(user_id)`,
+  idxAuthAuditEventType: sql`CREATE INDEX IF NOT EXISTS idx_auth_audit_event_type ON auth_audit_logs(event_type)`,
+  idxAuthAuditCreatedAt: sql`CREATE INDEX IF NOT EXISTS idx_auth_audit_created_at ON auth_audit_logs(created_at DESC)`,
+}));
 
 export const insertAuthAuditLogSchema = createInsertSchema(authAuditLogs).omit({ id: true, createdAt: true });
 export type AuthAuditLog = typeof authAuditLogs.$inferSelect;
@@ -4710,3 +4847,73 @@ export const insertSettlementRecordSchema = createInsertSchema(settlementRecords
 });
 export type SettlementRecord = typeof settlementRecords.$inferSelect;
 export type InsertSettlementRecord = z.infer<typeof insertSettlementRecordSchema>;
+
+// 월 정산서 테이블 (Monthly Settlement Statements)
+// 관리자가 월 마감 후 헬퍼에게 전송하는 정산서
+export const monthlySettlementStatements = pgTable("monthly_settlement_statements", {
+  id: serial("id").primaryKey(),
+  helperId: varchar("helper_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  year: integer("year").notNull(),
+  month: integer("month").notNull(), // 1~12
+  // 정산 금액
+  totalAmount: integer("total_amount").notNull().default(0), // 총액 (공급가 + VAT)
+  commissionRate: integer("commission_rate").default(0), // 수수료율 (%)
+  commissionAmount: integer("commission_amount").notNull().default(0), // 수수료
+  insuranceRate: text("insurance_rate"), // 산재보험료율 (%)
+  insuranceDeduction: integer("insurance_deduction").notNull().default(0), // 산재보험료 (헬퍼 50%)
+  otherDeductions: integer("other_deductions").notNull().default(0), // 기타 차감 (화물사고 등)
+  payoutAmount: integer("payout_amount").notNull().default(0), // 최종 지급액
+  // 통계
+  totalWorkDays: integer("total_work_days").default(0),
+  totalOrders: integer("total_orders").default(0),
+  // 일별 상세 JSON
+  settlementDataJson: text("settlement_data_json"), // JSON: [{date, orderCount, totalAmount, commission, insurance, deductions, payout}]
+  // 상태
+  status: text("status").notNull().default("sent"), // sent, viewed
+  sentAt: timestamp("sent_at").defaultNow(),
+  sentBy: varchar("sent_by").references(() => users.id, { onDelete: "set null" }),
+  viewedAt: timestamp("viewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMonthlySettlementStatementSchema = createInsertSchema(monthlySettlementStatements).omit({
+  id: true,
+  createdAt: true,
+});
+export type MonthlySettlementStatement = typeof monthlySettlementStatements.$inferSelect;
+export type InsertMonthlySettlementStatement = z.infer<typeof insertMonthlySettlementStatementSchema>;
+
+// ==========================================
+// 설정 변경 이력 테이블 (Setting Change History)
+// 모든 관리자 설정 변경을 추적: 예약 적용, 이력 조회, 롤백 지원
+// ==========================================
+export const settingChangeHistory = pgTable("setting_change_history", {
+  id: serial("id").primaryKey(),
+  settingType: text("setting_type").notNull(),
+  // "courier_settings" | "team_commission" | "commission_policy" | "platform_fee" |
+  // "urgent_fee" | "carrier_pricing" | "refund_policy" | "system_setting"
+  entityId: text("entity_id"),         // courierId, teamId, policyId, settingKey 등
+  fieldName: text("field_name"),       // 변경된 필드명 (null이면 전체 객체 변경)
+  oldValue: text("old_value"),         // JSON string
+  newValue: text("new_value"),         // JSON string
+  effectiveFrom: text("effective_from"), // YYYY-MM-DD HH:mm — 예약 적용일 (null이면 즉시)
+  status: text("status").notNull().default("active"),
+  // "pending" | "active" | "expired" | "rolled_back" | "cancelled"
+  appliedAt: timestamp("applied_at"),  // 실제 적용된 시각
+  changedBy: varchar("changed_by").references(() => users.id),
+  changedByName: text("changed_by_name"),
+  reason: text("reason"),              // 변경 사유
+  batchId: text("batch_id"),           // UUID — 동시에 여러 필드 변경 시 그룹핑
+  rolledBackBy: varchar("rolled_back_by").references(() => users.id),
+  rolledBackAt: timestamp("rolled_back_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSettingChangeHistorySchema = createInsertSchema(settingChangeHistory).omit({
+  id: true,
+  createdAt: true,
+});
+export type SettingChangeHistory = typeof settingChangeHistory.$inferSelect;
+export type InsertSettingChangeHistory = z.infer<typeof insertSettingChangeHistorySchema>;

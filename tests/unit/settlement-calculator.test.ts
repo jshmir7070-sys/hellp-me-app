@@ -35,8 +35,8 @@ describe('calculateSettlement', () => {
     expect(result.supplyAmount).toBe(220000);
     expect(result.vatAmount).toBe(22000); // 220000 * 0.1
     expect(result.totalAmount).toBe(242000); // 220000 + 22000
-    expect(result.depositAmount).toBe(48400); // floor(242000 * 0.2)
-    expect(result.balanceAmount).toBe(193600); // 242000 - 48400
+    expect(result.depositAmount).toBe(24200); // floor(242000 * 0.10) — default depositRate=10%
+    expect(result.balanceAmount).toBe(217800); // 242000 - 24200
   });
 
   it('should handle etc count with custom price', () => {
@@ -100,7 +100,7 @@ describe('calculateSettlement', () => {
     expect(result.balanceAmount).toBe(0);
   });
 
-  it('should default etcPricePerUnit to 1800 if 0', () => {
+  it('should keep etcPricePerUnit as 0 when explicitly set to 0', () => {
     const data: ClosingData = {
       deliveredCount: 0,
       returnedCount: 0,
@@ -111,8 +111,8 @@ describe('calculateSettlement', () => {
     };
 
     const result = calculateSettlement(data);
-    // etcPricePerUnit=0 is falsy → || 1800 fallback applies → 5 * 1800 = 9000
-    expect(result.etcAmount).toBe(9000);
+    // etcPricePerUnit != null check: 0 is not null → keeps 0 → 5 * 0 = 0
+    expect(result.etcAmount).toBe(0);
   });
 
   it('should handle null/undefined fields gracefully', () => {
@@ -225,7 +225,7 @@ describe('calculateHelperPayout', () => {
     expect(result.driverPayout).toBe(result.totalAmount);
   });
 
-  it('should allow negative payout when deductions exceed total', () => {
+  it('should clamp payout to 0 when deductions exceed total (Math.max)', () => {
     const data: ClosingData = {
       deliveredCount: 1,
       returnedCount: 0,
@@ -238,8 +238,8 @@ describe('calculateHelperPayout', () => {
     const result = calculateHelperPayout(data, 10, 50000);
 
     // totalAmount = 1100, platformFee = 110, deduction = 50000
-    // payout = 1100 - 110 - 50000 = -49010 (마이너스 가능)
-    expect(result.driverPayout).toBeLessThan(0);
+    // raw = 1100 - 110 - 50000 = -49010 → Math.max(0, -49010) = 0
+    expect(result.driverPayout).toBe(0);
   });
 });
 

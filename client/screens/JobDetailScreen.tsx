@@ -1,5 +1,5 @@
 import React, { useState, useLayoutEffect } from "react";
-import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, Linking, Image, Modal, Dimensions } from "react-native";
+import { View, ScrollView, Pressable, StyleSheet, Alert, Platform, ActivityIndicator, Linking, Image, Modal } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
@@ -15,12 +16,17 @@ import { OrderCard } from "@/components/order/OrderCard";
 import { adaptHelperRecruitmentOrder, type OrderCardDTO } from "@/adapters/orderCardAdapter";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 import { Avatar } from "@/components/Avatar";
+import { EditOrderModal } from "@/components/order/EditOrderModal";
 import { JobsStackParamList } from "@/navigation/types";
-import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { apiRequest, getApiUrl, queryClient as globalQueryClient } from "@/lib/query-client";
 
-const { width: screenWidth } = Dimensions.get('window');
+type JobDetailParamList = {
+  JobDetail: { jobId: string };
+  ClosingReport: { orderId: number };
+  [key: string]: any;
+};
 
-type JobDetailScreenProps = NativeStackScreenProps<JobsStackParamList, 'JobDetail'>;
+type JobDetailScreenProps = NativeStackScreenProps<JobDetailParamList, 'JobDetail'>;
 
 interface Order {
   id: number;
@@ -78,24 +84,36 @@ interface ClosingReport {
   revisionNote?: string | null;
   deliveredCount?: number;
   returnedCount?: number;
+  deliveryHistoryImages?: string[];
+  etcImages?: string[];
 }
 
 export default function JobDetailScreen({ navigation, route }: JobDetailScreenProps) {
   const insets = useSafeAreaInsets();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth, contentWidth } = useResponsive();
   const { user } = useAuth();
   const { jobId } = route.params;
   const queryClient = useQueryClient();
   const [mapModalVisible, setMapModalVisible] = useState(false);
+  const [editModalVisible, setEditModalVisible] = useState(false);
 
   useLayoutEffect(() => {
     navigation.setOptions({ headerShown: false });
   }, [navigation]);
 
+  const resolveUrl = (url?: string | null) => {
+    if (!url) return '';
+    return url.startsWith('/') ? `${getApiUrl()}${url}` : url;
+  };
+
+  const isHelper = user?.role === 'helper';
+  const isRequester = user?.role === 'requester';
   const profileImg = user?.profileImageUrl;
-  const displayUserName = (user as any)?.nickname || user?.name || '헬퍼';
+  const displayUserName = (user as any)?.nickname || user?.name || (isHelper ? '헬퍼' : '사용자');
   const userTeamName = user?.teamName;
+  const headerColor = isHelper ? BrandColors.helper : BrandColors.requester;
 
   const { data: order, isLoading, error } = useQuery<Order>({
     queryKey: [`/api/orders/${jobId}`],
@@ -162,6 +180,72 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
     },
   });
 
+  // 요청자 전용: 오더 삭제
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest('DELETE', `/api/orders/${jobId}`);
+    },
+    onSuccess: () => {
+      globalQueryClient.invalidateQueries({ queryKey: ['/api/requester/orders'] });
+      if (Platform.OS === 'web') {
+        alert('오더가 삭제되었습니다.');
+      } else {
+        Alert.alert('삭제 완료', '오더가 삭제되었습니다.');
+      }
+      navigation.goBack();
+    },
+    onError: (err: Error) => {
+      const message = err.message || '삭제에 실패했습니다.';
+      if (Platform.OS === 'web') { alert(message); } else { Alert.alert('오류', message); }
+    },
+  });
+
+  // 요청자 전용: 오더 숨기기
+  const hideMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest('POST', `/api/orders/${jobId}/hide`);
+    },
+    onSuccess: () => {
+      globalQueryClient.invalidateQueries({ queryKey: ['/api/requester/orders'] });
+      if (Platform.OS === 'web') {
+        alert('오더가 숨겨졌습니다.');
+      } else {
+        Alert.alert('숨기기 완료', '오더가 숨겨졌습니다.');
+      }
+      navigation.goBack();
+    },
+    onError: (err: Error) => {
+      const message = err.message || '숨기기에 실패했습니다.';
+      if (Platform.OS === 'web') { alert(message); } else { Alert.alert('오류', message); }
+    },
+  });
+
+  const handleDelete = () => {
+    if (Platform.OS === 'web') {
+      if (confirm('정말 삭제하시겠습니까?')) deleteMutation.mutate();
+    } else {
+      Alert.alert('삭제 확인', '정말 삭제하시겠습니까?', [
+        { text: '취소', style: 'cancel' },
+        { text: '삭제', style: 'destructive', onPress: () => deleteMutation.mutate() },
+      ]);
+    }
+  };
+
+  const handleHide = () => {
+    if (Platform.OS === 'web') {
+      if (confirm('이 업무를 숨기시겠습니까? 목록에서 더 이상 표시되지 않습니다.')) hideMutation.mutate();
+    } else {
+      Alert.alert('숨기기', '이 업무를 숨기시겠습니까?\n목록에서 더 이상 표시되지 않습니다.', [
+        { text: '취소', style: 'cancel' },
+        { text: '숨기기', onPress: () => hideMutation.mutate() },
+      ]);
+    }
+  };
+
+  const canEdit = isRequester && order && ['open', 'registered', 'matching', 'awaiting_deposit'].includes(order.status.toLowerCase());
+  const canDelete = isRequester && order && ['open', 'registered', 'matching', 'awaiting_deposit'].includes(order.status.toLowerCase());
+  const canHide = isRequester && order && ['closing_submitted', 'final_amount_confirmed', 'balance_paid', 'settlement_paid', 'closed'].includes(order.status.toLowerCase());
+
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '-';
     try {
@@ -214,7 +298,21 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
         return;
       }
     }
-    applyMutation.mutate();
+    // 지원 전 재확인
+    if (Platform.OS === 'web') {
+      if (confirm('이 오더에 지원하시겠습니까?')) {
+        applyMutation.mutate();
+      }
+    } else {
+      Alert.alert(
+        '오더 지원 확인',
+        '이 오더에 지원하시겠습니까?',
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '지원하기', onPress: () => applyMutation.mutate() },
+        ]
+      );
+    }
   };
 
   const copyAddress = async (address: string) => {
@@ -239,7 +337,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
   if (isLoading) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: theme.backgroundRoot }]}>
-        <ActivityIndicator size="large" color={BrandColors.helper} />
+        <ActivityIndicator size="large" color={headerColor} />
         <ThemedText style={[styles.loadingText, { color: theme.tabIconDefault }]}>
           정보를 불러오는 중...
         </ThemedText>
@@ -255,7 +353,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
           일거리를 찾을 수 없습니다
         </ThemedText>
         <Pressable
-          style={[styles.backButton, { backgroundColor: BrandColors.helper }]}
+          style={[styles.backButton, { backgroundColor: headerColor }]}
           onPress={() => navigation.goBack()}
         >
           <ThemedText style={styles.backButtonText}>돌아가기</ThemedText>
@@ -267,7 +365,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
   return (
     <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
       {/* 커스텀 헤더: 프로필 + 팀명 */}
-      <View style={[styles.customHeader, { paddingTop: insets.top + Spacing.sm }]}>
+      <View style={[styles.customHeader, { paddingTop: insets.top + Spacing.sm, backgroundColor: headerColor }]}>
         <Pressable style={styles.headerBackButton} onPress={() => navigation.goBack()}>
           <Icon name="chevron-back" size={24} color="#FFFFFF" />
         </Pressable>
@@ -298,8 +396,13 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
       <ScrollView
         contentContainerStyle={{
           paddingTop: Spacing.md,
-          paddingBottom: tabBarHeight + Spacing.xl,
+          paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + 120,
           paddingHorizontal: Spacing.lg,
+          ...(showDesktopLayout && {
+            maxWidth: containerMaxWidth,
+            alignSelf: 'center' as const,
+            width: '100%' as any,
+          }),
         }}
       >
         {/* 상단: 오더카드 (오더공고 리스트와 동일) */}
@@ -459,7 +562,7 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
           {(order.regionMapUrl || order.mapImageUrl) ? (
             <Pressable onPress={() => setMapModalVisible(true)}>
               <Image
-                source={{ uri: order.regionMapUrl || order.mapImageUrl }}
+                source={{ uri: resolveUrl(order.regionMapUrl || order.mapImageUrl) }}
                 style={styles.mapPreview}
                 resizeMode="cover"
               />
@@ -520,85 +623,165 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
       </ScrollView>
 
       <View style={[styles.footer, { paddingBottom: tabBarHeight + Spacing.xl, backgroundColor: theme.backgroundRoot }]}>
-        {order.status === 'scheduled' && isAssignedHelper ? (
+        {isRequester ? (
+          /* 요청자 전용 하단 버튼 */
           <View style={styles.footerRow}>
-            <Pressable
-              testID="button-qr-checkin"
-              style={({ pressed }) => [
-                styles.qrButton,
-                { backgroundColor: BrandColors.helper, opacity: pressed ? 0.8 : 1 },
-              ]}
-              onPress={() => navigation.getParent()?.getParent()?.navigate('QRScanner' as any, { orderId: String(order.id), type: 'start_work' })}
-            >
-              <Icon name="camera-outline" size={20} color="#FFFFFF" />
-              <ThemedText style={styles.applyButtonText}>QR 체크인</ThemedText>
-            </Pressable>
-            <Pressable
-              testID="button-start-work"
-              style={({ pressed }) => [
-                styles.applyButton,
-                { backgroundColor: theme.tabIconDefault, opacity: pressed ? 0.8 : 1 },
-              ]}
-              onPress={() => startWorkMutation.mutate()}
-              disabled={startWorkMutation.isPending}
-            >
-              {startWorkMutation.isPending ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <ThemedText style={styles.applyButtonText}>QR 없이 시작</ThemedText>
-              )}
-            </Pressable>
+            {canEdit ? (
+              <Pressable
+                testID="button-edit"
+                style={({ pressed }) => [
+                  styles.applyButton,
+                  { backgroundColor: BrandColors.requester, opacity: pressed ? 0.8 : 1 },
+                ]}
+                onPress={() => setEditModalVisible(true)}
+              >
+                <Icon name="create-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <ThemedText style={styles.applyButtonText}>수정</ThemedText>
+              </Pressable>
+            ) : null}
+            {canDelete ? (
+              <Pressable
+                testID="button-delete"
+                style={({ pressed }) => [
+                  styles.closeButton,
+                  { backgroundColor: '#EF4444', opacity: pressed ? 0.8 : 1 },
+                ]}
+                onPress={handleDelete}
+                disabled={deleteMutation.isPending}
+              >
+                {deleteMutation.isPending ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <>
+                    <Icon name="trash-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <ThemedText style={styles.applyButtonText}>삭제</ThemedText>
+                  </>
+                )}
+              </Pressable>
+            ) : null}
+            {canHide ? (
+              <Pressable
+                testID="button-hide"
+                style={({ pressed }) => [
+                  styles.applyButton,
+                  { backgroundColor: '#6B7280', opacity: pressed ? 0.8 : 1 },
+                ]}
+                onPress={handleHide}
+                disabled={hideMutation.isPending}
+              >
+                {hideMutation.isPending ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <>
+                    <Icon name="eye-off-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <ThemedText style={styles.applyButtonText}>숨기기</ThemedText>
+                  </>
+                )}
+              </Pressable>
+            ) : null}
+            {!canEdit && !canDelete && !canHide ? (
+              <Pressable
+                testID="button-close-only"
+                style={({ pressed }) => [
+                  styles.applyButton,
+                  { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.8 : 1 },
+                ]}
+                onPress={() => navigation.goBack()}
+              >
+                <ThemedText style={[styles.applyButtonText, { color: theme.text }]}>닫기</ThemedText>
+              </Pressable>
+            ) : null}
           </View>
-        ) : order.status === 'in_progress' && isAssignedHelper ? (
-          <Pressable
-            testID="button-submit-closing"
-            style={({ pressed }) => [
-              styles.applyButton,
-              { backgroundColor: BrandColors.helper, opacity: pressed ? 0.8 : 1 },
-            ]}
-            onPress={() => navigation.navigate('ClosingReport', { orderId: order.id })}
-          >
-            <ThemedText style={styles.applyButtonText}>마감 제출</ThemedText>
-          </Pressable>
-        ) : ['open', 'matching', 'registered'].includes(order.status) ? (
-          <View style={styles.footerRow}>
+        ) : (
+          /* 헬퍼 전용 하단 버튼 (기존 로직) */
+          order.status === 'scheduled' && isAssignedHelper ? (
+            <View style={styles.footerRow}>
+              <Pressable
+                testID="button-qr-checkin"
+                style={({ pressed }) => [
+                  styles.qrButton,
+                  { backgroundColor: BrandColors.helper, opacity: pressed ? 0.8 : 1 },
+                ]}
+                onPress={() => {
+                  // RootStack의 QRScanner로 이동 시도, 실패시 HomeStack의 QRCheckin으로 이동
+                  const rootNav = navigation.getParent()?.getParent();
+                  if (rootNav) {
+                    rootNav.navigate('QRScanner' as any, { orderId: String(order.id), type: 'start_work' });
+                  } else {
+                    navigation.navigate('QRCheckin' as any);
+                  }
+                }}
+              >
+                <Icon name="camera-outline" size={20} color="#FFFFFF" />
+                <ThemedText style={styles.applyButtonText}>QR 체크인</ThemedText>
+              </Pressable>
+              <Pressable
+                testID="button-start-work"
+                style={({ pressed }) => [
+                  styles.applyButton,
+                  { backgroundColor: theme.tabIconDefault, opacity: pressed ? 0.8 : 1 },
+                ]}
+                onPress={() => startWorkMutation.mutate()}
+                disabled={startWorkMutation.isPending}
+              >
+                {startWorkMutation.isPending ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <ThemedText style={styles.applyButtonText}>QR 없이 시작</ThemedText>
+                )}
+              </Pressable>
+            </View>
+          ) : order.status === 'in_progress' && isAssignedHelper ? (
             <Pressable
-              testID="button-apply"
+              testID="button-submit-closing"
               style={({ pressed }) => [
                 styles.applyButton,
                 { backgroundColor: BrandColors.helper, opacity: pressed ? 0.8 : 1 },
               ]}
-              onPress={handleApply}
-              disabled={applyMutation.isPending}
+              onPress={() => navigation.navigate('ClosingReport', { orderId: order.id })}
             >
-              {applyMutation.isPending ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <ThemedText style={styles.applyButtonText}>신청</ThemedText>
-              )}
+              <ThemedText style={styles.applyButtonText}>마감 제출</ThemedText>
             </Pressable>
+          ) : ['open', 'matching', 'registered'].includes(order.status) ? (
+            <View style={styles.footerRow}>
+              <Pressable
+                testID="button-apply"
+                style={({ pressed }) => [
+                  styles.applyButton,
+                  { backgroundColor: BrandColors.helper, opacity: pressed ? 0.8 : 1 },
+                ]}
+                onPress={handleApply}
+                disabled={applyMutation.isPending}
+              >
+                {applyMutation.isPending ? (
+                  <ActivityIndicator color="#FFFFFF" size="small" />
+                ) : (
+                  <ThemedText style={styles.applyButtonText}>신청</ThemedText>
+                )}
+              </Pressable>
+              <Pressable
+                testID="button-close"
+                style={({ pressed }) => [
+                  styles.closeButton,
+                  { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.8 : 1 },
+                ]}
+                onPress={() => navigation.goBack()}
+              >
+                <ThemedText style={[styles.closeButtonText, { color: theme.text }]}>닫기</ThemedText>
+              </Pressable>
+            </View>
+          ) : (
             <Pressable
-              testID="button-close"
+              testID="button-close-only"
               style={({ pressed }) => [
-                styles.closeButton,
+                styles.applyButton,
                 { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.8 : 1 },
               ]}
               onPress={() => navigation.goBack()}
             >
-              <ThemedText style={[styles.closeButtonText, { color: theme.text }]}>닫기</ThemedText>
+              <ThemedText style={[styles.applyButtonText, { color: theme.text }]}>닫기</ThemedText>
             </Pressable>
-          </View>
-        ) : (
-          <Pressable
-            testID="button-close-only"
-            style={({ pressed }) => [
-              styles.applyButton,
-              { backgroundColor: theme.backgroundSecondary, opacity: pressed ? 0.8 : 1 },
-            ]}
-            onPress={() => navigation.goBack()}
-          >
-            <ThemedText style={[styles.applyButtonText, { color: theme.text }]}>닫기</ThemedText>
-          </Pressable>
+          )
         )}
       </View>
 
@@ -612,10 +795,10 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
           style={styles.modalOverlay}
           onPress={() => setMapModalVisible(false)}
         >
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { width: contentWidth - Spacing['2xl'] * 2, height: contentWidth - Spacing['2xl'] * 2 }]}>
             {(order?.regionMapUrl || order?.mapImageUrl) ? (
               <Image
-                source={{ uri: order.regionMapUrl || order.mapImageUrl }}
+                source={{ uri: resolveUrl(order.regionMapUrl || order.mapImageUrl) }}
                 style={styles.modalMapImage}
                 resizeMode="contain"
               />
@@ -629,6 +812,18 @@ export default function JobDetailScreen({ navigation, route }: JobDetailScreenPr
           </View>
         </Pressable>
       </Modal>
+
+      {/* 요청자 오더 수정 모달 (단가/날짜만 변경) */}
+      <EditOrderModal
+        visible={editModalVisible}
+        onClose={() => {
+          setEditModalVisible(false);
+          queryClient.invalidateQueries({ queryKey: [`/api/orders/${jobId}`] });
+        }}
+        orderId={Number(jobId)}
+        currentUnitPrice={order?.pricePerUnit || order?.dailyRate}
+        currentDate={order?.scheduledDate}
+      />
     </View>
   );
 }
@@ -791,9 +986,11 @@ const styles = StyleSheet.create({
   },
   applyButton: {
     flex: 1,
+    flexDirection: 'row',
     paddingVertical: Spacing.lg,
     borderRadius: BorderRadius.sm,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   applyButtonText: {
     color: '#FFFFFF',
@@ -802,9 +999,11 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     flex: 1,
+    flexDirection: 'row',
     paddingVertical: Spacing.lg,
     borderRadius: BorderRadius.sm,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   closeButtonText: {
     ...Typography.body,
@@ -853,8 +1052,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    width: screenWidth - Spacing['2xl'] * 2,
-    height: screenWidth - Spacing['2xl'] * 2,
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { TabProvider } from './contexts/TabContext';
 import { Toaster } from './components/ui/toaster';
 import { ConfirmProvider } from './components/common/ConfirmDialog';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -22,9 +23,11 @@ import DisputesPage from './pages/DisputesPage';
 import AuditLogsPage from './pages/AuditLogsPage';
 import AdminUsersPage from './pages/AdminUsersPage';
 import HelperDocumentsPage from './pages/HelperDocumentsPage';
-import HelperBankAccountsPage from './pages/HelperBankAccountsPage';
 import SettlementStatsPage from './pages/SettlementStatsPage';
 import PlatformSettingsPage from './pages/PlatformSettingsPage';
+import TeamsPage from './pages/TeamsPage';
+import TeamDetailPage from './pages/TeamDetailPage';
+import EnterpriseAccountsPage from './pages/EnterpriseAccountsPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -110,15 +113,19 @@ function AppRoutes() {
                   <Route path="/helpers/:helperId" element={<PermissionRoute requiredPermission="helpers.view"><HelperDetailPage /></PermissionRoute>} />
                   <Route path="/requesters/:requesterId" element={<PermissionRoute requiredPermission="helpers.view"><RequesterDetailPage /></PermissionRoute>} />
 
-                  {/* 헬퍼 서류 검토 */}
+                  {/* 헬퍼 서류 검토 (통장 포함) */}
                   <Route path="/helper-documents" element={<PermissionRoute requiredPermission="helpers.edit"><HelperDocumentsPage /></PermissionRoute>} />
-                  <Route path="/helper-bank-accounts" element={<PermissionRoute requiredPermission="helpers.edit"><HelperBankAccountsPage /></PermissionRoute>} />
+
+                  {/* 팀 관리 */}
+                  <Route path="/teams" element={<PermissionRoute requiredPermission="helpers.view"><TeamsPage /></PermissionRoute>} />
+                  <Route path="/teams/:teamId" element={<PermissionRoute requiredPermission="helpers.view"><TeamDetailPage /></PermissionRoute>} />
 
                   {/* 통합 사고 페이지 */}
                   <Route path="/incidents" element={<PermissionRoute requiredPermission="orders.view"><IncidentsPageV2 /></PermissionRoute>} />
 
-                  <Route path="/rates" element={<PermissionRoute requiredPermission="settings.manage"><RatesPage /></PermissionRoute>} />
-                  <Route path="/refund-policy" element={<PermissionRoute requiredPermission="settings.manage"><RefundPolicyPage /></PermissionRoute>} />
+                  <Route path="/rates" element={<PermissionRoute requiredPermission="settings.edit"><RatesPage /></PermissionRoute>} />
+                  <Route path="/refund-policy" element={<PermissionRoute requiredPermission="settings.edit"><RefundPolicyPage /></PermissionRoute>} />
+                  <Route path="/enterprise-accounts" element={<PermissionRoute requiredPermission="settings.edit"><EnterpriseAccountsPage /></PermissionRoute>} />
                   <Route path="/cs" element={<PermissionRoute requiredPermission="orders.view"><CSPage /></PermissionRoute>} />
                   <Route path="/notifications" element={<PermissionRoute requiredPermission="orders.view"><NotificationsPage /></PermissionRoute>} />
                   <Route path="/disputes" element={<PermissionRoute requiredPermission="disputes.view"><DisputesPage /></PermissionRoute>} />
@@ -137,11 +144,13 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ConfirmProvider>
-        <AppRoutes />
-        <Toaster />
-      </ConfirmProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ConfirmProvider>
+          <AppRoutes />
+          <Toaster />
+        </ConfirmProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

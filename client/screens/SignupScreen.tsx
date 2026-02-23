@@ -362,7 +362,7 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
       if (response.ok) {
         setShowVerificationInput(true);
         let msg = '인증번호가 발송되었습니다. 3분 내에 입력해주세요.';
-        if (data.devCode) {
+        if (__DEV__ && data.devCode) {
           msg = `인증번호가 발송되었습니다. (개발모드: ${data.devCode})`;
         }
         setSuccessMessage(msg);
@@ -1037,13 +1037,13 @@ export default function SignupScreen({ navigation }: SignupScreenProps) {
                 <Icon name="close-outline" size={24} color={theme.text} />
               </Pressable>
             </View>
-            <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={true}>
+            <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: Spacing.xl }} showsVerticalScrollIndicator={true}>
               <ThemedText style={[styles.modalText, { color: theme.text }]}>
                 {selectedTerm?.content}
               </ThemedText>
             </ScrollView>
             <Pressable
-              style={[styles.modalCloseButton, { backgroundColor: accentColor }]}
+              style={[styles.modalCloseButton, { backgroundColor: accentColor, marginTop: Spacing.md }]}
               onPress={() => setTermModalVisible(false)}
             >
               <ThemedText style={styles.modalCloseButtonText}>확인</ThemedText>
@@ -1351,9 +1351,9 @@ const styles = StyleSheet.create({
   modalContent: {
     borderTopLeftRadius: BorderRadius.lg,
     borderTopRightRadius: BorderRadius.lg,
-    maxHeight: '70%',
+    maxHeight: '80%',
     paddingTop: Spacing.xl,
-    paddingBottom: Spacing['2xl'],
+    paddingBottom: Spacing.xl,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1371,9 +1371,7 @@ const styles = StyleSheet.create({
   modalBody: {
     paddingHorizontal: Spacing.xl,
     paddingTop: Spacing.lg,
-    paddingBottom: Spacing['3xl'],
-    flexGrow: 1,
-    maxHeight: '100%',
+    flexShrink: 1,
   },
   modalText: {
     ...Typography.body,

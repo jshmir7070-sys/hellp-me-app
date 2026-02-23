@@ -5,6 +5,7 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { Icon } from "@/components/Icon";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { ThemedText } from "@/components/ThemedText";
 import { OrderCard, type CardContext } from "@/components/order/OrderCard";
 import { Spacing, Typography, BrandColors } from "@/constants/theme";
@@ -82,6 +83,7 @@ export function OrderListPage({
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
 
   const isHelper = ["helper_home", "helper_recruitment", "helper_application", "helper_my_orders", "helper_history"].includes(context);
   const primaryColor = isHelper ? BrandColors.helper : BrandColors.requester;
@@ -134,7 +136,14 @@ export function OrderListPage({
         styles.contentContainer,
         {
           paddingTop: headerHeight + Spacing.lg,
-          paddingBottom: hasBottomTab ? insets.bottom + 80 : insets.bottom + Spacing.xl,
+          paddingBottom: hasBottomTab
+            ? (showDesktopLayout ? Spacing.xl : insets.bottom + 80)
+            : insets.bottom + Spacing.xl,
+          ...(showDesktopLayout && {
+            maxWidth: containerMaxWidth,
+            alignSelf: 'center' as const,
+            width: '100%' as any,
+          }),
         },
       ]}
       scrollIndicatorInsets={{ bottom: insets.bottom }}

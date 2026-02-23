@@ -15,6 +15,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { Colors, BrandColors, Spacing, BorderRadius, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/useTheme';
+import { useResponsive } from '@/hooks/useResponsive';
+import { formatOrderNumber } from '@/lib/format-order-number';
 
 interface Incident {
   id: number;
@@ -51,6 +53,8 @@ const HELPER_STATUS_LABELS: Record<string, string> = {
   item_found: '물건찾음',
   recovered: '회수완료',
   redelivered: '재배송완료',
+  redelivery_in_progress: '재배송진행중',
+  return_in_progress: '반납진행중',
   damage_confirmed: '파손확인',
   request_handling: '처리요망',
   confirmed: '확인완료',
@@ -59,6 +63,7 @@ const HELPER_STATUS_LABELS: Record<string, string> = {
 
 export default function HelperIncidentListScreen({ route }: any) {
   const { theme, isDark } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const colors = theme;
   const navigation = useNavigation<NativeStackNavigationProp<any>>();
   const headerHeight = useHeaderHeight();
@@ -147,7 +152,14 @@ export default function HelperIncidentListScreen({ route }: any) {
         data={incidents}
         keyExtractor={(item) => item.id.toString()}
         renderItem={renderItem}
-        contentContainerStyle={[styles.listContent, { paddingTop: headerHeight + Spacing.md }]}
+        contentContainerStyle={[styles.listContent, {
+          paddingTop: headerHeight + Spacing.md,
+          ...(showDesktopLayout && {
+            maxWidth: containerMaxWidth,
+            alignSelf: 'center' as const,
+            width: '100%' as any,
+          }),
+        }]}
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} />
         }

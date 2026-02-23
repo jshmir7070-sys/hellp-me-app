@@ -4,6 +4,7 @@ export type CourierCategory = "parcel" | "other" | "cold";
 
 export interface OrderCardDTO {
   orderId: string;
+  orderNumber?: string;
   contractId?: string;
 
   title?: string;
@@ -70,6 +71,7 @@ export function adaptRequesterOrder(order: any): OrderCardDTO {
   
   return {
     orderId: String(order.id || order.orderId),
+    orderNumber: order.orderNumber || undefined,
     contractId: order.contractId ? String(order.contractId) : undefined,
     title: order.title || order.orderTitle || formatOrderTitle(order),
     courierName: order.courierName || order.carrierName,
@@ -127,6 +129,7 @@ export function adaptHelperRecruitmentOrder(order: any, hasApplied: boolean = fa
   
   return {
     orderId: String(order.id || order.orderId),
+    orderNumber: order.orderNumber || undefined,
     title: order.title || order.orderTitle || formatOrderTitle(order),
     courierName: order.courierName || order.carrierName || order.courierCompany,
     companyName: order.companyName,
@@ -167,17 +170,22 @@ export function adaptHelperApplicationOrder(application: any): OrderCardDTO {
   
   const avgQty = getAverageQuantity(order);
   
+  // 실제 서버 오더 상태를 기반으로 표시 (하드코딩 제거)
+  const serverOrderStatus = mapOrderStatus(order.status || order.orderStatus);
   let orderStatus: OrderStatus;
   if (applicationStatus === 'accepted') {
-    orderStatus = mapOrderStatus(order.status || order.orderStatus) || 'ASSIGNED';
+    orderStatus = serverOrderStatus || 'ASSIGNED';
   } else if (applicationStatus === 'rejected') {
-    orderStatus = 'CANCELLED';
+    // 거절된 경우에도 실제 오더 상태 반영 (취소된 오더는 CANCELLED 표시)
+    orderStatus = serverOrderStatus === 'CANCELLED' ? 'CANCELLED' : serverOrderStatus;
   } else {
-    orderStatus = 'OPEN';
+    // 대기중: 실제 오더 상태 사용 (취소된 오더 대기중이면 CANCELLED 표시)
+    orderStatus = serverOrderStatus || 'OPEN';
   }
   
   return {
     orderId: String(application.orderId || order.id || order.orderId),
+    orderNumber: order.orderNumber || undefined,
     title: order.title || order.orderTitle || formatOrderTitle(order),
     courierName: order.courierName || order.carrierName || order.courierCompany,
     companyName: order.companyName,
@@ -240,6 +248,7 @@ export function adaptHelperMyOrder(order: any): OrderCardDTO {
   
   return {
     orderId: String(order.id || order.orderId),
+    orderNumber: order.orderNumber || undefined,
     contractId: order.contractId ? String(order.contractId) : undefined,
     title: order.title || order.orderTitle || formatOrderTitle(order),
     courierName: order.courierName || order.carrierName || order.courierCompany,
@@ -376,8 +385,16 @@ function mapOrderStatus(status?: string): OrderStatus {
     "closed": "BALANCE_PAID",
     "cancelled": "CANCELLED",
     "CANCELLED": "CANCELLED",
+    "dispute_reviewing": "DISPUTE_REVIEWING",
+    "DISPUTE_REVIEWING": "DISPUTE_REVIEWING",
+    "dispute_resolved": "DISPUTE_RESOLVED",
+    "DISPUTE_RESOLVED": "DISPUTE_RESOLVED",
+    "dispute_rejected": "DISPUTE_REJECTED",
+    "DISPUTE_REJECTED": "DISPUTE_REJECTED",
+    "settled": "SETTLED",
+    "SETTLED": "SETTLED",
   };
-  
+
   return statusMap[status] || "OPEN";
 }
 

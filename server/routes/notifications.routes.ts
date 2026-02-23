@@ -40,7 +40,20 @@ export function registerNotificationRoutes(ctx: RouteContext): void {
   // 단일 알림 읽음 처리
   app.post("/api/notifications/:id/read", requireAuth, async (req: any, res) => {
     try {
-      const notification = await storage.markNotificationAsRead(Number(req.params.id));
+      const notifId = Number(req.params.id);
+      if (isNaN(notifId)) {
+        return res.status(400).json({ message: "유효하지 않은 ID입니다" });
+      }
+      // 먼저 알림 조회하여 소유권 확인 (읽음 처리 전에 검증)
+      const existing = await storage.getNotification(notifId);
+      if (!existing) {
+        return res.status(404).json({ message: "알림을 찾을 수 없습니다" });
+      }
+      if ((existing as any).userId !== req.user!.id) {
+        return res.status(403).json({ message: "권한이 없습니다" });
+      }
+      // 소유권 확인 후 읽음 처리
+      const notification = await storage.markNotificationAsRead(notifId);
       res.json(notification);
     } catch (err: any) {
       console.error("[Notifications] Error:", err);

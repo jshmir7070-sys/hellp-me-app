@@ -8,6 +8,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import * as ImagePicker from 'expo-image-picker';
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
@@ -27,6 +28,7 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const { user, refreshUser } = useAuth();
 
   const isHelper = user?.role === 'helper';
@@ -265,8 +267,13 @@ export default function EditProfileScreen({ navigation }: EditProfileScreenProps
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
     >
       {/* Profile image editing removed as per request */}

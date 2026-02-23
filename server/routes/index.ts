@@ -33,6 +33,7 @@ import { registerAuthRoutes } from "./auth.routes";
 import { registerHelperRoutes } from "./helpers.routes";
 import { registerOrderRoutes } from "./orders.routes";
 import { registerAdminRoutes } from "./admin";
+import { registerPartnerRoutes } from "./partner";
 
 /**
  * 모듈화된 라우트들을 등록합니다.
@@ -51,6 +52,7 @@ export async function registerModularRoutes(ctx: RouteContext): Promise<void> {
     { name: "helpers", register: registerHelperRoutes },
     { name: "orders", register: registerOrderRoutes },
     { name: "admin", register: registerAdminRoutes },
+    { name: "partner", register: registerPartnerRoutes },
   ];
 
   for (const mod of modules) {

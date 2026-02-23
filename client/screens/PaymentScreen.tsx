@@ -10,6 +10,7 @@ import { getToken } from '@/utils/secure-token-storage';
 import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
 import { useTheme } from '@/hooks/useTheme';
+import { useResponsive } from '@/hooks/useResponsive';
 import { Spacing, BorderRadius, Typography, BrandColors, Colors } from '@/constants/theme';
 import { getApiUrl, isApiConfigured, getApiConfigError } from '@/lib/query-client';
 
@@ -40,6 +41,7 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const webViewRef = useRef<WebView>(null);
 
   const orderId = route?.params?.orderId || '';
@@ -172,23 +174,27 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
   const handleNavigationChange = useCallback((navState: WebViewNavigation) => {
     const { url } = navState;
 
-    const isSuccess = 
-      url.includes('/payment/success') || 
+    // URL 파라미터 정확 매칭 (substring false positive 방지)
+    let parsedStatus: string | null = null;
+    try {
+      const urlObj = new URL(url);
+      parsedStatus = urlObj.searchParams.get('status');
+    } catch {}
+
+    const isSuccess =
+      url.includes('/payment/success') ||
       url.includes('payment_success=true') ||
-      url.includes('/payment/callback?status=success') ||
-      url.includes('status=success');
+      parsedStatus === 'success';
 
-    const isFail = 
-      url.includes('/payment/fail') || 
+    const isFail =
+      url.includes('/payment/fail') ||
       url.includes('payment_fail=true') ||
-      url.includes('/payment/callback?status=fail') ||
-      url.includes('status=fail');
+      parsedStatus === 'fail' || parsedStatus === 'failed';
 
-    const isCancel = 
-      url.includes('/payment/cancel') || 
+    const isCancel =
+      url.includes('/payment/cancel') ||
       url.includes('payment_cancel=true') ||
-      url.includes('/payment/callback?status=cancel') ||
-      url.includes('status=cancel');
+      parsedStatus === 'cancel' || parsedStatus === 'cancelled';
 
     if (isSuccess) {
       handlePaymentSuccess();
@@ -226,10 +232,45 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
     }
   }, [navigation, handlePaymentSuccess]);
 
+  // Restrict WebView navigation to trusted PG domains only
+  const ALLOWED_PAYMENT_DOMAINS = [
+    'api.portone.io',
+    'checkout.portone.io',
+    'service.portone.io',
+    'pay.toss.im',
+    'pgweb.tosspayments.com',
+    'pg-web.tosspayments.com',
+    'payment.kakaopay.com',
+    'nid.naver.com',
+    'pay.naver.com',
+    'ksmobile.inicis.com',
+    'mobile.inicis.com',
+    'nice.checkplus.co.kr',
+    'npay.settlebank.co.kr',
+  ];
+
+  const handleShouldStartLoad = useCallback((request: WebViewNavigation): boolean => {
+    try {
+      const url = new URL(request.url);
+      const apiHost = new URL(getApiUrl()).host;
+      if (url.host === apiHost || ALLOWED_PAYMENT_DOMAINS.some(d => url.host.endsWith(d))) {
+        return true;
+      }
+      // Allow about:blank and data: URIs
+      if (request.url.startsWith('about:') || request.url.startsWith('data:')) {
+        return true;
+      }
+      console.warn('[PaymentScreen] Blocked navigation to:', url.host);
+      return false;
+    } catch {
+      return false;
+    }
+  }, []);
+
   if (Platform.OS === 'web') {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={[styles.content, { paddingTop: headerHeight + Spacing.md }]}>
+        <View style={[styles.content, showDesktopLayout && { maxWidth: containerMaxWidth, alignSelf: 'center' as const, width: '100%' as any }, { paddingTop: headerHeight + Spacing.md }]}>
           <Card style={styles.webCard}>
             <View style={[styles.iconContainer, { backgroundColor: BrandColors.requesterLight }]}>
               <Icon name="card-outline" size={48} color={BrandColors.requester} />
@@ -281,7 +322,7 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
   if (paymentStatus === 'success') {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={[styles.content, { paddingTop: headerHeight + Spacing.md }]}>
+        <View style={[styles.content, showDesktopLayout && { maxWidth: containerMaxWidth, alignSelf: 'center' as const, width: '100%' as any }, { paddingTop: headerHeight + Spacing.md }]}>
           <Card style={styles.successCard}>
             <View style={[styles.iconContainer, { backgroundColor: BrandColors.successLight }]}>
               <Icon name="checkmark-circle-outline" size={48} color={BrandColors.success} />
@@ -301,7 +342,7 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
   if (paymentStatus === 'failed' || !paymentUrl) {
     return (
       <View style={[styles.container, { backgroundColor: theme.backgroundRoot }]}>
-        <View style={[styles.content, { paddingTop: headerHeight + Spacing.md }]}>
+        <View style={[styles.content, showDesktopLayout && { maxWidth: containerMaxWidth, alignSelf: 'center' as const, width: '100%' as any }, { paddingTop: headerHeight + Spacing.md }]}>
           <Card style={styles.errorCard}>
             <View style={[styles.iconContainer, { backgroundColor: BrandColors.errorLight }]}>
               <Icon name="alert-circle-outline" size={48} color={BrandColors.error} />
@@ -346,6 +387,7 @@ export default function PaymentScreen({ navigation, route }: PaymentScreenProps)
         javaScriptEnabled
         domStorageEnabled
         originWhitelist={['https://*']}
+        onShouldStartLoadWithRequest={handleShouldStartLoad}
         mixedContentMode="never"
         sharedCookiesEnabled
         thirdPartyCookiesEnabled

@@ -1,6 +1,7 @@
 import React from "react";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createBottomTabNavigator, BottomTabBar } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
+import { DesktopSidebar } from "@/components/DesktopSidebar";
 import { BlurView } from "expo-blur";
 import { Platform, StyleSheet, View, Text, Alert, Pressable, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -35,28 +36,22 @@ export default function MainTabNavigator() {
   const { theme, isDark } = useTheme();
   const { user } = useAuth();
   const unreadCount = useUnreadNotifications();
-  const { isDesktop, isTablet, sidebarWidth } = useResponsive();
+  const { isDesktop, isTablet, sidebarWidth, showDesktopLayout } = useResponsive();
   const insets = useSafeAreaInsets();
 
   const isHelper = user?.role === 'helper';
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const accentColor = isAdmin ? BrandColors.helper : isHelper ? BrandColors.helper : BrandColors.requester;
-  const showSidebar = (isDesktop || isTablet) && Platform.OS === 'web';
 
   return (
     <Tab.Navigator
       initialRouteName="HomeTab"
+      tabBar={(props) => showDesktopLayout ? <DesktopSidebar {...props} /> : <BottomTabBar {...props} />}
       screenOptions={{
         tabBarActiveTintColor: accentColor,
         tabBarInactiveTintColor: theme.tabIconDefault,
-        tabBarPosition: showSidebar ? 'left' : 'bottom',
-        tabBarStyle: showSidebar ? {
-          width: sidebarWidth,
-          paddingTop: insets.top + 20,
-          paddingHorizontal: 12,
-          backgroundColor: theme.backgroundRoot,
-          borderRightWidth: 1,
-          borderRightColor: theme.border,
+        tabBarStyle: showDesktopLayout ? {
+          display: 'none',
         } : {
           position: "absolute",
           backgroundColor: Platform.select({
@@ -66,24 +61,8 @@ export default function MainTabNavigator() {
           borderTopWidth: 0,
           elevation: 0,
         },
-        tabBarLabelStyle: showSidebar ? {
-          fontSize: 14,
-          marginLeft: 8,
-        } : undefined,
-        tabBarIconStyle: showSidebar ? {
-          marginRight: 0,
-        } : undefined,
-        tabBarItemStyle: showSidebar ? {
-          flexDirection: 'row',
-          justifyContent: 'flex-start',
-          alignItems: 'center',
-          paddingVertical: 12,
-          paddingHorizontal: 16,
-          borderRadius: 8,
-          marginBottom: 4,
-        } : undefined,
         tabBarBackground: () =>
-          Platform.OS === "ios" && !showSidebar ? (
+          Platform.OS === "ios" && !showDesktopLayout ? (
             <BlurView
               intensity={100}
               tint={isDark ? "dark" : "light"}
@@ -91,7 +70,7 @@ export default function MainTabNavigator() {
             />
           ) : null,
         headerShown: false,
-        sceneStyle: showSidebar ? {
+        sceneStyle: showDesktopLayout ? {
           marginLeft: sidebarWidth,
         } : undefined,
       }}

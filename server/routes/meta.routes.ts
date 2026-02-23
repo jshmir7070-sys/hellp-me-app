@@ -23,10 +23,14 @@ export function registerMetaRoutes(ctx: RouteContext): void {
   app.get("/api/meta/couriers", async (req, res) => {
     try {
       const settings = await storage.getAllCourierSettings();
-      const courierList = settings.filter((s: any) => s.isActive);
+      const courierList = settings
+        .filter((s: any) => s.isActive)
+        .sort((a: any, b: any) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.id - b.id);
 
       const result = courierList.map((s: any) => ({
         id: s.id,
+        code: s.id.toString(),
+        name: s.courierName,
         label: s.courierName,
         category: s.category || "parcel",
         basePricePerBox: s.basePricePerBox || 0,
@@ -37,6 +41,7 @@ export function registerMetaRoutes(ctx: RouteContext): void {
         urgentCommissionRate: s.urgentCommissionRate || 0,
         urgentSurchargeRate: s.urgentSurchargeRate || 0,
         isDefault: s.isDefault || false,
+        sortOrder: s.sortOrder || 0,
         active: true,
       }));
       res.json(result);

@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/api';
+import { useSearchParams } from 'react-router-dom';
+import { apiRequest, adminFetch } from '@/lib/api';
 import { useConfirm } from '@/components/common/ConfirmDialog';
 import { downloadCSV } from '@/utils/csv-export';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 import { Button } from '@/components/ui/button';
@@ -21,7 +23,7 @@ import {
   Pagination,
 } from '@/components/common';
 import { ExcelTable, ColumnDef } from '@/components/common/ExcelTable';
-import { CheckCircle, RefreshCw, Download, Filter, ChevronDown, UserPlus, CircleCheck, Banknote, XCircle, Users, Plus } from 'lucide-react';
+import { CheckCircle, RefreshCw, Download, Filter, ChevronDown, UserPlus, Banknote, XCircle, Users, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -79,6 +81,24 @@ interface Order {
   paidAt?: string;
   balancePaymentDueDate?: string;
   regionMapUrl?: string;
+  contractConfirmed?: boolean;
+  contractConfirmedAt?: string;
+  signatureData?: string;
+  maxHelpers?: number;
+  currentHelpers?: number;
+  enterpriseId?: number | null;
+  orderNumber?: string | null;
+}
+
+// 12자리 오더번호 포맷 (1-002-1234-0001)
+function formatOrderNumber(orderNumber: string | null | undefined, orderId: number): string {
+  if (orderNumber) {
+    if (orderNumber.length === 12) {
+      return `${orderNumber.slice(0, 1)}-${orderNumber.slice(1, 4)}-${orderNumber.slice(4, 8)}-${orderNumber.slice(8, 12)}`;
+    }
+    return orderNumber;
+  }
+  return `#${orderId}`;
 }
 
 function getCourierCategory(courierCompany: string): 'parcel' | 'other' | 'cold' {
@@ -96,10 +116,12 @@ function getCourierCategory(courierCompany: string): 'parcel' | 'other' | 'cold'
 export default function OrdersPage() {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [dateRange, setDateRange] = useState(getDefaultDateRange(7));
   const [activeView, setActiveView] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'parcel' | 'other' | 'cold'>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearch = useDebouncedValue(searchQuery, 300);
   const [filterOpen, setFilterOpen] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -110,6 +132,7 @@ export default function OrdersPage() {
   const [isApproveClosingModalOpen, setIsApproveClosingModalOpen] = useState(false);
   const [isConfirmBalanceModalOpen, setIsConfirmBalanceModalOpen] = useState(false);
   const [selectedHelperId, setSelectedHelperId] = useState<string | null>(null);
+  const [selectedHelperIds, setSelectedHelperIds] = useState<Set<string>>(new Set());
   const [helperSearchQuery, setHelperSearchQuery] = useState('');
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [helperDetailId, _setHelperDetailId] = useState<string | number | null>(null);
@@ -151,17 +174,36 @@ export default function OrdersPage() {
     freight: '',
     waypoints: [''],
     coldCompanyName: '',
+    // 협력업체
+    enterpriseId: null as number | null,
+    enterpriseName: '',
+    settlementDate: '',
+  });
+
+  // 협력업체 검색
+  const [enterpriseSearch, setEnterpriseSearch] = useState('');
+  const [showEnterpriseDropdown, setShowEnterpriseDropdown] = useState(false);
+
+  const { data: enterpriseSearchResults = [] } = useQuery<any[]>({
+    queryKey: ['enterprise-search', enterpriseSearch],
+    enabled: enterpriseSearch.length >= 1,
+    queryFn: async () => {
+      try {
+        const data = await apiRequest<any[]>(`/enterprise-accounts/search?q=${encodeURIComponent(enterpriseSearch)}`);
+        return data || [];
+      } catch { return []; }
+    },
   });
 
   const { data: ordersResponse, isLoading, refetch } = useQuery({
-    queryKey: ['admin-orders', dateRange, currentPage, itemsPerPage, searchQuery],
+    queryKey: ['admin-orders', dateRange, currentPage, itemsPerPage, debouncedSearch],
     refetchInterval: autoRefresh ? 10000 : false, // 자동 새로고침 시 10초마다
     queryFn: async () => {
       try {
         const params = new URLSearchParams();
-        params.append('page', '1');
-        params.append('limit', '500');
-        if (searchQuery) params.append('search', searchQuery);
+        params.append('page', String(currentPage));
+        params.append('limit', String(itemsPerPage));
+        if (debouncedSearch) params.append('search', debouncedSearch);
         
         const data = await apiRequest<{ 
           data: any[]; 
@@ -182,7 +224,7 @@ export default function OrdersPage() {
             courierCategory: o.courierCategory || getCourierCategory(o.courierCompany || ''),
             companyName: o.companyName || '',
             boxCount: o.boxCount || 0,
-            unitPrice: o.unitPrice || o.pricePerBox || 0,
+            unitPrice: o.pricePerUnit || o.unitPrice || o.pricePerBox || 0,
             totalAmount: o.totalAmount || 0,
             status: o.status || 'open',
             matchedHelperId: o.matchedHelperId,
@@ -192,6 +234,9 @@ export default function OrdersPage() {
             scheduledDate: o.scheduledDate,
             paymentStatus: o.paymentStatus,
             settlementStatus: o.settlementStatus,
+            maxHelpers: o.maxHelpers || 3,
+            currentHelpers: o.currentHelpers || 0,
+            orderNumber: o.orderNumber || null,
           })),
           pagination: data.pagination,
         };
@@ -204,23 +249,83 @@ export default function OrdersPage() {
   const orders = ordersResponse?.orders || [];
   const pagination = ordersResponse?.pagination;
 
+  // URL ?id= 파라미터로 오더 상세 자동 오픈
+  const autoOpenHandled = useRef(false);
+  useEffect(() => {
+    if (autoOpenHandled.current) return;
+    const targetId = searchParams.get('id');
+    if (!targetId || !orders.length) return;
+
+    const orderId = Number(targetId);
+    const found = orders.find((o: Order) => o.id === orderId);
+    if (found) {
+      setSelectedOrder(found);
+      setIsDrawerOpen(true);
+      autoOpenHandled.current = true;
+      // URL에서 id 파라미터 제거 (뒤로가기 시 재트리거 방지)
+      searchParams.delete('id');
+      setSearchParams(searchParams, { replace: true });
+    } else if (!found && orderId > 0) {
+      // 목록에 없으면 API로 직접 조회
+      apiRequest<any>(`/orders/${orderId}`).then((data) => {
+        if (data) {
+          const order: Order = {
+            id: data.id,
+            createdAt: data.createdAt,
+            requesterId: data.requesterId || 0,
+            requesterName: data.requesterName || `요청자${data.requesterId || 0}`,
+            requesterPhone: data.requesterPhone,
+            requesterEmail: data.requesterEmail || '',
+            deliveryArea: data.deliveryArea || '',
+            campAddress: data.campAddress || '',
+            courierCompany: data.courierCompany || '',
+            courierCategory: data.courierCategory || 'parcel',
+            companyName: data.companyName || '',
+            boxCount: data.boxCount || 0,
+            unitPrice: data.pricePerUnit || data.unitPrice || 0,
+            totalAmount: data.totalAmount || 0,
+            status: data.status || 'open',
+            matchedHelperId: data.matchedHelperId,
+            helperName: data.helperName,
+            deadline: data.deadline || data.workDate,
+            requestedDate: data.requestedDate || data.workDate || data.scheduledDate,
+            scheduledDate: data.scheduledDate,
+            paymentStatus: data.paymentStatus,
+            settlementStatus: data.settlementStatus,
+            maxHelpers: data.maxHelpers || 3,
+            currentHelpers: data.currentHelpers || 0,
+            orderNumber: data.orderNumber || null,
+          };
+          setSelectedOrder(order);
+          setIsDrawerOpen(true);
+          autoOpenHandled.current = true;
+          searchParams.delete('id');
+          setSearchParams(searchParams, { replace: true });
+        }
+      }).catch(() => { /* 오더 조회 실패 시 무시 */ });
+      autoOpenHandled.current = true;
+    }
+  }, [orders, searchParams, setSearchParams]);
+
   interface Helper {
     id: string;
     name: string;
     phoneNumber?: string;
     dailyStatus?: string;
+    teamName?: string;
   }
 
   const { data: helpers = [] } = useQuery<Helper[]>({
     queryKey: ['admin-helpers'],
     queryFn: async () => {
       try {
-        const data = await apiRequest<any[]>('/users?role=helper');
-        return data.map((h: any) => ({
+        const data = await apiRequest<{ data: any[]; pagination: any }>('/helpers?limit=200');
+        return (data.data || []).map((h: any) => ({
           id: h.id,
           name: h.name || '이름없음',
           phoneNumber: h.phoneNumber,
           dailyStatus: h.dailyStatus,
+          teamName: h.teamName,
         }));
       } catch {
         return [];
@@ -279,6 +384,7 @@ export default function OrdersPage() {
           courierCompany: courierName,
           courierCategory: category,
           pricePerUnit: parseInt(formData.unitPriceManual) || formData.pricePerUnit || defaultPrice,
+          enterpriseId: formData.enterpriseId || undefined,
         }),
       });
     },
@@ -311,7 +417,12 @@ export default function OrdersPage() {
         freight: '',
         waypoints: [''],
         coldCompanyName: '',
+        enterpriseId: null,
+        enterpriseName: '',
+        settlementDate: '',
       });
+      setEnterpriseSearch('');
+      setShowEnterpriseDropdown(false);
       refetch();
       toast({ title: '본사 계약권 오더가 등록되었습니다.' });
     },
@@ -339,7 +450,7 @@ export default function OrdersPage() {
           courierCategory: data.courierCategory || getCourierCategory(data.courierCompany || ''),
           companyName: data.companyName || '',
           boxCount: data.boxCount || 0,
-          unitPrice: data.unitPrice || data.pricePerBox || 0,
+          unitPrice: data.pricePerUnit || data.unitPrice || data.pricePerBox || 0,
           totalAmount: data.totalAmount || 0,
           status: data.status || 'open',
           matchedHelperId: data.matchedHelperId,
@@ -356,6 +467,11 @@ export default function OrdersPage() {
           paidAt: data.paidAt || data.virtualAccount?.paidAt,
           balancePaymentDueDate: data.balancePaymentDueDate,
           regionMapUrl: data.regionMapUrl,
+          contractConfirmed: data.contractConfirmed,
+          contractConfirmedAt: data.contractConfirmedAt,
+          signatureData: data.signatureData,
+          maxHelpers: data.maxHelpers || 3,
+          currentHelpers: data.currentHelpers || 0,
         };
       } catch {
         return null;
@@ -440,6 +556,21 @@ export default function OrdersPage() {
     enabled: !!selectedOrder?.id,
   });
 
+  // 계약서 전문 HTML 조회 (admin auth 사용)
+  const { data: contractHtml, isLoading: contractHtmlLoading, isError: contractHtmlError } = useQuery<string>({
+    queryKey: ['order-contract-html', selectedOrder?.id],
+    queryFn: async () => {
+      if (!selectedOrder?.id) throw new Error('No order selected');
+      const response = await adminFetch(`/api/admin/orders/${selectedOrder.id}/contract/pdf`);
+      if (!response.ok) throw new Error(`Contract fetch failed: ${response.status}`);
+      const html = await response.text();
+      if (!html || html.length < 10) throw new Error('Empty contract HTML');
+      return html;
+    },
+    enabled: !!selectedOrder?.id,
+    retry: 1,
+  });
+
   const { data: closingReport } = useQuery<ClosingReport | null>({
     queryKey: ['order-closing-report', selectedOrder?.id],
     queryFn: async () => {
@@ -501,7 +632,67 @@ export default function OrdersPage() {
       setHelperSearchQuery('');
       setIsDrawerOpen(false);
       refetch();
-      toast({ title: '헬퍼가 배정되었습니다.' });
+      toast({ title: '헬퍼가 신청되었습니다.' });
+    },
+  });
+
+  const bulkAssignMutation = useMutation({
+    mutationFn: async (orderId: number) => {
+      return apiRequest<{ success: boolean; assignedCount: number; helpers: { id: string; name: string; phone: string }[] }>(
+        `/orders/${orderId}/bulk-assign`,
+        { method: 'POST' }
+      );
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['order-applications'] });
+      setIsDrawerOpen(false);
+      refetch();
+      toast({ title: `${data?.assignedCount || 0}명의 헬퍼가 전체 배정되었습니다.` });
+    },
+    onError: (error: any) => {
+      toast({ title: error.message || '전체 배정에 실패했습니다', variant: 'destructive' });
+    },
+  });
+
+  const directAssignMutation = useMutation({
+    mutationFn: async ({ orderId, helperIds }: { orderId: number; helperIds: string[] }) => {
+      return apiRequest<{ success: boolean; assignedCount: number; helpers: { id: string; name: string; phone: string }[] }>(
+        `/orders/${orderId}/direct-assign`,
+        { method: 'POST', body: JSON.stringify({ helperIds }) }
+      );
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['order-applications'] });
+      setIsAssignModalOpen(false);
+      setSelectedHelperIds(new Set());
+      setHelperSearchQuery('');
+      setIsDrawerOpen(false);
+      refetch();
+      toast({ title: `${data?.assignedCount || 0}명의 헬퍼가 배정되었습니다.` });
+    },
+    onError: (error: any) => {
+      toast({ title: error.message || '배정에 실패했습니다', variant: 'destructive' });
+    },
+  });
+
+  const removeAssignmentMutation = useMutation({
+    mutationFn: async ({ orderId, helperId }: { orderId: number; helperId: string }) => {
+      return apiRequest<{ success: boolean; remainingHelpers: number; newStatus: string }>(
+        `/orders/${orderId}/applications/${helperId}`,
+        { method: 'DELETE' }
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['order-applications'] });
+      queryClient.invalidateQueries({ queryKey: ['order-detail'] });
+      refetch();
+      toast({ title: '헬퍼 배정이 해제되었습니다.' });
+    },
+    onError: (error: any) => {
+      toast({ title: error.message || '배정 해제에 실패했습니다', variant: 'destructive' });
     },
   });
 
@@ -535,7 +726,7 @@ export default function OrdersPage() {
 
   const cancelOrderMutation = useMutation({
     mutationFn: async (orderId: number) => {
-      return apiRequest(`/orders/${orderId}`, { 
+      return apiRequest(`/orders/${orderId}`, {
         method: 'PATCH',
         body: JSON.stringify({ status: 'cancelled' })
       });
@@ -543,12 +734,20 @@ export default function OrdersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-orders'] });
       refetch();
-      toast({ title: '오더가 반려되었습니다.' });
+      toast({ title: '오더가 취소되었습니다. 계약금이 있는 경우 결제관리 > 환불에서 확인하세요.' });
     },
   });
 
   const handleCancelOrder = async (orderId: number) => {
     const ok = await confirm({ title: '오더 반려', description: '이 오더를 반려하시겠습니까?' });
+    if (ok) cancelOrderMutation.mutate(orderId);
+  };
+
+  const handleCancelUnassigned = async (orderId: number) => {
+    const ok = await confirm({
+      title: '취소/미배정',
+      description: '미배정 오더를 취소하시겠습니까?\n계약금이 입금된 오더는 결제관리 > 환불 탭에서 환불 처리됩니다.',
+    });
     if (ok) cancelOrderMutation.mutate(orderId);
   };
 
@@ -606,8 +805,8 @@ export default function OrdersPage() {
 
   const handleDownloadExcel = () => {
     const data = filteredOrders.map(item => ({
-      '오더번호': item.id,
-      '생성일시': item.createdAt ? new Date(item.createdAt).toLocaleString('ko-KR') : '',
+      '오더번호': formatOrderNumber(item.orderNumber, item.id),
+      '생성일시': item.createdAt ? new Date(item.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
       '요청자': item.requesterName || '',
       '요청자이메일': item.requesterEmail || '',
       '택배사': item.companyName || '',
@@ -633,8 +832,14 @@ export default function OrdersPage() {
     {
       key: 'id',
       header: '오더번호',
-      width: 90,
-      render: (value) => <EntityLink type="order" id={value} />,
+      width: 150,
+      render: (value, row) => (
+        <EntityLink
+          type="order"
+          id={value}
+          label={formatOrderNumber(row.orderNumber, value)}
+        />
+      ),
     },
     {
       key: 'createdAt',
@@ -642,7 +847,7 @@ export default function OrdersPage() {
       width: 150,
       render: (value) => (
         <span className="text-sm text-muted-foreground">
-          {new Date(value).toLocaleString('ko-KR')}
+          {new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
         </span>
       ),
     },
@@ -655,8 +860,15 @@ export default function OrdersPage() {
     {
       key: 'companyName',
       header: '택배사',
-      width: 100,
-      render: (value) => <span className="text-sm">{value || '-'}</span>,
+      width: 130,
+      render: (value: any, row: any) => (
+        <div className="flex items-center gap-1">
+          <span className="text-sm">{value || '-'}</span>
+          {!row.requesterId && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-700 whitespace-nowrap">관리자</span>
+          )}
+        </div>
+      ),
     },
     {
       key: 'deliveryArea',
@@ -689,7 +901,7 @@ export default function OrdersPage() {
       width: 100,
       render: (value) => value ? (
         <span className="text-sm">
-          {new Date(value).toLocaleDateString('ko-KR')}
+          {new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}
         </span>
       ) : '-',
     },
@@ -732,20 +944,36 @@ export default function OrdersPage() {
               </>
             )}
             {normalizedStatus === ORDER_STATUS.OPEN && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-blue-500 text-blue-600 hover:bg-blue-50"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedOrder(row);
-                  _setHelperDetailId(row.matchedHelperId || null);
-                  setIsHelperDetailOpen(true);
-                }}
-              >
-                <Users className="h-4 w-4 mr-1" />
-                헬퍼배정
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-blue-500 text-blue-600 hover:bg-blue-50"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedOrder(row);
+                    setIsAssignModalOpen(true);
+                  }}
+                >
+                  <Users className="h-4 w-4 mr-1" />
+                  헬퍼신청
+                </Button>
+                {!row.matchedHelperId && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-red-500 text-red-600 hover:bg-red-50"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedOrder(row);
+                      handleCancelUnassigned(row.id);
+                    }}
+                  >
+                    <XCircle className="h-4 w-4 mr-1" />
+                    취소/미배정
+                  </Button>
+                )}
+              </>
             )}
             {normalizedStatus === ORDER_STATUS.CLOSING_SUBMITTED && (
               <Button
@@ -908,7 +1136,7 @@ export default function OrdersPage() {
           )}
         >
           <span className="text-2xl font-bold">{viewCounts.unassigned_refund}</span>
-          <span className="mt-1">미배정환불</span>
+          <span className="mt-1">취소/미배정</span>
         </button>
       </div>
 
@@ -1042,7 +1270,7 @@ export default function OrdersPage() {
       <DrawerDetail
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        title={`오더 ORD-${selectedOrder?.id}`}
+        title={`오더 ${formatOrderNumber(selectedOrder?.orderNumber, selectedOrder?.id || 0)}`}
         subtitle={selectedOrder?.requesterName}
         tabs={[
           {
@@ -1060,15 +1288,15 @@ export default function OrdersPage() {
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium w-1/3 border-r">이름</td>
-                      <td className="px-3 py-2">{selectedOrder?.requesterName || '-'}</td>
+                      <td className="px-3 py-2">{displayOrder?.requesterName || '-'}</td>
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">이메일</td>
-                      <td className="px-3 py-2">{selectedOrder?.requesterEmail || '-'}</td>
+                      <td className="px-3 py-2">{displayOrder?.requesterEmail || '-'}</td>
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">전화번호</td>
-                      <td className="px-3 py-2">{selectedOrder?.requesterPhone || '-'}</td>
+                      <td className="px-3 py-2">{displayOrder?.requesterPhone || '-'}</td>
                     </tr>
                     <tr className="border-b bg-green-50">
                       <td colSpan={2} className="px-3 py-2 font-bold text-green-800">헬퍼 정보</td>
@@ -1109,39 +1337,21 @@ export default function OrdersPage() {
                         <td className="px-3 py-2">{displayOrder.helperPhone}</td>
                       </tr>
                     )}
-                    <tr className="border-b">
-                      <td className="bg-gray-50 px-3 py-2 font-medium border-r align-top">신청자 목록</td>
-                      <td className="px-3 py-2">
-                        {applications.length > 0 ? (
-                          <div className="space-y-1">
-                            {applications.map((app) => (
-                              <div key={app.id} className="flex items-center gap-2 text-xs">
-                                <span className={app.status === 'approved' ? 'font-medium text-green-700' : ''}>
-                                  {app.helperName || '헬퍼'}
-                                </span>
-                                <Badge variant={app.status === 'approved' ? 'default' : 'secondary'} className="text-xs">
-                                  {app.status === 'applied' ? '신청' : app.status === 'approved' ? '배정' : app.status}
-                                </Badge>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground">신청자 없음</span>
-                        )}
-                      </td>
-                    </tr>
                     <tr className="border-b bg-orange-50">
                       <td colSpan={2} className="px-3 py-2 font-bold text-orange-800">오더 정보</td>
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">카테고리</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 flex items-center gap-1">
                         <Badge variant="outline">
                           {(() => {
-                            const cat = selectedOrder?.courierCategory || getCourierCategory(selectedOrder?.courierCompany || '');
+                            const cat = displayOrder?.courierCategory || getCourierCategory(displayOrder?.courierCompany || '');
                             return cat === 'parcel' ? '택배' : cat === 'other' ? '기타택배' : '냉탑전용';
                           })()}
                         </Badge>
+                        {!displayOrder?.requesterId && (
+                          <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100">관리자</Badge>
+                        )}
                       </td>
                     </tr>
                     <tr className="border-b">
@@ -1150,22 +1360,22 @@ export default function OrdersPage() {
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">평균수량</td>
-                      <td className="px-3 py-2">{selectedOrder?.averageQuantity || selectedOrder?.boxCount || 0} 박스</td>
+                      <td className="px-3 py-2">{displayOrder?.averageQuantity || displayOrder?.boxCount || 0} 박스</td>
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">단가 / 운송료</td>
-                      <td className="px-3 py-2"><Money amount={selectedOrder?.unitPrice || 0} /></td>
+                      <td className="px-3 py-2"><Money amount={displayOrder?.unitPrice || 0} /></td>
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">배송지역</td>
-                      <td className="px-3 py-2">{selectedOrder?.deliveryArea || '-'}</td>
+                      <td className="px-3 py-2">{displayOrder?.deliveryArea || '-'}</td>
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r align-top">배송지 이미지</td>
                       <td className="px-3 py-2">
-                        {selectedOrder?.regionMapUrl ? (
-                          <img 
-                            src={displayOrder?.regionMapUrl} 
+                        {displayOrder?.regionMapUrl ? (
+                          <img
+                            src={displayOrder?.regionMapUrl}
                             alt="배송지 이미지"
                             className="max-w-full h-auto rounded border cursor-pointer hover:opacity-90"
                             style={{ maxHeight: '200px' }}
@@ -1178,31 +1388,31 @@ export default function OrdersPage() {
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">캠프/터미널 (상차지)</td>
-                      <td className="px-3 py-2">{selectedOrder?.campAddress || '-'}</td>
+                      <td className="px-3 py-2">{displayOrder?.campAddress || '-'}</td>
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">요청일</td>
                       <td className="px-3 py-2">
                         {displayOrder?.scheduledDate 
-                          ? new Date(displayOrder.scheduledDate).toLocaleDateString('ko-KR') 
+                          ? new Date(displayOrder.scheduledDate).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) 
                           : '-'}
                       </td>
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">담당자 연락처</td>
-                      <td className="px-3 py-2">{selectedOrder?.contactPhone || selectedOrder?.requesterPhone || '-'}</td>
+                      <td className="px-3 py-2">{displayOrder?.contactPhone || displayOrder?.requesterPhone || '-'}</td>
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r align-top">배송가이드</td>
                       <td className="px-3 py-2 whitespace-pre-wrap text-xs">
-                        {selectedOrder?.deliveryGuide || '등록된 배송가이드가 없습니다.'}
+                        {displayOrder?.deliveryGuide || '등록된 배송가이드가 없습니다.'}
                       </td>
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">잔금 결제 예정일</td>
                       <td className="px-3 py-2">
                         {displayOrder?.balancePaymentDueDate 
-                          ? new Date(displayOrder.balancePaymentDueDate).toLocaleDateString('ko-KR') 
+                          ? new Date(displayOrder.balancePaymentDueDate).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) 
                           : '-'}
                       </td>
                     </tr>
@@ -1263,15 +1473,23 @@ export default function OrdersPage() {
                       </td>
                     </tr>
                     <tr>
-                      <td className="bg-gray-50 px-3 py-2 font-medium border-r">계약서</td>
+                      <td className="bg-gray-50 px-3 py-2 font-medium border-r">계약 상태</td>
                       <td className="px-3 py-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => window.open(`/api/orders/${selectedOrder?.id}/contract/pdf`, '_blank')}
-                        >
-                          계약서 출력
-                        </Button>
+                        {displayOrder?.contractConfirmed ? (
+                          <div className="flex items-center gap-2">
+                            <Badge variant="success" className="text-xs">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              계약 확정
+                            </Badge>
+                            {displayOrder?.contractConfirmedAt && (
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(displayOrder.contractConfirmedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <Badge variant="secondary" className="text-xs">계약 미확정</Badge>
+                        )}
                       </td>
                     </tr>
                   </tbody>
@@ -1282,128 +1500,319 @@ export default function OrdersPage() {
           {
             id: 'applicants',
             label: `지원자 (${applications.length})`,
-            content: applications.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                지원자가 없습니다
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {applications.map((app) => (
-                  <div key={app.id} className="p-3 border rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <span className="font-medium">{app.helperName || '헬퍼'}</span>
-                        <span className="text-sm text-muted-foreground ml-2">{app.helperPhone}</span>
-                      </div>
-                      <Badge variant={app.status === 'applied' ? 'default' : app.status === 'approved' ? 'success' : 'secondary'}>
-                        {app.status === 'applied' ? '신청중' : app.status === 'approved' ? '배정됨' : app.status}
-                      </Badge>
-                    </div>
-                    {app.message && (
-                      <p className="text-sm text-muted-foreground mb-2">{app.message}</p>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(app.appliedAt).toLocaleString('ko-KR')}
+            content: (() => {
+              const appliedCount = applications.filter(a => a.status === 'applied').length;
+              const approvedCount = applications.filter(a => a.status === 'approved' || a.status === 'scheduled' || a.status === 'in_progress').length;
+              const maxHelpers = (selectedOrder as any)?.maxHelpers || 3;
+              const isEnterprise = !!displayOrder?.enterpriseId;
+              const canRemove = isEnterprise && (
+                normalizeOrderStatus(selectedOrder?.status) === ORDER_STATUS.OPEN ||
+                normalizeOrderStatus(selectedOrder?.status) === ORDER_STATUS.SCHEDULED
+              );
+              return applications.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  {isEnterprise ? '배정된 헬퍼가 없습니다' : '지원자가 없습니다'}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* 현황 요약 */}
+                  <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="text-sm">
+                      <span className="font-medium text-blue-800">
+                        {isEnterprise ? '배정 현황: ' : '신청 현황: '}
                       </span>
-                      {app.status === 'applied' && (
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedHelperId(app.helperId);
-                              setIsAssignModalOpen(true);
-                            }}
-                          >
-                            <CircleCheck className="h-4 w-4 mr-1" />
-                            배정
-                          </Button>
-                        </div>
-                      )}
+                      <span className="text-blue-700">
+                        {isEnterprise ? `${approvedCount} / ${maxHelpers}명` : `${appliedCount} / ${maxHelpers}명`}
+                      </span>
                     </div>
+                    {!isEnterprise && appliedCount > 0 && normalizeOrderStatus(selectedOrder?.status) === ORDER_STATUS.OPEN && (
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700"
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: '전체 배정 확인',
+                            description: `신청된 ${appliedCount}명을 전체 배정하시겠습니까?\n배정 시 헬퍼에게 푸시알림과 의뢰인 연락처가 전송됩니다.`,
+                          });
+                          if (ok) {
+                            bulkAssignMutation.mutate(selectedOrder!.id);
+                          }
+                        }}
+                        disabled={bulkAssignMutation.isPending}
+                      >
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                        {bulkAssignMutation.isPending ? '배정 중...' : `전체 배정 (${appliedCount}명)`}
+                      </Button>
+                    )}
                   </div>
-                ))}
-              </div>
-            ),
+
+                  {/* 지원자/배정 헬퍼 목록 */}
+                  {applications.map((app) => (
+                    <div key={app.id} className="p-3 border rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <span className="font-medium">{app.helperName || '헬퍼'}</span>
+                          <span className="text-sm text-muted-foreground ml-2">{app.helperPhone}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={app.status === 'applied' ? 'default' : app.status === 'approved' ? 'success' : app.status === 'rejected' ? 'destructive' : 'secondary'}>
+                            {app.status === 'applied' ? '신청중' : app.status === 'approved' ? '배정됨' : app.status === 'rejected' ? '해제됨' : app.status}
+                          </Badge>
+                          {canRemove && (app.status === 'approved' || app.status === 'applied') && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={async () => {
+                                const ok = await confirm({
+                                  title: '배정 해제',
+                                  description: `${app.helperName || '헬퍼'}의 배정을 해제하시겠습니까?`,
+                                });
+                                if (ok && selectedOrder) {
+                                  removeAssignmentMutation.mutate({
+                                    orderId: selectedOrder.id,
+                                    helperId: app.helperId,
+                                  });
+                                }
+                              }}
+                              disabled={removeAssignmentMutation.isPending}
+                            >
+                              ✕
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      {app.message && (
+                        <p className="text-sm text-muted-foreground mb-2">{app.message}</p>
+                      )}
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(app.appliedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })(),
           },
           {
             id: 'contracts',
-            label: `계약정보 (${contracts.length})`,
-            content: contracts.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                계약 정보가 없습니다
-              </div>
-            ) : (
+            label: '계약정보',
+            content: (
               <div className="space-y-4">
-                {contracts.map((contract) => (
-                  <div key={contract.id} className="border rounded-lg overflow-hidden bg-white">
-                    <div className="bg-purple-50 px-4 py-2 border-b">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-purple-800">계약 #{contract.id}</h4>
-                        <Badge variant={contract.status === 'active' ? 'success' : 'secondary'}>
-                          {contract.status === 'active' ? '활성' : contract.status}
-                        </Badge>
-                      </div>
-                    </div>
-                    <table className="w-full text-sm">
-                      <tbody>
-                        <tr className="border-b">
-                          <td className="bg-gray-50 px-3 py-2 font-medium w-1/3 border-r">계약일시</td>
-                          <td className="px-3 py-2">
-                            {contract.signedAt 
-                              ? new Date(contract.signedAt).toLocaleString('ko-KR')
-                              : contract.createdAt 
-                                ? new Date(contract.createdAt).toLocaleString('ko-KR')
-                                : '-'}
-                          </td>
-                        </tr>
-                        <tr className="border-b">
-                          <td className="bg-gray-50 px-3 py-2 font-medium border-r">헬퍼</td>
-                          <td className="px-3 py-2">
-                            {contract.helperName || '미지정'} 
-                            {contract.helperPhone && <span className="text-muted-foreground ml-2">({contract.helperPhone})</span>}
-                          </td>
-                        </tr>
-                        <tr className="border-b">
-                          <td className="bg-gray-50 px-3 py-2 font-medium border-r">요청자</td>
-                          <td className="px-3 py-2">
-                            {contract.requesterName || '-'} 
-                            {contract.requesterPhone && <span className="text-muted-foreground ml-2">({contract.requesterPhone})</span>}
-                          </td>
-                        </tr>
-                        <tr className="border-b">
-                          <td className="bg-gray-50 px-3 py-2 font-medium border-r align-top">요청자 서명</td>
-                          <td className="px-3 py-2">
-                            {contract.requesterSignature ? (
-                              <img 
-                                src={contract.requesterSignature} 
-                                alt="요청자 서명" 
-                                className="max-w-[200px] h-auto border rounded bg-white p-1"
-                              />
-                            ) : (
-                              <span className="text-muted-foreground">서명 없음</span>
-                            )}
-                          </td>
-                        </tr>
-                        <tr>
-                          <td className="bg-gray-50 px-3 py-2 font-medium border-r align-top">헬퍼 서명</td>
-                          <td className="px-3 py-2">
-                            {contract.helperSignature ? (
-                              <img 
-                                src={contract.helperSignature} 
-                                alt="헬퍼 서명" 
-                                className="max-w-[200px] h-auto border rounded bg-white p-1"
-                              />
-                            ) : (
-                              <span className="text-muted-foreground">서명 없음</span>
-                            )}
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                {/* 계약 확정 상태 */}
+                <div className="border rounded-lg overflow-hidden bg-white">
+                  <div className="bg-purple-50 px-4 py-2 border-b">
+                    <h4 className="font-bold text-purple-800">계약 확정 상태</h4>
                   </div>
-                ))}
+                  <table className="w-full text-sm">
+                    <tbody>
+                      <tr className="border-b">
+                        <td className="bg-gray-50 px-3 py-2 font-medium w-1/3 border-r">계약 상태</td>
+                        <td className="px-3 py-2">
+                          {displayOrder?.contractConfirmed ? (
+                            <Badge variant="success">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              계약 확정 완료
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">계약 미확정</Badge>
+                          )}
+                        </td>
+                      </tr>
+                      {displayOrder?.contractConfirmedAt && (
+                        <tr className="border-b">
+                          <td className="bg-gray-50 px-3 py-2 font-medium border-r">확정 일시</td>
+                          <td className="px-3 py-2">
+                            {new Date(displayOrder.contractConfirmedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
+                          </td>
+                        </tr>
+                      )}
+                      {displayOrder?.signatureData && (
+                        <tr className="border-b">
+                          <td className="bg-gray-50 px-3 py-2 font-medium border-r align-top">의뢰인 서명</td>
+                          <td className="px-3 py-2">
+                            <img
+                              src={displayOrder.signatureData.startsWith('data:') ? displayOrder.signatureData : `data:image/png;base64,${displayOrder.signatureData}`}
+                              alt="의뢰인 서명"
+                              className="max-w-[200px] h-auto border rounded bg-white p-1"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                      <tr className="border-b">
+                        <td className="bg-gray-50 px-3 py-2 font-medium border-r">잔금 입금 예정일</td>
+                        <td className="px-3 py-2">
+                          {displayOrder?.balancePaymentDueDate
+                            ? new Date(displayOrder.balancePaymentDueDate).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })
+                            : '-'}
+                        </td>
+                      </tr>
+                      <tr>
+                        <td className="bg-gray-50 px-3 py-2 font-medium border-r">계약금</td>
+                        <td className="px-3 py-2">
+                          <Money amount={displayOrder?.depositAmount || 0} />
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 계약서 전문 + 프린트 */}
+                <div className="border rounded-lg overflow-hidden bg-white">
+                  <div className="bg-indigo-50 px-4 py-2 border-b flex items-center justify-between">
+                    <h4 className="font-bold text-indigo-800">계약서 전문</h4>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const iframe = document.getElementById(`contract-iframe-${selectedOrder?.id}`) as HTMLIFrameElement;
+                          if (iframe?.contentWindow) {
+                            iframe.contentWindow.print();
+                          }
+                        }}
+                      >
+                        🖨️ 프린트
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (!contractHtml) return;
+                          // PDF 저장용: 새 창을 열고 자동으로 인쇄 다이얼로그 표시
+                          // 브라우저에서 "PDF로 저장"을 선택하면 법정 제출용 PDF 생성
+                          const win = window.open('', '_blank');
+                          if (win) {
+                            win.document.write(contractHtml);
+                            win.document.close();
+                            // 로딩 완료 후 인쇄 다이얼로그 자동 표시
+                            win.onload = () => win.print();
+                            // fallback: onload가 안 먹을 경우 setTimeout
+                            setTimeout(() => {
+                              try { win.print(); } catch {}
+                            }, 500);
+                          }
+                        }}
+                        disabled={!contractHtml}
+                      >
+                        📄 PDF 저장 (법정 제출용)
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          // 새창에서 계약서 HTML 직접 표시
+                          const win = window.open('', '_blank');
+                          if (win && contractHtml) {
+                            win.document.write(contractHtml);
+                            win.document.close();
+                          }
+                        }}
+                        disabled={!contractHtml}
+                      >
+                        새창 열기
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="p-2">
+                    {contractHtml ? (
+                      <iframe
+                        id={`contract-iframe-${selectedOrder?.id}`}
+                        srcDoc={contractHtml}
+                        className="w-full border rounded"
+                        style={{ height: '600px' }}
+                        title="계약서 전문"
+                      />
+                    ) : contractHtmlLoading ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        계약서를 불러오는 중...
+                      </div>
+                    ) : contractHtmlError ? (
+                      <div className="text-center py-8 text-red-500">
+                        계약서를 불러올 수 없습니다. 계약 데이터를 확인해주세요.
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        계약서가 아직 생성되지 않았습니다.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 기존 계약 레코드 (contracts 테이블) */}
+                {contracts.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-bold text-sm text-gray-700">계약 레코드 ({contracts.length})</h4>
+                    {contracts.map((contract) => (
+                      <div key={contract.id} className="border rounded-lg overflow-hidden bg-white">
+                        <div className="bg-gray-50 px-4 py-2 border-b">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-gray-700">계약 #{contract.id}</span>
+                            <Badge variant={contract.status === 'active' ? 'success' : 'secondary'}>
+                              {contract.status === 'active' ? '활성' : contract.status === 'pending' ? '대기' : contract.status}
+                            </Badge>
+                          </div>
+                        </div>
+                        <table className="w-full text-sm">
+                          <tbody>
+                            <tr className="border-b">
+                              <td className="bg-gray-50 px-3 py-2 font-medium w-1/3 border-r">계약일시</td>
+                              <td className="px-3 py-2">
+                                {contract.signedAt
+                                  ? new Date(contract.signedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
+                                  : contract.createdAt
+                                    ? new Date(contract.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
+                                    : '-'}
+                              </td>
+                            </tr>
+                            <tr className="border-b">
+                              <td className="bg-gray-50 px-3 py-2 font-medium border-r">헬퍼</td>
+                              <td className="px-3 py-2">
+                                {contract.helperName || '미지정'}
+                                {contract.helperPhone && <span className="text-muted-foreground ml-2">({contract.helperPhone})</span>}
+                              </td>
+                            </tr>
+                            <tr className="border-b">
+                              <td className="bg-gray-50 px-3 py-2 font-medium border-r">요청자</td>
+                              <td className="px-3 py-2">
+                                {contract.requesterName || '-'}
+                                {contract.requesterPhone && <span className="text-muted-foreground ml-2">({contract.requesterPhone})</span>}
+                              </td>
+                            </tr>
+                            {contract.requesterSignature && (
+                              <tr className="border-b">
+                                <td className="bg-gray-50 px-3 py-2 font-medium border-r align-top">요청자 서명</td>
+                                <td className="px-3 py-2">
+                                  <img
+                                    src={contract.requesterSignature.startsWith('data:') ? contract.requesterSignature : `data:image/png;base64,${contract.requesterSignature}`}
+                                    alt="요청자 서명"
+                                    className="max-w-[200px] h-auto border rounded bg-white p-1"
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                  />
+                                </td>
+                              </tr>
+                            )}
+                            {contract.helperSignature && (
+                              <tr className="border-b">
+                                <td className="bg-gray-50 px-3 py-2 font-medium border-r align-top">헬퍼 서명</td>
+                                <td className="px-3 py-2">
+                                  <img
+                                    src={contract.helperSignature}
+                                    alt="헬퍼 서명"
+                                    className="max-w-[200px] h-auto border rounded bg-white p-1"
+                                  />
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ),
           },
@@ -1411,8 +1820,18 @@ export default function OrdersPage() {
             id: 'closing',
             label: '마감자료',
             content: !closingReport ? (
-              <div className="text-center py-8 text-muted-foreground">
-                마감 자료가 없습니다
+              <div className="text-center py-8">
+                <p className="text-muted-foreground mb-2">마감 자료가 없습니다</p>
+                {displayOrder && ['closing_submitted', 'final_amount_confirmed', 'balance_paid', 'settlement_paid'].includes(displayOrder.status?.toLowerCase() || '') && (
+                  <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-left max-w-md mx-auto">
+                    <p className="text-yellow-800 text-sm font-medium">⚠️ 데이터 불일치 감지</p>
+                    <p className="text-yellow-700 text-xs mt-1">
+                      오더 상태가 &apos;{displayOrder.status}&apos;이지만 마감 보고서가 없습니다.
+                      DB 스키마 변경(db:push) 시 데이터가 삭제되었을 수 있습니다.
+                      헬퍼에게 마감 재제출을 요청하거나, 관리자가 수동으로 처리해주세요.
+                    </p>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="border rounded-lg overflow-hidden bg-white">
@@ -1438,7 +1857,7 @@ export default function OrdersPage() {
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">제출 일시</td>
-                      <td className="px-3 py-2">{closingReport.createdAt ? new Date(closingReport.createdAt).toLocaleString('ko-KR') : '-'}</td>
+                      <td className="px-3 py-2">{closingReport.createdAt ? new Date(closingReport.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'}</td>
                     </tr>
                     <tr className="border-b">
                       <td className="bg-gray-50 px-3 py-2 font-medium border-r">상태</td>
@@ -1536,15 +1955,49 @@ export default function OrdersPage() {
                     입금 확인 (등록 승인)
                   </Button>
                 )}
-                {!selectedOrder?.matchedHelperId && actions?.canSelectHelper && (
+                {actions?.canSelectHelper && displayOrder?.enterpriseId && (
                   <Button
-                    className="w-full"
-                    variant="outline"
-                    onClick={() => setIsAssignModalOpen(true)}
+                    className="w-full bg-indigo-600 hover:bg-indigo-700"
+                    onClick={() => {
+                      setSelectedHelperIds(new Set());
+                      setHelperSearchQuery('');
+                      setIsAssignModalOpen(true);
+                    }}
                   >
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    수동 배정
+                    <Users className="h-4 w-4 mr-2" />
+                    헬퍼 배정
                   </Button>
+                )}
+                {!selectedOrder?.matchedHelperId && actions?.canSelectHelper && !displayOrder?.enterpriseId && (
+                  <>
+                    <Button
+                      className="w-full"
+                      variant="outline"
+                      onClick={() => setIsAssignModalOpen(true)}
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      수동 신청
+                    </Button>
+                    {applications.filter(a => a.status === 'applied').length > 0 && (
+                      <Button
+                        className="w-full bg-green-600 hover:bg-green-700"
+                        onClick={async () => {
+                          const appliedCount = applications.filter(a => a.status === 'applied').length;
+                          const ok = await confirm({
+                            title: '전체 배정 확인',
+                            description: `신청된 ${appliedCount}명을 전체 배정하시겠습니까?\n배정 시 헬퍼에게 푸시알림과 의뢰인 연락처가 전송됩니다.`,
+                          });
+                          if (ok) {
+                            bulkAssignMutation.mutate(selectedOrder!.id);
+                          }
+                        }}
+                        disabled={bulkAssignMutation.isPending}
+                      >
+                        <Users className="h-4 w-4 mr-2" />
+                        {bulkAssignMutation.isPending ? '배정 중...' : `전체 배정 (${applications.filter(a => a.status === 'applied').length}명)`}
+                      </Button>
+                    )}
+                  </>
                 )}
                 {actions?.canApproveClosing && (
                   <Button
@@ -1579,15 +2032,43 @@ export default function OrdersPage() {
             onClick={() => {
               setIsAssignModalOpen(false);
               setSelectedHelperId(null);
+              setSelectedHelperIds(new Set());
               setHelperSearchQuery('');
             }}
           />
           <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-background rounded-lg shadow-xl">
             <div className="p-6 border-b">
-              <h3 className="text-lg font-semibold">헬퍼 배정</h3>
+              <h3 className="text-lg font-semibold">
+                {displayOrder?.enterpriseId ? '본사 헬퍼 배정' : '헬퍼 신청'}
+              </h3>
               <p className="text-sm text-muted-foreground mt-1">
-                오더 ORD-{selectedOrder?.id}에 배정할 헬퍼를 선택하세요.
+                {displayOrder?.enterpriseId
+                  ? `오더 ${formatOrderNumber(selectedOrder?.orderNumber, selectedOrder?.id || 0)}에 배정할 헬퍼를 선택하세요. (최대 ${(selectedOrder as any)?.maxHelpers || 3}명)`
+                  : `오더 ${formatOrderNumber(selectedOrder?.orderNumber, selectedOrder?.id || 0)}에 신청할 헬퍼를 선택하세요.`
+                }
               </p>
+              {displayOrder?.enterpriseId && selectedHelperIds.size > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-3">
+                  {Array.from(selectedHelperIds).map(hId => {
+                    const h = helpers.find(x => x.id === hId);
+                    return (
+                      <Badge key={hId} variant="default" className="flex items-center gap-1 pr-1">
+                        {h?.name || hId}
+                        <button
+                          className="ml-1 hover:bg-white/20 rounded-full p-0.5"
+                          onClick={() => {
+                            const next = new Set(selectedHelperIds);
+                            next.delete(hId);
+                            setSelectedHelperIds(next);
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </Badge>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div className="p-6 space-y-4 max-h-[400px] overflow-y-auto">
               <Input
@@ -1597,32 +2078,90 @@ export default function OrdersPage() {
               />
               <div className="space-y-2">
                 {helpers
-                  .filter(h => 
+                  .filter(h =>
                     h.name.toLowerCase().includes(helperSearchQuery.toLowerCase()) ||
                     (h.phoneNumber && h.phoneNumber.includes(helperSearchQuery))
                   )
                   .slice(0, 20)
-                  .map((helper) => (
-                    <div
-                      key={helper.id}
-                      className={cn(
-                        "p-3 border rounded-lg cursor-pointer hover:bg-muted/50 flex items-center justify-between",
-                        selectedHelperId === helper.id && "border-primary bg-primary/5"
-                      )}
-                      onClick={() => setSelectedHelperId(helper.id)}
-                    >
-                      <div>
-                        <div className="font-medium">{helper.name}</div>
-                        <div className="text-sm text-muted-foreground">{helper.phoneNumber || '연락처 없음'}</div>
+                  .map((helper) => {
+                    const isEnterprise = !!displayOrder?.enterpriseId;
+                    const isSelected = isEnterprise
+                      ? selectedHelperIds.has(helper.id)
+                      : selectedHelperId === helper.id;
+                    const maxHelpers = (selectedOrder as any)?.maxHelpers || 3;
+                    const alreadyAssigned = applications.filter(a =>
+                      a.status === 'approved' || a.status === 'applied' || a.status === 'scheduled' || a.status === 'in_progress'
+                    );
+                    const isAlreadyApplied = alreadyAssigned.some(a => a.helperId === helper.id);
+                    const isMaxReached = isEnterprise && !isSelected && (selectedHelperIds.size + alreadyAssigned.length >= maxHelpers);
+
+                    return (
+                      <div
+                        key={helper.id}
+                        className={cn(
+                          "p-3 border rounded-lg flex items-center justify-between",
+                          isAlreadyApplied
+                            ? "bg-gray-100 opacity-60 cursor-not-allowed"
+                            : isMaxReached
+                              ? "opacity-50 cursor-not-allowed"
+                              : "cursor-pointer hover:bg-muted/50",
+                          isSelected && "border-primary bg-primary/5"
+                        )}
+                        onClick={() => {
+                          if (isAlreadyApplied || isMaxReached) return;
+                          if (isEnterprise) {
+                            const next = new Set(selectedHelperIds);
+                            if (next.has(helper.id)) {
+                              next.delete(helper.id);
+                            } else {
+                              next.add(helper.id);
+                            }
+                            setSelectedHelperIds(next);
+                          } else {
+                            setSelectedHelperId(helper.id);
+                          }
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          {isEnterprise && (
+                            <div className={cn(
+                              "w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0",
+                              isSelected ? "bg-primary border-primary text-white" : "border-gray-300",
+                              isAlreadyApplied && "bg-gray-300 border-gray-300"
+                            )}>
+                              {(isSelected || isAlreadyApplied) && <span className="text-xs">✓</span>}
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-medium flex items-center gap-2">
+                              {helper.name}
+                              {isAlreadyApplied && <Badge variant="outline" className="text-xs">배정됨</Badge>}
+                              <button
+                                className="text-xs text-blue-500 hover:underline"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  _setHelperDetailId(helper.id);
+                                  setIsHelperDetailOpen(true);
+                                }}
+                              >
+                                상세보기
+                              </button>
+                            </div>
+                            <div className="text-sm text-muted-foreground">{helper.phoneNumber || '연락처 없음'}</div>
+                            {helper.teamName && (
+                              <div className="text-xs text-muted-foreground">팀: {helper.teamName}</div>
+                            )}
+                          </div>
+                        </div>
+                        {helper.dailyStatus && (
+                          <Badge variant={helper.dailyStatus === 'available' ? 'success' : 'secondary'}>
+                            {helper.dailyStatus === 'available' ? '대기중' : helper.dailyStatus}
+                          </Badge>
+                        )}
                       </div>
-                      {helper.dailyStatus && (
-                        <Badge variant={helper.dailyStatus === 'available' ? 'success' : 'secondary'}>
-                          {helper.dailyStatus === 'available' ? '대기중' : helper.dailyStatus}
-                        </Badge>
-                      )}
-                    </div>
-                  ))}
-                {helpers.filter(h => 
+                    );
+                  })}
+                {helpers.filter(h =>
                   h.name.toLowerCase().includes(helperSearchQuery.toLowerCase()) ||
                   (h.phoneNumber && h.phoneNumber.includes(helperSearchQuery))
                 ).length === 0 && (
@@ -1638,21 +2177,39 @@ export default function OrdersPage() {
                 onClick={() => {
                   setIsAssignModalOpen(false);
                   setSelectedHelperId(null);
+                  setSelectedHelperIds(new Set());
                   setHelperSearchQuery('');
                 }}
               >
                 취소
               </Button>
-              <Button
-                onClick={() => {
-                  if (selectedOrder && selectedHelperId) {
-                    assignHelperMutation.mutate({ orderId: selectedOrder.id, helperId: selectedHelperId });
-                  }
-                }}
-                disabled={!selectedHelperId || assignHelperMutation.isPending}
-              >
-                {assignHelperMutation.isPending ? '배정 중...' : '배정 확정'}
-              </Button>
+              {displayOrder?.enterpriseId ? (
+                <Button
+                  className="bg-indigo-600 hover:bg-indigo-700"
+                  onClick={() => {
+                    if (selectedOrder && selectedHelperIds.size > 0) {
+                      directAssignMutation.mutate({
+                        orderId: selectedOrder.id,
+                        helperIds: Array.from(selectedHelperIds),
+                      });
+                    }
+                  }}
+                  disabled={selectedHelperIds.size === 0 || directAssignMutation.isPending}
+                >
+                  {directAssignMutation.isPending ? '배정 중...' : `즉시 배정 (${selectedHelperIds.size}명)`}
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => {
+                    if (selectedOrder && selectedHelperId) {
+                      assignHelperMutation.mutate({ orderId: selectedOrder.id, helperId: selectedHelperId });
+                    }
+                  }}
+                  disabled={!selectedHelperId || assignHelperMutation.isPending}
+                >
+                  {assignHelperMutation.isPending ? '신청 중...' : '신청 확정'}
+                </Button>
+              )}
             </div>
           </div>
         </>
@@ -1667,7 +2224,7 @@ export default function OrdersPage() {
           }
         }}
         title="입금 확인"
-        description={`오더 ORD-${selectedOrder?.id}의 예치금 입금을 확인하고 오더를 등록합니다. 이 작업 후 헬퍼들이 해당 오더를 볼 수 있게 됩니다.`}
+        description={`오더 ${formatOrderNumber(selectedOrder?.orderNumber, selectedOrder?.id || 0)}의 예치금 입금을 확인하고 오더를 등록합니다. 이 작업 후 헬퍼들이 해당 오더를 볼 수 있게 됩니다.`}
         submitText="입금 확인 및 등록"
         minLength={0}
       />
@@ -1681,7 +2238,7 @@ export default function OrdersPage() {
           }
         }}
         title="마감 승인"
-        description={`오더 ORD-${selectedOrder?.id}의 마감보고를 확인하고 최종 금액을 확정합니다. 승인 후 요청자에게 잔금 청구가 진행됩니다.`}
+        description={`오더 ${formatOrderNumber(selectedOrder?.orderNumber, selectedOrder?.id || 0)}의 마감보고를 확인하고 최종 금액을 확정합니다. 승인 후 요청자에게 잔금 청구가 진행됩니다.`}
         submitText="마감 승인"
         minLength={0}
       />
@@ -1695,7 +2252,7 @@ export default function OrdersPage() {
           }
         }}
         title="잔금 확인"
-        description={`오더 ORD-${selectedOrder?.id}의 잔금 입금을 확인합니다. 확인 후 기사 정산이 가능해집니다.`}
+        description={`오더 ${formatOrderNumber(selectedOrder?.orderNumber, selectedOrder?.id || 0)}의 잔금 입금을 확인합니다. 확인 후 기사 정산이 가능해집니다.`}
         submitText="잔금 확인"
         minLength={0}
       />
@@ -1713,6 +2270,83 @@ export default function OrdersPage() {
             <DialogTitle>본사 계약권 오더 등록</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
+            {/* 협력업체 검색 */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">협력업체 검색 (선택)</Label>
+              <div className="relative">
+                <div className="flex gap-2">
+                  <Input
+                    value={newOrderForm.enterpriseId ? newOrderForm.enterpriseName : enterpriseSearch}
+                    onChange={(e) => {
+                      setEnterpriseSearch(e.target.value);
+                      setShowEnterpriseDropdown(true);
+                      if (newOrderForm.enterpriseId) {
+                        setNewOrderForm(prev => ({ ...prev, enterpriseId: null, enterpriseName: '', companyName: '', settlementDate: '' }));
+                      }
+                    }}
+                    onFocus={() => enterpriseSearch.length >= 1 && setShowEnterpriseDropdown(true)}
+                    placeholder="업체명으로 검색..."
+                    className={newOrderForm.enterpriseId ? 'bg-blue-50 border-blue-300' : ''}
+                    disabled={!!newOrderForm.enterpriseId}
+                  />
+                  {newOrderForm.enterpriseId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setNewOrderForm(prev => ({ ...prev, enterpriseId: null, enterpriseName: '', companyName: '', settlementDate: '' }));
+                        setEnterpriseSearch('');
+                      }}
+                      className="shrink-0"
+                    >
+                      초기화
+                    </Button>
+                  )}
+                </div>
+                {showEnterpriseDropdown && !newOrderForm.enterpriseId && enterpriseSearchResults.length > 0 && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {enterpriseSearchResults.map((ent: any) => (
+                      <button
+                        key={ent.id}
+                        className="w-full px-3 py-2 text-left hover:bg-blue-50 flex items-center justify-between text-sm"
+                        onClick={() => {
+                          setNewOrderForm(prev => ({
+                            ...prev,
+                            enterpriseId: ent.id,
+                            enterpriseName: ent.name,
+                            companyName: ent.name,
+                          }));
+                          setEnterpriseSearch('');
+                          setShowEnterpriseDropdown(false);
+                        }}
+                      >
+                        <span className="font-medium">{ent.name}</span>
+                        <span className="text-xs text-muted-foreground">수수료 {ent.commissionRate ?? 10}%</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {newOrderForm.enterpriseId && (
+                <div className="flex items-center gap-2 text-sm text-blue-700 bg-blue-50 px-3 py-1.5 rounded">
+                  <span>✅</span>
+                  <span className="font-medium">{newOrderForm.enterpriseName}</span>
+                  <span className="text-blue-500">(수수료 자동 적용)</span>
+                </div>
+              )}
+              {newOrderForm.enterpriseId && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium whitespace-nowrap">정산일</label>
+                  <input
+                    type="date"
+                    className="flex-1 h-9 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                    value={newOrderForm.settlementDate}
+                    onChange={(e) => setNewOrderForm(prev => ({ ...prev, settlementDate: e.target.value }))}
+                  />
+                </div>
+              )}
+            </div>
+
             {/* 카테고리 탭 */}
             <div className="flex gap-2 border-b pb-2">
               {(['택배사', '기타택배', '냉탑전용'] as const).map((tab) => (

@@ -92,7 +92,7 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
   const {
     orders, users, contracts, orderApplications, closingReports, helperDocuments,
     helperBankAccounts, identityVerifications, documentReviewTasks, orderStatusEvents,
-    settlementStatements, settlementRecords, refunds, refundPolicies, deductions,
+    settlementStatements, settlementRecords, settlementLineItems, refunds, refundPolicies, deductions,
     incidentReports, incidentEvidence, disputes, customerServiceInquiries, customerInquiries,
     inquiryComments, ticketEscalations, supportTicketEscalations, smsTemplates, smsLogs,
     webhookLogs, integrationHealth, integrationEvents, systemEvents, pushNotificationLogs,
@@ -150,22 +150,25 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
       const settings = await storage.getAllCourierSettings();
       const courierList = settings.filter(s => s.isActive);
 
-      const couriers = courierList.map(s => ({
-        id: s.id,
-        code: s.id.toString(),
-        name: s.courierName,
-        label: s.courierName,
-        category: s.category || 'parcel',
-        basePricePerBox: s.basePricePerBox || 0,
-        etcPricePerBox: s.etcPricePerBox || 0,
-        minDeliveryFee: s.minDeliveryFee || 0,
-        minTotal: s.minTotal || 0,
-        commissionRate: s.commissionRate || 0,
-        urgentCommissionRate: s.urgentCommissionRate || 0,
-        urgentSurchargeRate: s.urgentSurchargeRate || 0,
-        isDefault: s.isDefault || false,
-        active: true,
-      }));
+      const couriers = courierList
+        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.id - b.id)
+        .map(s => ({
+          id: s.id,
+          code: s.id.toString(),
+          name: s.courierName,
+          label: s.courierName,
+          category: s.category || 'parcel',
+          basePricePerBox: s.basePricePerBox || 0,
+          etcPricePerBox: s.etcPricePerBox || 0,
+          minDeliveryFee: s.minDeliveryFee || 0,
+          minTotal: s.minTotal || 0,
+          commissionRate: s.commissionRate || 0,
+          urgentCommissionRate: s.urgentCommissionRate || 0,
+          urgentSurchargeRate: s.urgentSurchargeRate || 0,
+          isDefault: s.isDefault || false,
+          sortOrder: s.sortOrder || 0,
+          active: true,
+        }));
 
       res.json({ couriers });
     } catch (err: any) {
@@ -197,6 +200,8 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         memo,
         isUrgent,
         regionMapUrl,
+        enterpriseId,
+        settlementDate,
       } = req.body;
 
       // 필수 필드 검증
@@ -234,6 +239,48 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         }
       }
 
+      // 기타택배/냉탑전용: carrierCode 없으면 시스템 설정에서 수수료율 조회
+      const effectiveCategory = courierCategory || "parcel";
+      if (!carrierCode && (effectiveCategory === "other" || effectiveCategory === "cold")) {
+        const systemSettings = await storage.getAllSystemSettings();
+        const settingsMap: Record<string, string> = {};
+        systemSettings.forEach((s: any) => {
+          settingsMap[s.settingKey] = s.settingValue;
+        });
+        if (effectiveCategory === "other") {
+          snapshotCommissionRate = parseInt(settingsMap["other_commission_rate"]) || 10;
+        } else if (effectiveCategory === "cold") {
+          snapshotCommissionRate = parseInt(settingsMap["cold_commission_rate"]) || 10;
+        }
+      }
+
+      // 협력업체 수수료율 적용 (enterpriseId가 있으면 우선 적용)
+      if (enterpriseId) {
+        try {
+          const enterprise = await storage.getEnterpriseAccount(enterpriseId);
+          if (enterprise && enterprise.commissionRate != null) {
+            snapshotCommissionRate = enterprise.commissionRate;
+          }
+        } catch (entErr) {
+          console.error("Enterprise account lookup error:", entErr);
+        }
+      }
+
+      // 12자리 오더번호 생성 (본사/협력업체 오더)
+      const { generateOrderNumber } = await import("../../utils/order-number");
+      let enterpriseContactPhone: string | null = null;
+      if (enterpriseId) {
+        try {
+          const entAccount = await storage.getEnterpriseAccount(enterpriseId);
+          enterpriseContactPhone = entAccount?.contactPhone || null;
+        } catch (e) { /* ignore */ }
+      }
+      const orderNumber = await generateOrderNumber({
+        isEnterprise: true,
+        deliveryArea: deliveryArea || "",
+        enterpriseContactPhone: enterpriseContactPhone || contactPhone || requesterPhone,
+      });
+
       // 본사 계약권 오더 생성 - 계약금 없이 바로 open 상태
       const order = await storage.createOrder({
         requesterId: requesterId || null,
@@ -241,6 +288,8 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         carrierCode: carrierCode || null,
         courierCompany: courierCompany || null,
         courierCategory: courierCategory || "parcel",
+        enterpriseId: enterpriseId || null,
+        settlementDate: settlementDate || null,
         deliveryArea,
         campAddress: campAddress || null,
         averageQuantity: averageQuantity || "0",
@@ -263,6 +312,7 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         snapshotTeamLeaderRate,
         basePricePerBox,
         finalPricePerBox,
+        orderNumber,
         minTotalApplied,
         isHqOrder: true,
       });
@@ -325,6 +375,7 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
           const business = order.requesterId ? businessMap.get(order.requesterId) : null;
           return (
             String(order.id).includes(search) ||
+            order.orderNumber?.toLowerCase().includes(search) ||
             order.companyName?.toLowerCase().includes(search) ||
             order.deliveryArea?.toLowerCase().includes(search) ||
             requester?.name?.toLowerCase().includes(search) ||
@@ -458,10 +509,26 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  // Update order (admin)
+  // Update order (admin) - whitelist allowed fields to prevent mass-assignment
   app.patch("/api/admin/orders/:orderId", adminAuth, requirePermission("orders.edit"), async (req, res) => {
     try {
-      const updated = await storage.updateOrder(Number(req.params.orderId), req.body);
+      const allowedFields = [
+        "status",
+        "title", "description", "pickupAddress", "deliveryAddress",
+        "pickupDate", "deliveryDate", "pickupTime", "deliveryTime",
+        "vehicleType", "cargoType", "cargoWeight", "cargoDescription",
+        "specialInstructions", "memo", "adminMemo", "internalNote",
+        "settlementDate", "requiresColdChain", "requiredTemp",
+        "contactName", "contactPhone", "receiverName", "receiverPhone",
+        "itemCount", "itemUnit", "routeDistance",
+      ];
+      const sanitized: Record<string, any> = {};
+      for (const key of allowedFields) {
+        if (key in req.body) {
+          sanitized[key] = req.body[key];
+        }
+      }
+      const updated = await storage.updateOrder(Number(req.params.orderId), sanitized);
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ message: "Internal server error" });
@@ -544,8 +611,8 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
   });
 
 
-  // 계약서 출력 (HTML - 프린트용)
-  app.get("/api/orders/:id/contract/pdf", async (req, res) => {
+  // 계약서 출력 핸들러 (공통)
+  async function handleContractPdf(req: any, res: any) {
     try {
       const orderId = Number(req.params.id);
       const order = await storage.getOrder(orderId);
@@ -583,9 +650,19 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
       // 잔금 입금 예정일
       const balancePaymentDueDate = (order as any).balancePaymentDueDate || "-";
 
-      // 계약일 (오더 생성일)
+      // 한국시간(KST) 포맷 헬퍼
+      const formatKST = (date: Date): string => {
+        const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+        return `${kst.getUTCFullYear()}년 ${kst.getUTCMonth() + 1}월 ${kst.getUTCDate()}일`;
+      };
+      const formatKSTFull = (date: Date): string => {
+        const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
+        return `${kst.getUTCFullYear()}년 ${kst.getUTCMonth() + 1}월 ${kst.getUTCDate()}일 ${kst.getUTCHours()}시 ${kst.getUTCMinutes()}분`;
+      };
+
+      // 계약일 (오더 생성일) — 한국시간(KST) 기준
       const createdAt = order.createdAt ? new Date(order.createdAt) : new Date();
-      const contractDate = `${createdAt.getFullYear()}년 ${createdAt.getMonth() + 1}월 ${createdAt.getDate()}일`;
+      const contractDate = formatKST(createdAt);
 
       // 서명 정보 (의뢰인 서비스 동의서에서 가져옴)
       let signatureName = requesterName;
@@ -600,7 +677,7 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
           if ((agreement as any).phoneNumber) verifiedPhone = (agreement as any).phoneNumber;
           if (agreement.agreedAt) {
             const d = new Date(agreement.agreedAt);
-            signedAt = `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+            signedAt = formatKSTFull(d);
           }
         }
       } catch (e) {
@@ -616,7 +693,7 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; font-size: 13px; line-height: 1.8; color: #333; padding: 40px; max-width: 800px; margin: 0 auto; }
-    @media print { body { padding: 20px; } .no-print { display: none !important; } }
+    @media print { body { padding: 20px; font-size: 12px; } .no-print { display: none !important; } @page { size: A4; margin: 15mm 20mm; } .signature-area { page-break-inside: avoid; } .consent-box { page-break-inside: avoid; } }
     .print-btn { position: fixed; top: 20px; right: 20px; padding: 10px 24px; background: #2563eb; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; z-index: 100; }
     .print-btn:hover { background: #1d4ed8; }
     h1 { text-align: center; font-size: 22px; margin-bottom: 8px; border-bottom: 3px double #333; padding-bottom: 12px; }
@@ -714,19 +791,19 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
   <div class="section-title">제13조 (특약사항 및 동의)</div>
   <div class="consent-box">
     <div class="consent-item">
-      <span class="consent-check">?</span>
+      <span class="consent-check">&#10003;</span>
       <span>제1호: 잔여금은 마감 자료(실제 배송 수량) 기준으로 확정되며, 청구일로부터 7일 이내 지급할 것에 동의합니다.</span>
     </div>
     <div class="consent-item">
-      <span class="consent-check">?</span>
+      <span class="consent-check">&#10003;</span>
       <span>제2호: 잔여금 정산은 신용거래이며, 미지급 시 연 12% 지연이자, 서비스 이용 제한 및 법적 조치(소송비용·변호사 비용 부담 포함)가 발생할 수 있음에 동의합니다.</span>
     </div>
     <div class="consent-item">
-      <span class="consent-check">?</span>
+      <span class="consent-check">&#10003;</span>
       <span>제3호: 본 거래는 개인 간 거래로서 플랫폼은 통신판매중개자의 지위에 있음을 이해하며, 매칭 완료 후(운송인 연락처 전달 후) 취소 시 계약금이 환불되지 않음에 동의합니다.</span>
     </div>
     <div class="consent-item">
-      <span class="consent-check">?</span>
+      <span class="consent-check">&#10003;</span>
       <span>제4호: 상기 지정한 잔금 입금 예정일(${balancePaymentDueDate})까지 잔여금을 지급할 것을 확약하며, 미이행 시 제5조의 신용거래 조항이 적용됨에 동의합니다.</span>
     </div>
   </div>
@@ -742,7 +819,7 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
     <table class="info-table">
       <tr><th>서명자</th><td>${signatureName} (서명 완료)</td></tr>
       <tr><th>본인인증</th><td>${phoneVerified ? "인증 완료" : "미인증"} (${verifiedPhone})</td></tr>
-      <tr><th>계약 체결일</th><td>${signedAt}</td></tr>
+      <tr><th>계약 체결일</th><td>${signedAt} (KST)</td></tr>
     </table>
     <div class="signature-row">
       <div class="signature-box">
@@ -758,7 +835,8 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
 
   <div class="footer-info">
     <p>본 계약서는 전자적으로 체결되었으며, 「전자문서 및 전자거래 기본법」에 따라 법적 효력을 가집니다.</p>
-    <p>출력일: ${new Date().getFullYear()}년 ${new Date().getMonth() + 1}월 ${new Date().getDate()}일 | 헬프미 운송주선 플랫폼</p>
+    <p>문서번호: CONTRACT-${orderId}-${createdAt.getTime()} | 출력일: ${formatKST(new Date())} | 헬프미 운송주선 플랫폼</p>
+    <p style="margin-top: 4px; font-size: 10px; color: #aaa;">본 문서는 시스템에서 자동 생성된 전자계약서 원본입니다. 위변조 여부 확인: 관리자 시스템에서 오더번호 ORD-${orderId}로 원본 대조 가능합니다.</p>
   </div>
 </body>
 </html>`;
@@ -769,7 +847,13 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
       console.error("Error generating contract:", err);
       res.status(500).send("<h1>계약서 생성 중 오류가 발생했습니다</h1>");
     }
-  });
+  }
+
+  // 계약서 출력 (클라이언트용 - requireAuth)
+  app.get("/api/orders/:id/contract/pdf", requireAuth, handleContractPdf);
+
+  // 계약서 출력 (관리자용 - adminAuth)
+  app.get("/api/admin/orders/:id/contract/pdf", adminAuth, handleContractPdf);
 
   // Get all contracts (admin)
   app.get("/api/admin/contracts", adminAuth, requirePermission("contracts.view"), async (req, res) => {
@@ -1954,7 +2038,17 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
   app.get("/api/admin/payments", adminAuth, requirePermission("payments.view"), async (req, res) => {
     try {
       const payments = await storage.getAllPayments();
-      res.json(payments);
+      // orderNumber 매핑
+      const payOrderIds = [...new Set(payments.filter(p => p.orderId).map(p => p.orderId!))];
+      const payOrderList = payOrderIds.length > 0
+        ? await db.select({ id: orders.id, orderNumber: orders.orderNumber }).from(orders).where(inArray(orders.id, payOrderIds))
+        : [];
+      const payOrderMap = new Map(payOrderList.map(o => [o.id, o.orderNumber]));
+      const enriched = payments.map(p => ({
+        ...p,
+        orderNumber: p.orderId ? payOrderMap.get(p.orderId) || null : null,
+      }));
+      res.json(enriched);
     } catch (err: any) {
       res.status(500).json({ message: "Internal server error" });
     }
@@ -2715,6 +2809,58 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
         })
         .where(eq(incidentReports.id, id));
 
+      // 정산 차감 자동 반영 (환불 금액을 정산에서 차감)
+      try {
+        let settlement: any = null;
+        if (incident.settlementId) {
+          settlement = await storage.getSettlementStatement(incident.settlementId);
+        } else if (incident.orderId) {
+          settlement = await storage.getSettlementStatementByOrder(incident.orderId);
+        } else if (incident.jobContractId) {
+          const contract = await storage.getContract(incident.jobContractId);
+          if (contract?.orderId) {
+            settlement = await storage.getSettlementStatementByOrder(contract.orderId);
+          }
+        }
+
+        if (settlement && amount > 0) {
+          const existingLineItem = await storage.getSettlementLineItemByIncident(settlement.id, id);
+          if (!existingLineItem) {
+            await storage.createSettlementLineItem({
+              statementId: settlement.id,
+              itemType: "deduction",
+              itemName: `환불 확정 차감 #${id}`,
+              quantity: 1,
+              unitPrice: -amount,
+              amount: -amount,
+              notes: JSON.stringify({
+                incidentId: id,
+                refundId: refund.id,
+                reason: reason.trim(),
+                status: "approved",
+                type: "refund"
+              }),
+            });
+
+            const currentDeduction = settlement.deduction || 0;
+            const newDeduction = currentDeduction + amount;
+            const currentNetAmount = settlement.netAmount || 0;
+            const newNetAmount = currentNetAmount - amount;
+
+            await storage.updateSettlementStatement(settlement.id, {
+              deduction: newDeduction,
+              netAmount: newNetAmount,
+            });
+
+            await storage.updateIncidentReport(id, { settlementId: settlement.id });
+            console.log(`[Refund→Settlement] Dispute #${id} refund ${amount}원 applied to settlement #${settlement.id}`);
+          }
+        }
+      } catch (settlementErr: any) {
+        console.error(`[Refund→Settlement] Failed to apply settlement adjustment for dispute #${id}:`, settlementErr);
+        // Don't fail the refund if settlement adjustment fails - it can be manually applied
+      }
+
       // Audit log
       await db.insert(auditLogs).values({
         actorRole: "ADMIN",
@@ -2784,6 +2930,170 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
     } catch (err: any) {
       console.error("Resolve without refund error:", err);
       res.status(500).json({ message: "분쟁 해결에 실패했습니다" });
+    }
+  });
+
+  // POST /api/admin/disputes/:id/create-deduction-refund - 차감 + 환불 통합 처리
+  app.post("/api/admin/disputes/:id/create-deduction-refund", adminAuth, requirePermission("disputes.resolve"), async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const adminUser = (req as any).adminUser;
+      const { deductionAmount, refundAmount, reason, category } = req.body;
+
+      if (!deductionAmount || deductionAmount <= 0) {
+        return res.status(400).json({ message: "차감 금액을 입력해주세요" });
+      }
+      if (!reason || reason.trim().length < 5) {
+        return res.status(400).json({ message: "사유는 5자 이상 입력해주세요" });
+      }
+
+      // Get incident/dispute
+      const incident = await storage.getIncidentReport(id);
+      if (!incident) {
+        return res.status(404).json({ message: "분쟁을 찾을 수 없습니다" });
+      }
+
+      // Get order
+      const order = await storage.getOrder(incident.orderId);
+      if (!order) {
+        return res.status(404).json({ message: "오더를 찾을 수 없습니다" });
+      }
+
+      // Get helper info from contracts or order
+      const helperId = incident.helperId || order.assignedHelperId;
+      const requesterId = incident.requesterId || order.requesterId;
+
+      if (!helperId) {
+        return res.status(400).json({ message: "해당 오더에 배정된 헬퍼가 없습니다" });
+      }
+
+      // 1. 헬퍼 차감 생성
+      const [deduction] = await db.insert(deductions).values({
+        orderId: incident.orderId,
+        incidentId: id,
+        helperId: helperId,
+        targetType: "helper",
+        targetId: helperId,
+        amount: deductionAmount,
+        reason: reason.trim(),
+        category: category || "dispute",
+        status: "pending",
+        createdBy: adminUser?.id,
+      }).returning();
+
+      // 2. 요청자 환불 생성 (환불 금액이 있을 경우)
+      let refund = null;
+      if (refundAmount && refundAmount > 0 && requesterId) {
+        const [created] = await db.insert(refunds).values({
+          orderId: incident.orderId,
+          incidentId: id,
+          requesterId: requesterId,
+          amount: refundAmount,
+          reason: reason.trim(),
+          reasonCategory: "dispute",
+          status: "pending",
+          refundMethod: "bank_transfer",
+          requestedBy: adminUser?.id,
+        }).returning();
+        refund = created;
+      }
+
+      // 3. incident 업데이트 (차감 생성 → 자동으로 "처리중" 상태)
+      await db.update(incidentReports)
+        .set({
+          status: "reviewing",
+          deductionAmount: deductionAmount,
+          deductionReason: reason.trim(),
+          deductionMethod: refundAmount && refundAmount > 0 ? "both" : "helper_deduct",
+          updatedAt: new Date(),
+        })
+        .where(eq(incidentReports.id, id));
+
+      // 4. 정산 차감 자동 반영
+      try {
+        let settlement: any = null;
+        if (incident.settlementId) {
+          settlement = await storage.getSettlementStatement(incident.settlementId);
+        } else if (incident.orderId) {
+          settlement = await storage.getSettlementStatementByOrder(incident.orderId);
+        } else if (incident.jobContractId) {
+          const contract = await storage.getContract(incident.jobContractId);
+          if (contract?.orderId) {
+            settlement = await storage.getSettlementStatementByOrder(contract.orderId);
+          }
+        }
+
+        if (settlement && deductionAmount > 0) {
+          const existingLineItem = await storage.getSettlementLineItemByIncident(settlement.id, id);
+          if (!existingLineItem) {
+            await storage.createSettlementLineItem({
+              statementId: settlement.id,
+              itemType: "deduction",
+              itemName: `차감 처리 #${id}`,
+              quantity: 1,
+              unitPrice: -deductionAmount,
+              amount: -deductionAmount,
+              notes: JSON.stringify({
+                incidentId: id,
+                deductionId: deduction.id,
+                refundId: refund?.id || null,
+                reason: reason.trim(),
+                status: "approved",
+                type: "deduction_refund"
+              }),
+            });
+
+            const currentDeduction = settlement.deduction || 0;
+            const newDeduction = currentDeduction + deductionAmount;
+            const currentNetAmount = settlement.netAmount || 0;
+            const newNetAmount = currentNetAmount - deductionAmount;
+
+            await storage.updateSettlementStatement(settlement.id, {
+              deduction: newDeduction,
+              netAmount: newNetAmount,
+            });
+
+            await storage.updateIncidentReport(id, { settlementId: settlement.id });
+            console.log(`[Deduction→Settlement] Dispute #${id} deduction ${deductionAmount}원 applied to settlement #${settlement.id}`);
+          }
+        }
+      } catch (settlementErr: any) {
+        console.error(`[Deduction→Settlement] Failed to apply settlement adjustment for dispute #${id}:`, settlementErr);
+      }
+
+      // 5. 감사로그 기록
+      await db.insert(auditLogs).values({
+        actorRole: "ADMIN",
+        userId: adminUser?.id,
+        action: "DEDUCTION_AND_REFUND_CREATED",
+        orderId: incident.orderId,
+        incidentId: id,
+        targetType: "deduction",
+        targetId: String(deduction.id),
+        reason: reason.trim(),
+        newValue: JSON.stringify({
+          deductionId: deduction.id,
+          deductionAmount,
+          refundId: refund?.id || null,
+          refundAmount: refundAmount || 0,
+          helperId,
+          requesterId: requesterId || null,
+        }),
+      });
+
+      console.log(`[Deduction+Refund] Created deduction ${deduction.id}${refund ? ` + refund ${refund.id}` : ''} for dispute ${id}`);
+
+      res.json({
+        success: true,
+        deduction,
+        refund,
+        message: refund
+          ? `차감(${deductionAmount.toLocaleString()}원) 및 환불(${refundAmount.toLocaleString()}원)이 생성되었습니다`
+          : `차감(${deductionAmount.toLocaleString()}원)이 생성되었습니다`,
+      });
+    } catch (err: any) {
+      console.error("Create deduction+refund error:", err);
+      res.status(500).json({ message: "차감/환불 처리에 실패했습니다" });
     }
   });
 
@@ -3095,6 +3405,68 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
+  // PATCH /api/admin/orders/:orderId/closing-report/quantities - 마감수량 수정 (이의제기용)
+  app.patch("/api/admin/orders/:orderId/closing-report/quantities", adminAuth, requirePermission("orders.edit"), async (req: AuthenticatedRequest, res) => {
+    try {
+      const orderId = Number(req.params.orderId);
+      const adminUser = req.user!;
+      const { deliveredCount, returnedCount, etcCount, reason } = req.body;
+
+      if (!reason || reason.trim().length < 5) {
+        return res.status(400).json({ message: "수정 사유는 5자 이상 입력해주세요" });
+      }
+
+      const [closingReport] = await db.select()
+        .from(closingReports)
+        .where(eq(closingReports.orderId, orderId))
+        .limit(1);
+
+      if (!closingReport) {
+        return res.status(404).json({ message: "마감 보고서를 찾을 수 없습니다" });
+      }
+
+      const oldValues = {
+        deliveredCount: closingReport.deliveredCount,
+        returnedCount: closingReport.returnedCount,
+        etcCount: closingReport.etcCount,
+      };
+
+      const updates: any = {};
+      if (deliveredCount !== undefined) updates.deliveredCount = deliveredCount;
+      if (returnedCount !== undefined) updates.returnedCount = returnedCount;
+      if (etcCount !== undefined) updates.etcCount = etcCount;
+
+      await db.update(closingReports)
+        .set(updates)
+        .where(eq(closingReports.id, closingReport.id));
+
+      // 감사로그
+      await db.insert(auditLogs).values({
+        actorRole: "ADMIN",
+        userId: adminUser.id,
+        action: "CLOSING_REPORT_QUANTITIES_MODIFIED",
+        orderId: orderId,
+        targetType: "closing_report",
+        targetId: String(closingReport.id),
+        reason: reason.trim(),
+        oldValue: JSON.stringify(oldValues),
+        newValue: JSON.stringify({ deliveredCount, returnedCount, etcCount }),
+      });
+
+      console.log(`[ClosingReport] Quantities modified for order ${orderId} by admin ${adminUser.id}`);
+
+      res.json({
+        success: true,
+        message: "마감수량이 수정되었습니다",
+        oldValues,
+        newValues: { deliveredCount, returnedCount, etcCount },
+      });
+    } catch (err: any) {
+      console.error("Closing report quantity modify error:", err);
+      res.status(500).json({ message: "마감수량 수정에 실패했습니다" });
+    }
+  });
+
   // POST /api/admin/orders/:orderId/closing/approve - 관리자 마감 승인 (정산 자동화 + settlement_records 생성)
   app.post("/api/admin/orders/:orderId/closing/approve", adminAuth, requirePermission("settlements.approve"), async (req: AuthenticatedRequest, res) => {
     try {
@@ -3242,6 +3614,41 @@ export async function registerOrderRoutes(ctx: RouteContext): Promise<void> {
           title: "마감 승인",
           message: `오더 마감이 승인되었습니다. 잔금 ${balanceAmount.toLocaleString()}원을 결제해주세요.`,
           relatedId: orderId,
+        });
+
+        // 푸시 알림 (의뢰인)
+        sendPushToUser(order.requesterId, {
+          title: "마감 승인",
+          body: `${order.companyName} 오더 마감이 승인되었습니다. 잔금 ${balanceAmount.toLocaleString()}원을 결제해주세요.`,
+          url: "/requester-home",
+          tag: `closing-approved-requester-${orderId}`,
+        });
+
+        // SMS: 마감 승인 → 잔금 결제 안내
+        const closingRequester = await storage.getUser(order.requesterId);
+        if (closingRequester?.phoneNumber) {
+          try {
+            await smsService.sendCustomMessage(closingRequester.phoneNumber,
+              `[헬프미] ${order.companyName} 오더 마감 승인. 잔금 ${balanceAmount.toLocaleString()}원을 앱에서 결제해주세요.`);
+          } catch (smsErr) { console.error("[SMS Error] closing-approved requester:", smsErr); }
+        }
+      }
+
+      // 7. 헬퍼 알림
+      if (order.matchedHelperId) {
+        await storage.createNotification({
+          userId: order.matchedHelperId,
+          type: "closing_approved",
+          title: "마감 승인 완료",
+          message: `${order.companyName} 오더 마감이 승인되었습니다. 지급 예정액: ${driverPayout.toLocaleString()}원`,
+          relatedId: orderId,
+        });
+
+        sendPushToUser(order.matchedHelperId, {
+          title: "마감 승인 완료",
+          body: `${order.companyName} 오더 마감 승인. 지급 예정: ${driverPayout.toLocaleString()}원`,
+          url: "/helper-home",
+          tag: `closing-approved-helper-${orderId}`,
         });
       }
 

@@ -8,6 +8,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
@@ -60,6 +61,7 @@ export default function RequesterDisputeListScreen({ navigation }: RequesterDisp
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
 
   const { data: disputes = [], isLoading, refetch, isRefetching } = useQuery<Dispute[]>({
     queryKey: ["/api/requester/disputes"],
@@ -169,7 +171,12 @@ export default function RequesterDisputeListScreen({ navigation }: RequesterDisp
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.lg,
           paddingHorizontal: Spacing.lg,
-          paddingBottom: tabBarHeight + Spacing.xl,
+          paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
+          ...(showDesktopLayout && {
+            maxWidth: containerMaxWidth,
+            alignSelf: 'center' as const,
+            width: '100%' as any,
+          }),
         }}
         ListEmptyComponent={renderEmpty}
         refreshControl={

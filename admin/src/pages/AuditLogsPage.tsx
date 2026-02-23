@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/api';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { formatDateTime } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +23,7 @@ interface AuditLog {
 
 export default function AuditLogsPage() {
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebouncedValue(search, 300);
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -32,8 +34,8 @@ export default function AuditLogsPage() {
   });
 
   const filteredLogs = logs.filter((log) => {
-    if (!search) return true;
-    const searchLower = search.toLowerCase();
+    if (!debouncedSearch) return true;
+    const searchLower = debouncedSearch.toLowerCase();
     return (
       log.action?.toLowerCase().includes(searchLower) ||
       log.targetType?.toLowerCase().includes(searchLower) ||

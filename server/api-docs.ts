@@ -75,6 +75,18 @@ function getOpenAPISpec() {
       { name: "Admin-TaxInvoice", description: "관리자 세금계산서 관리" },
       { name: "Team", description: "팀 관리" },
       { name: "Push", description: "푸시 알림" },
+      { name: "Partner-Auth", description: "파트너(팀장) 인증" },
+      { name: "Partner-Dashboard", description: "파트너 대시보드" },
+      { name: "Partner-Order", description: "파트너 오더 관리" },
+      { name: "Partner-Member", description: "파트너 팀원 관리" },
+      { name: "Partner-Settlement", description: "파트너 정산 조회" },
+      { name: "Partner-CS", description: "파트너 CS 문의" },
+      { name: "Partner-Incident", description: "파트너 사고 관리" },
+      { name: "Partner-Settings", description: "파트너 설정" },
+      { name: "Checkin", description: "출근 체크 (QR/코드)" },
+      { name: "Notification", description: "알림 관리" },
+      { name: "Review", description: "리뷰/평점" },
+      { name: "Meta", description: "메타 데이터/주소 검색" },
     ],
     components: {
       securitySchemes: {
@@ -154,6 +166,60 @@ function getOpenAPISpec() {
             configured: { type: "boolean" },
             testMode: { type: "boolean" },
             provider: { type: "string" },
+          },
+        },
+        PartnerTeamInfo: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            name: { type: "string" },
+            commissionRate: { type: "integer" },
+            businessType: { type: "string", nullable: true },
+          },
+        },
+        TeamMember: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            helperId: { type: "string" },
+            isActive: { type: "boolean" },
+            joinedAt: { type: "string", format: "date-time" },
+            user: { type: "object", nullable: true },
+          },
+        },
+        CSInquiry: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            teamId: { type: "integer" },
+            reporterId: { type: "string" },
+            title: { type: "string" },
+            content: { type: "string" },
+            category: { type: "string", enum: ["order", "payment", "settlement", "member", "other"] },
+            status: { type: "string", enum: ["pending", "in_progress", "resolved", "closed"] },
+            priority: { type: "string", enum: ["low", "normal", "high", "urgent"] },
+            createdAt: { type: "string", format: "date-time" },
+          },
+        },
+        TeamIncident: {
+          type: "object",
+          properties: {
+            id: { type: "integer" },
+            teamId: { type: "integer" },
+            helperId: { type: "string" },
+            incidentType: { type: "string", enum: ["damage", "loss", "misdelivery", "delay", "accident", "other"] },
+            description: { type: "string" },
+            status: { type: "string", enum: ["reported", "investigating", "resolved", "closed"] },
+            severity: { type: "string", enum: ["low", "medium", "high", "critical"] },
+            createdAt: { type: "string", format: "date-time" },
+          },
+        },
+        PaginatedList: {
+          type: "object",
+          properties: {
+            total: { type: "integer" },
+            page: { type: "integer" },
+            totalPages: { type: "integer" },
           },
         },
       },
@@ -747,6 +813,609 @@ function getOpenAPISpec() {
             200: { description: "로그인 성공, JWT 토큰 반환" },
             401: { description: "인증 실패" },
           },
+        },
+      },
+
+      // ===== Partner Auth =====
+      "/api/partner/auth/login": {
+        post: {
+          tags: ["Partner-Auth"],
+          summary: "파트너 로그인",
+          description: "팀장 계정으로 로그인. isTeamLeader=true 필수.",
+          requestBody: {
+            required: true,
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  required: ["email", "password"],
+                  properties: {
+                    email: { type: "string", format: "email" },
+                    password: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: {
+              description: "로그인 성공",
+              content: { "application/json": { schema: { type: "object", properties: { token: { type: "string" }, user: { type: "object" }, team: { $ref: "#/components/schemas/PartnerTeamInfo" } } } } },
+            },
+            400: { description: "이메일/비밀번호 미입력" },
+            401: { description: "인증 실패" },
+            403: { description: "팀장 계정 아님 또는 활성 팀 없음" },
+          },
+        },
+      },
+      "/api/partner/auth/me": {
+        get: {
+          tags: ["Partner-Auth"],
+          summary: "현재 파트너 사용자 정보",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: { description: "사용자 + 팀 정보" },
+            401: { description: "인증 필요" },
+          },
+        },
+      },
+      "/api/partner/auth/change-password": {
+        post: {
+          tags: ["Partner-Auth"],
+          summary: "파트너 비밀번호 변경",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["currentPassword", "newPassword"], properties: { currentPassword: { type: "string" }, newPassword: { type: "string", minLength: 8 } } } } },
+          },
+          responses: {
+            200: { description: "비밀번호 변경 성공" },
+            400: { description: "입력값 오류" },
+            401: { description: "현재 비밀번호 불일치" },
+          },
+        },
+      },
+
+      // ===== Partner Dashboard =====
+      "/api/partner/dashboard": {
+        get: {
+          tags: ["Partner-Dashboard"],
+          summary: "파트너 대시보드",
+          description: "팀명, 팀원수, 활성 오더수, 월 정산 요약을 반환합니다.",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: {
+              description: "대시보드 데이터",
+              content: { "application/json": { schema: { type: "object", properties: { teamName: { type: "string" }, memberCount: { type: "integer" }, activeOrderCount: { type: "integer" }, monthlySettlement: { type: "number" }, currentMonth: { type: "string" } } } } },
+            },
+          },
+        },
+      },
+
+      // ===== Partner Orders =====
+      "/api/partner/orders": {
+        get: {
+          tags: ["Partner-Order"],
+          summary: "팀 오더 목록",
+          description: "팀원에게 매칭된 오더 목록. 상태/날짜/헬퍼별 필터 지원.",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "status", in: "query", schema: { type: "string" }, description: "오더 상태 필터" },
+            { name: "helperId", in: "query", schema: { type: "string" }, description: "특정 팀원 필터" },
+            { name: "startDate", in: "query", schema: { type: "string", format: "date" } },
+            { name: "endDate", in: "query", schema: { type: "string", format: "date" } },
+            { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+            { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+          ],
+          responses: { 200: { description: "페이지네이션 오더 목록" } },
+        },
+      },
+      "/api/partner/orders/available": {
+        get: {
+          tags: ["Partner-Order"],
+          summary: "매칭 가능 오더 목록",
+          description: "status=matching인 배정 가능 오더 조회.",
+          security: [{ BearerAuth: [] }],
+          responses: { 200: { description: "매칭 가능 오더 목록" } },
+        },
+      },
+      "/api/partner/orders/{orderId}": {
+        get: {
+          tags: ["Partner-Order"],
+          summary: "오더 상세",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "orderId", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            200: { description: "오더 + 지원 목록" },
+            403: { description: "팀 오더 아님" },
+            404: { description: "오더 없음" },
+          },
+        },
+      },
+      "/api/partner/orders/{orderId}/assign": {
+        post: {
+          tags: ["Partner-Order"],
+          summary: "팀원 오더 배정",
+          description: "매칭중 오더에 팀원을 배정합니다.",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "orderId", in: "path", required: true, schema: { type: "integer" } }],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["helperId"], properties: { helperId: { type: "string" } } } } },
+          },
+          responses: {
+            200: { description: "배정 성공" },
+            400: { description: "잘못된 요청 (매칭 상태 아님, 팀원 아님)" },
+            404: { description: "오더 없음" },
+          },
+        },
+      },
+
+      // ===== Partner Members =====
+      "/api/partner/members": {
+        get: {
+          tags: ["Partner-Member"],
+          summary: "팀원 목록",
+          description: "팀원 목록 + 사용자 정보 + 초대 코드 반환.",
+          security: [{ BearerAuth: [] }],
+          responses: { 200: { description: "팀원 목록" } },
+        },
+      },
+      "/api/partner/members/{memberId}": {
+        get: {
+          tags: ["Partner-Member"],
+          summary: "팀원 상세",
+          description: "팀원 정보 + 최근 오더 이력.",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "memberId", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            200: { description: "팀원 상세 정보" },
+            404: { description: "팀원 없음" },
+          },
+        },
+        delete: {
+          tags: ["Partner-Member"],
+          summary: "팀원 제거",
+          description: "팀원을 비활성화 (isActive=false).",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "memberId", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            200: { description: "제거 성공" },
+            404: { description: "팀원 없음" },
+          },
+        },
+      },
+      "/api/partner/members/invite": {
+        post: {
+          tags: ["Partner-Member"],
+          summary: "초대 코드 조회",
+          description: "팀 QR 코드 토큰(초대 코드)을 반환합니다.",
+          security: [{ BearerAuth: [] }],
+          responses: {
+            200: { description: "초대 코드", content: { "application/json": { schema: { type: "object", properties: { inviteCode: { type: "string" }, teamName: { type: "string" }, teamId: { type: "integer" } } } } } },
+          },
+        },
+      },
+
+      // ===== Partner Settlement =====
+      "/api/partner/settlements": {
+        get: {
+          tags: ["Partner-Settlement"],
+          summary: "팀 정산 내역",
+          description: "월별 팀원 정산 내역 + 요약 + 팀 인센티브.",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "month", in: "query", schema: { type: "string", example: "2025-01" }, description: "YYYY-MM 형식 (미지정 시 현재 월)" },
+          ],
+          responses: { 200: { description: "정산 내역 + 요약" } },
+        },
+      },
+      "/api/partner/settlements/summary": {
+        get: {
+          tags: ["Partner-Settlement"],
+          summary: "월별 정산 요약",
+          description: "최근 6개월 월별 정산 집계.",
+          security: [{ BearerAuth: [] }],
+          responses: { 200: { description: "월별 요약 배열" } },
+        },
+      },
+
+      // ===== Partner CS =====
+      "/api/partner/cs": {
+        get: {
+          tags: ["Partner-CS"],
+          summary: "CS 문의 목록",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "status", in: "query", schema: { type: "string", enum: ["pending", "in_progress", "resolved", "closed"] } },
+            { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+            { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+          ],
+          responses: { 200: { description: "페이지네이션 CS 목록" } },
+        },
+        post: {
+          tags: ["Partner-CS"],
+          summary: "CS 문의 생성",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["title", "content"], properties: { title: { type: "string" }, content: { type: "string" }, category: { type: "string", enum: ["order", "payment", "settlement", "member", "other"] }, priority: { type: "string", enum: ["low", "normal", "high", "urgent"] }, orderId: { type: "integer" } } } } },
+          },
+          responses: {
+            201: { description: "문의 생성 성공" },
+            400: { description: "제목/내용 미입력" },
+          },
+        },
+      },
+      "/api/partner/cs/{id}": {
+        get: {
+          tags: ["Partner-CS"],
+          summary: "CS 문의 상세",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            200: { description: "문의 상세" },
+            404: { description: "문의 없음" },
+          },
+        },
+        patch: {
+          tags: ["Partner-CS"],
+          summary: "CS 문의 수정",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          requestBody: {
+            content: { "application/json": { schema: { type: "object", properties: { content: { type: "string" }, priority: { type: "string" } } } } },
+          },
+          responses: {
+            200: { description: "수정 성공" },
+            404: { description: "문의 없음" },
+          },
+        },
+      },
+
+      // ===== Partner Incidents =====
+      "/api/partner/incidents": {
+        get: {
+          tags: ["Partner-Incident"],
+          summary: "사고 목록",
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            { name: "status", in: "query", schema: { type: "string", enum: ["reported", "investigating", "resolved", "closed"] } },
+            { name: "page", in: "query", schema: { type: "integer", default: 1 } },
+            { name: "limit", in: "query", schema: { type: "integer", default: 20 } },
+          ],
+          responses: { 200: { description: "페이지네이션 사고 목록" } },
+        },
+        post: {
+          tags: ["Partner-Incident"],
+          summary: "사고 보고 생성",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["helperId", "description"], properties: { helperId: { type: "string" }, orderId: { type: "integer" }, incidentType: { type: "string", enum: ["damage", "loss", "misdelivery", "delay", "accident", "other"] }, description: { type: "string" }, severity: { type: "string", enum: ["low", "medium", "high", "critical"] } } } } },
+          },
+          responses: {
+            201: { description: "사고 보고 생성 성공" },
+            400: { description: "필수값 미입력 또는 팀원 아님" },
+          },
+        },
+      },
+      "/api/partner/incidents/{id}": {
+        get: {
+          tags: ["Partner-Incident"],
+          summary: "사고 상세",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          responses: {
+            200: { description: "사고 상세 + 헬퍼명" },
+            404: { description: "사고 없음" },
+          },
+        },
+        patch: {
+          tags: ["Partner-Incident"],
+          summary: "사고 수정",
+          description: "팀장 메모 추가 또는 상태 변경.",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          requestBody: {
+            content: { "application/json": { schema: { type: "object", properties: { teamLeaderNote: { type: "string" }, status: { type: "string", enum: ["reported", "investigating", "resolved", "closed"] } } } } },
+          },
+          responses: {
+            200: { description: "수정 성공" },
+            404: { description: "사고 없음" },
+          },
+        },
+      },
+
+      // ===== Partner Settings =====
+      "/api/partner/settings": {
+        get: {
+          tags: ["Partner-Settings"],
+          summary: "팀 설정 조회",
+          description: "팀 정보, 팀장 정보, 팀원 통계 반환.",
+          security: [{ BearerAuth: [] }],
+          responses: { 200: { description: "팀 설정 정보" } },
+        },
+        patch: {
+          tags: ["Partner-Settings"],
+          summary: "팀 설정 수정",
+          description: "긴급연락처, 업무유형 등 수정 가능.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            content: { "application/json": { schema: { type: "object", properties: { emergencyPhone: { type: "string" }, businessType: { type: "string" } } } } },
+          },
+          responses: {
+            200: { description: "설정 저장 성공" },
+            400: { description: "수정 항목 없음" },
+          },
+        },
+      },
+
+      // ===== Checkin =====
+      "/api/checkin/qr": {
+        post: {
+          tags: ["Checkin"],
+          summary: "QR 코드 출근 체크",
+          description: "의뢰인 QR 코드를 스캔하여 출근 처리.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["qrData"], properties: { qrData: { type: "string", description: "QR JSON 데이터" }, latitude: { type: "string" }, longitude: { type: "string" }, address: { type: "string" } } } } },
+          },
+          responses: {
+            200: { description: "출근 성공" },
+            400: { description: "잘못된 QR / 배정 없음" },
+          },
+        },
+      },
+      "/api/checkin": {
+        post: {
+          tags: ["Checkin"],
+          summary: "오더 기반 직접 출근",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            content: { "application/json": { schema: { type: "object", properties: { orderId: { type: "integer" }, latitude: { type: "string" }, longitude: { type: "string" } } } } },
+          },
+          responses: { 200: { description: "출근 성공" } },
+        },
+      },
+      "/api/checkin/today": {
+        get: {
+          tags: ["Checkin"],
+          summary: "오늘 출근 기록",
+          security: [{ BearerAuth: [] }],
+          responses: { 200: { description: "오늘의 출근 기록 목록" } },
+        },
+      },
+      "/api/checkin/qr-data": {
+        get: {
+          tags: ["Checkin"],
+          summary: "의뢰인 QR 코드 데이터",
+          description: "의뢰인용 영구 QR 코드 데이터 반환.",
+          security: [{ BearerAuth: [] }],
+          responses: { 200: { description: "QR JSON 데이터" } },
+        },
+      },
+      "/api/checkin/by-code": {
+        post: {
+          tags: ["Checkin"],
+          summary: "요청자 코드로 출근",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            content: { "application/json": { schema: { type: "object", properties: { code: { type: "string" } } } } },
+          },
+          responses: { 200: { description: "출근 성공" } },
+        },
+      },
+      "/api/checkin/verify-helper-code": {
+        post: {
+          tags: ["Checkin"],
+          summary: "헬퍼 코드 출근 확인",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            content: { "application/json": { schema: { type: "object", properties: { helperCode: { type: "string" }, orderId: { type: "integer" } } } } },
+          },
+          responses: { 200: { description: "확인 성공" } },
+        },
+      },
+
+      // ===== Notifications =====
+      "/api/notifications": {
+        get: {
+          tags: ["Notification"],
+          summary: "알림 목록 조회",
+          security: [{ BearerAuth: [] }],
+          responses: { 200: { description: "알림 목록" } },
+        },
+      },
+      "/api/notifications/unread-count": {
+        get: {
+          tags: ["Notification"],
+          summary: "읽지 않은 알림 수",
+          security: [{ BearerAuth: [] }],
+          responses: { 200: { description: "읽지 않은 알림 수", content: { "application/json": { schema: { type: "object", properties: { count: { type: "integer" } } } } } } },
+        },
+      },
+      "/api/notifications/{id}/read": {
+        post: {
+          tags: ["Notification"],
+          summary: "알림 읽음 처리",
+          security: [{ BearerAuth: [] }],
+          parameters: [{ name: "id", in: "path", required: true, schema: { type: "integer" } }],
+          responses: { 200: { description: "읽음 처리 완료" } },
+        },
+      },
+      "/api/notifications/read-all": {
+        post: {
+          tags: ["Notification"],
+          summary: "전체 알림 읽음 처리",
+          security: [{ BearerAuth: [] }],
+          responses: { 200: { description: "전체 읽음 처리 완료" } },
+        },
+      },
+
+      // ===== Reviews =====
+      "/api/reviews": {
+        post: {
+          tags: ["Review"],
+          summary: "리뷰 작성",
+          description: "의뢰인이 헬퍼에 대한 리뷰 작성.",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", properties: { contractId: { type: "integer" }, orderId: { type: "integer" }, helperId: { type: "string" }, rating: { type: "integer", minimum: 1, maximum: 5 }, comment: { type: "string" } } } } },
+          },
+          responses: {
+            201: { description: "리뷰 작성 성공" },
+            400: { description: "이미 리뷰 작성됨" },
+          },
+        },
+      },
+      "/api/reviews/helper/{helperId}": {
+        get: {
+          tags: ["Review"],
+          summary: "헬퍼 리뷰 목록",
+          parameters: [{ name: "helperId", in: "path", required: true, schema: { type: "string" } }],
+          responses: { 200: { description: "리뷰 목록 + 평균 평점" } },
+        },
+      },
+      "/api/reviews/my": {
+        get: {
+          tags: ["Review"],
+          summary: "내가 작성한 리뷰",
+          security: [{ BearerAuth: [] }],
+          responses: { 200: { description: "내 리뷰 목록" } },
+        },
+      },
+      "/api/orders/review-pending": {
+        get: {
+          tags: ["Review"],
+          summary: "리뷰 대기 오더",
+          security: [{ BearerAuth: [] }],
+          responses: { 200: { description: "리뷰 대기 오더 목록" } },
+        },
+      },
+
+      // ===== Push =====
+      "/api/push/vapid-public-key": {
+        get: {
+          tags: ["Push"],
+          summary: "VAPID 공개키 조회",
+          responses: { 200: { description: "VAPID 공개키", content: { "application/json": { schema: { type: "object", properties: { publicKey: { type: "string" } } } } } } },
+        },
+      },
+      "/api/push/subscribe": {
+        post: {
+          tags: ["Push"],
+          summary: "웹 푸시 구독",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["subscription"], properties: { subscription: { type: "object", properties: { endpoint: { type: "string" }, keys: { type: "object", properties: { p256dh: { type: "string" }, auth: { type: "string" } } } } }, userAgent: { type: "string" } } } } },
+          },
+          responses: { 201: { description: "구독 성공" } },
+        },
+      },
+      "/api/push/unsubscribe": {
+        post: {
+          tags: ["Push"],
+          summary: "웹 푸시 구독 해제",
+          security: [{ BearerAuth: [] }],
+          responses: { 200: { description: "구독 해제 성공" } },
+        },
+      },
+      "/api/push/status": {
+        get: {
+          tags: ["Push"],
+          summary: "푸시 구독 상태",
+          security: [{ BearerAuth: [] }],
+          responses: { 200: { description: "구독 상태 정보" } },
+        },
+      },
+      "/api/push/register-fcm": {
+        post: {
+          tags: ["Push"],
+          summary: "FCM 토큰 등록",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: { "application/json": { schema: { type: "object", required: ["token"], properties: { token: { type: "string" }, platform: { type: "string", enum: ["android", "ios", "web"] } } } } },
+          },
+          responses: { 200: { description: "등록 성공" } },
+        },
+      },
+      "/api/push/unregister-fcm": {
+        post: {
+          tags: ["Push"],
+          summary: "FCM 토큰 해제",
+          security: [{ BearerAuth: [] }],
+          requestBody: {
+            content: { "application/json": { schema: { type: "object", properties: { token: { type: "string" } } } } },
+          },
+          responses: { 200: { description: "해제 성공" } },
+        },
+      },
+
+      // ===== Meta =====
+      "/api/meta/couriers": {
+        get: {
+          tags: ["Meta"],
+          summary: "택배사 목록",
+          description: "활성화된 택배사 목록 + 단가 정보.",
+          responses: { 200: { description: "택배사 목록" } },
+        },
+      },
+      "/api/meta/category-pricing": {
+        get: {
+          tags: ["Meta"],
+          summary: "카테고리별 단가",
+          responses: { 200: { description: "카테고리별 단가 설정" } },
+        },
+      },
+      "/api/meta/contract-settings": {
+        get: {
+          tags: ["Meta"],
+          summary: "계약 설정 조회",
+          responses: { 200: { description: "계약 관련 설정값" } },
+        },
+      },
+      "/api/meta/couriers/{courierName}/rate-items": {
+        get: {
+          tags: ["Meta"],
+          summary: "택배사별 단가 항목",
+          parameters: [{ name: "courierName", in: "path", required: true, schema: { type: "string" } }],
+          responses: { 200: { description: "단가 항목 목록" } },
+        },
+      },
+      "/api/meta/couriers/{courierName}/tiered-pricing": {
+        get: {
+          tags: ["Meta"],
+          summary: "택배사별 구간 단가",
+          parameters: [{ name: "courierName", in: "path", required: true, schema: { type: "string" } }],
+          responses: { 200: { description: "구간별 단가 목록" } },
+        },
+      },
+      "/api/meta/vehicle-types": {
+        get: {
+          tags: ["Meta"],
+          summary: "차량 유형 목록",
+          responses: { 200: { description: "차량 유형 목록" } },
+        },
+      },
+      "/api/meta/order-categories": {
+        get: {
+          tags: ["Meta"],
+          summary: "오더 카테고리 목록",
+          responses: { 200: { description: "오더 카테고리 목록" } },
+        },
+      },
+      "/api/address/search": {
+        get: {
+          tags: ["Meta"],
+          summary: "주소 검색",
+          description: "Kakao 주소 검색 API 프록시.",
+          parameters: [{ name: "query", in: "query", required: true, schema: { type: "string" }, description: "검색어" }],
+          responses: { 200: { description: "주소 검색 결과" } },
         },
       },
     },

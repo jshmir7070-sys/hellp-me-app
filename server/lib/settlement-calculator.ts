@@ -38,6 +38,8 @@ export interface HelperPayoutResult extends SettlementResult {
   platformFeeRate: number;        // 플랫폼 수수료율 (%)
   platformFee: number;            // 플랫폼 수수료
   damageDeduction: number;        // 화물사고 차감
+  industrialAccidentInsuranceRate: number; // 산재보험료율 (%)
+  industrialAccidentInsurance: number;     // 산재보험료 (헬퍼 부담분 50%)
   driverPayout: number;           // 헬퍼 지급액
 }
 
@@ -48,10 +50,10 @@ export interface HelperPayoutResult extends SettlementResult {
  * - 공급가 = (배송 + 반품) × 단가 + 기타 × 기타단가 + 기타비용
  * - VAT = 공급가 × 10%
  * - 총액 = 공급가 + VAT
- * - 계약금 = 총액 × 20%
+ * - 계약금 = 총액 × 계약금 비율 (기본 10%)
  * - 잔금 = 총액 - 계약금
  */
-export function calculateSettlement(data: ClosingData, depositRate: number = 20): SettlementResult {
+export function calculateSettlement(data: ClosingData, depositRate: number = 10): SettlementResult {
   const deliveredCount = data.deliveredCount || 0;
   const returnedCount = data.returnedCount || 0;
   const etcCount = data.etcCount || 0;
@@ -94,26 +96,32 @@ export function calculateSettlement(data: ClosingData, depositRate: number = 20)
 
 /**
  * 헬퍼 지급액 계산 (정산 결과 + 수수료 차감)
- * 
+ *
  * 공식:
  * - 플랫폼 수수료 = 총액 × 수수료율
- * - 헬퍼 지급액 = 총액 - 플랫폼 수수료 - 화물사고 차감
+ * - 산재보험료 (헬퍼 50%) = 총액 × 보험료율% × 0.5
+ * - 헬퍼 지급액 = 총액 - 플랫폼 수수료 - 화물사고 차감 - 산재보험료
  */
 export function calculateHelperPayout(
   data: ClosingData,
   platformFeeRate: number,
-  damageDeduction: number = 0
+  damageDeduction: number = 0,
+  industrialAccidentInsuranceRate: number = 0
 ): HelperPayoutResult {
   const settlement = calculateSettlement(data);
 
   const platformFee = Math.round(settlement.totalAmount * (platformFeeRate / 100));
-  const driverPayout = Math.max(0, settlement.totalAmount - platformFee - damageDeduction);
+  // 산재보험료: 총액 × 보험료율% × 50% (본사 50% + 헬퍼 50%)
+  const industrialAccidentInsurance = Math.round(settlement.totalAmount * (industrialAccidentInsuranceRate / 100) * 0.5);
+  const driverPayout = Math.max(0, settlement.totalAmount - platformFee - damageDeduction - industrialAccidentInsurance);
 
   return {
     ...settlement,
     platformFeeRate,
     platformFee,
     damageDeduction,
+    industrialAccidentInsuranceRate,
+    industrialAccidentInsurance,
     driverPayout,
   };
 }

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View, Modal, Pressable, Dimensions } from 'react-native';
+import { StyleSheet, View, Modal, Pressable } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -25,10 +25,6 @@ const ICON_CONFIG: Record<AlertIconType, { name: string; color: string }> = {
   error: { name: 'alert-circle-outline', color: BrandColors.error },
   question: { name: 'help-circle-outline', color: BrandColors.primary },
 };
-
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const ALERT_MAX_WIDTH = 400;
-const ALERT_WIDTH = Math.min(SCREEN_WIDTH - 64, ALERT_MAX_WIDTH);
 
 const springConfig: WithSpringConfig = {
   damping: 15,
@@ -203,7 +199,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   alert: {
-    width: ALERT_WIDTH,
+    width: '90%',
+    maxWidth: 400,
+    alignSelf: 'center',
     borderRadius: 24,
     padding: Spacing['2xl'],
     shadowColor: '#000',

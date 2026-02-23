@@ -9,10 +9,13 @@ import * as ImagePicker from "expo-image-picker";
 import { Icon } from "@/components/Icon";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
+import { useAuthImage } from "@/hooks/useAuthImage";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 import { apiRequest, getApiUrl, getAuthToken } from "@/lib/query-client";
+import { formatOrderNumber } from "@/lib/format-order-number";
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -30,6 +33,7 @@ type IncidentReportScreenProps = NativeStackScreenProps<any, 'IncidentReport'>;
 
 export default function IncidentReportScreen({ route, navigation }: IncidentReportScreenProps) {
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
@@ -65,10 +69,7 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
     enabled: !!orderId,
   });
 
-  const getImageUrl = (imagePath: string) => {
-    if (imagePath.startsWith('http')) return imagePath;
-    return new URL(imagePath, getApiUrl()).toString();
-  };
+  const { getImageUrl } = useAuthImage();
 
   const pickImage = async () => {
     if (evidencePhotos.length >= 5) {
@@ -77,7 +78,7 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: false,
       aspect: [4, 3],
       quality: 0.8,
@@ -97,7 +98,7 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
         } as any);
 
         const token = await getAuthToken();
-        const response = await fetch(`${getApiUrl()}/api/upload/evidence`, {
+        const response = await fetch(`${getApiUrl().replace(/\/$/, '')}/api/upload/evidence`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -126,10 +127,6 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
 
   const submitMutation = useMutation({
     mutationFn: async () => {
-      const allImages = [
-        ...(closingSummary?.deliveryHistoryImages || []),
-        ...evidencePhotos,
-      ];
       const res = await apiRequest('POST', `/api/orders/${orderId}/incident`, {
         type: incidentType,
         description,
@@ -138,7 +135,8 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
         deliveryAddress: deliveryAddress.trim(),
         customerName: customerName.trim(),
         customerPhone: customerPhone.trim(),
-        attachedImages: allImages,
+        attachedImages: closingSummary?.deliveryHistoryImages || [],
+        evidenceImages: evidencePhotos,
       });
       return res.json();
     },
@@ -237,15 +235,20 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
     >
       <Card style={styles.orderSummary}>
         <View style={styles.orderHeader}>
           <View style={styles.orderNumberBadge}>
             <ThemedText style={styles.orderNumberText}>
-              {orderDetail?.orderNumber || `O-${orderId}`}
+              {formatOrderNumber(orderDetail?.orderNumber, orderId)}
             </ThemedText>
           </View>
           <ThemedText style={[styles.orderLabel, { color: theme.tabIconDefault }]}>
@@ -266,7 +269,7 @@ export default function IncidentReportScreen({ route, navigation }: IncidentRepo
             </View>
             <View style={styles.orderInfoRow}>
               <ThemedText style={[styles.orderInfoLabel, { color: theme.tabIconDefault }]}>오더번호</ThemedText>
-              <ThemedText style={[styles.orderInfoValue, { color: theme.text }]}>O-{orderId}</ThemedText>
+              <ThemedText style={[styles.orderInfoValue, { color: theme.text }]}>{formatOrderNumber(orderDetail?.orderNumber, orderId)}</ThemedText>
             </View>
             <View style={styles.orderInfoRow}>
               <ThemedText style={[styles.orderInfoLabel, { color: theme.tabIconDefault }]}>배송일</ThemedText>

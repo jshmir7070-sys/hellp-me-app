@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { randomUUID, randomBytes, createHmac } from "crypto";
 import { storage, db } from "./storage";
 import { api } from "@shared/routes";
-import { insertCarrierRateItemSchema, insertAdminBankAccountSchema, insertCustomerServiceInquirySchema, updateCustomerServiceInquirySchema, userLocationLogs, userLocationLatest, teamIncentives, incentiveDetails, requesterRefundAccounts, insertRequesterRefundAccountSchema, SettlementStatement, authAuditLogs, insertDestinationPricingSchema, insertColdChainSettingSchema, destinationRegions, timeSlots, regionPricingRules, vatSettings, minimumGuaranteeRules, minimumGuaranteeApplications, settlementAuditLogs, settlementPayoutAttempts, orderForceStatusLogs, manualDispatchLogs, proofUploadFailures, orders, settlementStatements, settlementLineItems, helperBankAccounts, carrierMinRates, pricingTables, pricingTableRows, identityVerifications, documentReviewTasks, orderStatusEvents, smsTemplates, smsLogs, webhookLogs, integrationHealth, systemEvents, refunds, supportTicketEscalations, closingReports, contracts, incidentReports, incidentEvidence, incidentActions, auditLogs, orderStartTokens, integrationEvents, users, orderApplications, closingFieldSettings, carrierPricingPolicies, urgentFeePolicies, platformFeePolicies, extraCostCatalog, orderPolicySnapshots, settlementRecords, customerServiceInquiries, refundPolicies, insertRefundPolicySchema, customerInquiries, inquiryComments, ticketEscalations, pushNotificationLogs, deductions, disputes, signupConsents, termsVersions, termsReConsents } from "@shared/schema";
+import { insertCarrierRateItemSchema, insertAdminBankAccountSchema, insertCustomerServiceInquirySchema, updateCustomerServiceInquirySchema, userLocationLogs, userLocationLatest, teamIncentives, incentiveDetails, requesterRefundAccounts, insertRequesterRefundAccountSchema, SettlementStatement, authAuditLogs, insertDestinationPricingSchema, insertColdChainSettingSchema, destinationRegions, timeSlots, regionPricingRules, vatSettings, minimumGuaranteeRules, minimumGuaranteeApplications, settlementAuditLogs, settlementPayoutAttempts, orderForceStatusLogs, manualDispatchLogs, proofUploadFailures, orders, settlementStatements, settlementLineItems, helperBankAccounts, carrierMinRates, pricingTables, pricingTableRows, identityVerifications, documentReviewTasks, orderStatusEvents, smsTemplates, smsLogs, webhookLogs, integrationHealth, systemEvents, refunds, supportTicketEscalations, closingReports, contracts, incidentReports, incidentEvidence, incidentActions, auditLogs, orderStartTokens, integrationEvents, users, orderApplications, closingFieldSettings, carrierPricingPolicies, urgentFeePolicies, platformFeePolicies, extraCostCatalog, orderPolicySnapshots, settlementRecords, customerServiceInquiries, refundPolicies, insertRefundPolicySchema, customerInquiries, inquiryComments, ticketEscalations, pushNotificationLogs, deductions, disputes, signupConsents, termsVersions, termsReConsents, teamCsInquiries, teamIncidents, teamMembers } from "@shared/schema";
 import { sql, eq, desc, and, or, inArray, not, isNull, gte, lte } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -102,6 +102,19 @@ async function getDepositRate(): Promise<number> {
     return (isNaN(rate) || rate <= 0) ? 10 : rate;
   } catch {
     return 10; // 기본값 10%
+  }
+}
+
+// ============================================
+// 산재보험료율 조회 (특고직 택배기사 기준)
+// ============================================
+async function getIndustrialAccidentInsuranceRate(): Promise<number> {
+  try {
+    const setting = await storage.getSystemSetting('industrial_accident_insurance_rate');
+    const rate = setting ? parseFloat(setting.settingValue) : 1.06;
+    return (isNaN(rate) || rate < 0) ? 1.06 : rate;
+  } catch {
+    return 1.06; // 기본값 1.06% (특고직 택배기사)
   }
 }
 
@@ -1582,13 +1595,14 @@ export async function registerRoutes(
     smsService,
     popbill,
     uploadVehicleImage,
-    tables: {},
+    tables: { orders, settlementStatements, teamIncentives, teamCsInquiries, teamIncidents, orderApplications, users, teamMembers },
     sql, eq, desc, and, or, inArray, not, isNull, gte, lte,
     checkIdempotency,
     storeIdempotencyResponse,
     getIdempotencyKeyFromRequest,
     getOrderDepositInfo,
     getDepositRate,
+    getIndustrialAccidentInsuranceRate,
     getOrCreatePersonalCode,
   } as any);
 

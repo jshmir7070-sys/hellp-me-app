@@ -11,6 +11,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Button } from "@/components/Button";
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useAuth } from "@/contexts/AuthContext";
 import { getApiUrl } from "@/lib/query-client";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
@@ -24,6 +25,7 @@ export default function ChangePasswordScreen({ navigation }: ChangePasswordScree
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const { user, logout } = useAuth();
 
   const [currentPassword, setCurrentPassword] = useState("");
@@ -115,8 +117,13 @@ export default function ChangePasswordScreen({ navigation }: ChangePasswordScree
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
       scrollIndicatorInsets={{ bottom: insets.bottom }}
     >

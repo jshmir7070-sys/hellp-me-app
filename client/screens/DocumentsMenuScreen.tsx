@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
 import { useTheme } from '@/hooks/useTheme';
+import { useResponsive } from '@/hooks/useResponsive';
 import { Spacing, BorderRadius, BrandColors } from '@/constants/theme';
 
 type DocumentsMenuScreenProps = {
@@ -105,6 +106,7 @@ export default function DocumentsMenuScreen({ navigation }: DocumentsMenuScreenP
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
 
   // 서류 상태 조회
   const { data: documentsStatus = [], isLoading } = useQuery<DocumentStatus[]>({
@@ -130,8 +132,13 @@ export default function DocumentsMenuScreen({ navigation }: DocumentsMenuScreenP
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.md,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
     >
       {/* 진행 상황 카드 */}

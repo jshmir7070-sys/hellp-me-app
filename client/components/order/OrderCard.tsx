@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { View, Pressable, StyleSheet, Animated, Alert } from "react-native";
+import { View, Pressable, StyleSheet, Animated, Alert, Platform } from "react-native";
 import { Icon } from "@/components/Icon";
 import * as Clipboard from "expo-clipboard";
 
@@ -13,6 +13,7 @@ import {
   type ActionButton,
 } from "@/domain/orderCardRules";
 import { getApiUrl } from "@/lib/query-client";
+import { formatOrderNumber } from "@/lib/format-order-number";
 
 export type CardContext =
   | "requester_home"
@@ -127,8 +128,9 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
   // 카테고리별 표시명: 냉탑전용/기타택배는 companyName, 택배사는 courierName
   const displayName = data.companyName || data.courierName || data.title || "오더";
 
-  // 카테고리 라벨
-  const categoryLabel = isCold ? "냉탑전용" : isOther ? "기타택배" : null;
+  // 카테고리 라벨 — 택배사 포함 전체 뱃지 통일
+  const isParcel = !isCold && !isOther;
+  const categoryLabel = isCold ? "냉탑전용" : isOther ? "기타택배" : "택배";
 
   // 단가 라벨: 냉탑전용은 "운임", 기타택배는 박스당/착지당, 택배사는 "단가"
   const getPriceLabel = () => {
@@ -178,21 +180,26 @@ export function OrderCard({ data, context, onAction, onPress }: OrderCardProps) 
               <ThemedText style={styles.urgentText}>긴급</ThemedText>
             </Animated.View>
           ) : null}
-          {categoryLabel ? (
-            <View style={[styles.categoryBadge, isCold ? styles.categoryBadgeCold : styles.categoryBadgeOther]}>
-              <ThemedText style={[styles.categoryBadgeText, isCold ? styles.categoryTextCold : styles.categoryTextOther]}>
-                {categoryLabel}
-              </ThemedText>
-            </View>
-          ) : null}
+          <View style={[styles.categoryBadge, isCold ? styles.categoryBadgeCold : isOther ? styles.categoryBadgeOther : styles.categoryBadgeParcel]}>
+            <ThemedText style={[styles.categoryBadgeText, isCold ? styles.categoryTextCold : isOther ? styles.categoryTextOther : styles.categoryTextParcel]}>
+              {categoryLabel}
+            </ThemedText>
+          </View>
           <ThemedText style={[styles.companyName, { color: theme.text }]} numberOfLines={1}>
             {displayName}
           </ThemedText>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: statusLabel.bgColor }]}>
-          <ThemedText style={[styles.statusText, { color: statusLabel.color }]}>
-            {statusLabel.text}
-          </ThemedText>
+        <View style={styles.headerRight}>
+          {(context === 'settlement_list' || context === 'requester_closing' || context === 'requester_history' || context === 'helper_history') ? (
+            <ThemedText style={[styles.orderNumberText, { color: theme.tabIconDefault }]} numberOfLines={1}>
+              {formatOrderNumber(data.orderNumber, data.orderId)}
+            </ThemedText>
+          ) : null}
+          <View style={[styles.statusBadge, { backgroundColor: statusLabel.bgColor }]}>
+            <ThemedText style={[styles.statusText, { color: statusLabel.color }]}>
+              {statusLabel.text}
+            </ThemedText>
+          </View>
         </View>
       </View>
 
@@ -455,11 +462,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     flex: 1,
   },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 0,
+  },
+  orderNumberText: {
+    fontSize: 9,
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
   statusBadge: {
     paddingHorizontal: 5,
     paddingVertical: 1,
     borderRadius: BorderRadius.sm,
-    marginLeft: Spacing.xs,
   },
   statusText: {
     fontSize: 10,
@@ -490,6 +506,9 @@ const styles = StyleSheet.create({
   categoryBadgeOther: {
     backgroundColor: "#FEF3C7",
   },
+  categoryBadgeParcel: {
+    backgroundColor: "#D1FAE5",
+  },
   categoryBadgeText: {
     fontSize: 9,
     fontWeight: "700",
@@ -499,6 +518,9 @@ const styles = StyleSheet.create({
   },
   categoryTextOther: {
     color: "#D97706",
+  },
+  categoryTextParcel: {
+    color: "#059669",
   },
   infoGrid: {
     gap: 0,

@@ -84,7 +84,7 @@ export async function registerHelperRoutes(ctx: RouteContext): Promise<void> {
     },
   });
 
-  app.post("/api/helpers/credential/upload", uploadCredentialImage.single("file"), requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/helpers/credential/upload", requireAuth, uploadCredentialImage.single("file"), async (req: AuthenticatedRequest, res) => {
     try {
       const userId = req.user!.id;
       const user = req.user!;
@@ -384,7 +384,7 @@ export async function registerHelperRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.patch(api.helpPosts.update.path, async (req, res) => {
+  app.patch(api.helpPosts.update.path, requireAuth, async (req, res) => {
     try {
       const input = api.helpPosts.update.input.parse(req.body);
       const post = await storage.updateHelpPost(Number(req.params.id), input);
@@ -439,7 +439,7 @@ export async function registerHelperRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.post(api.helpers.uploadVehicleImage.path, uploadVehicleImage.single("image"), requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post(api.helpers.uploadVehicleImage.path, requireAuth, uploadVehicleImage.single("image"), async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.user!;
 
@@ -531,7 +531,7 @@ export async function registerHelperRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.post(api.helpers.uploadBusinessImage.path, uploadBusinessImage.single("image"), requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post(api.helpers.uploadBusinessImage.path, requireAuth, uploadBusinessImage.single("image"), async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.user!;
 
@@ -609,7 +609,7 @@ export async function registerHelperRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.post("/api/requesters/business/image", uploadBusinessImage.single("image"), requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/requesters/business/image", requireAuth, uploadBusinessImage.single("image"), async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.user!;
 
@@ -767,7 +767,7 @@ export async function registerHelperRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.post(api.helpers.uploadBankbookImage.path, uploadBankbookImage.single("image"), requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post(api.helpers.uploadBankbookImage.path, requireAuth, uploadBankbookImage.single("image"), async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.user!;
 
@@ -943,7 +943,7 @@ export async function registerHelperRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.post(api.helpers.uploadDriverLicenseImage.path, uploadLicenseImage.single("image"), requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post(api.helpers.uploadDriverLicenseImage.path, requireAuth, uploadLicenseImage.single("image"), async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.user!;
 
@@ -962,7 +962,7 @@ export async function registerHelperRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.post(api.helpers.uploadCargoLicenseImage.path, uploadLicenseImage.single("image"), requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post(api.helpers.uploadCargoLicenseImage.path, requireAuth, uploadLicenseImage.single("image"), async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.user!;
 
@@ -1004,7 +1004,7 @@ export async function registerHelperRoutes(ctx: RouteContext): Promise<void> {
     },
   });
 
-  app.post("/api/work-proof/upload", uploadWorkproofImage.single("image"), requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/work-proof/upload", requireAuth, uploadWorkproofImage.single("image"), async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.user!;
 
@@ -1052,7 +1052,7 @@ export async function registerHelperRoutes(ctx: RouteContext): Promise<void> {
     },
   });
 
-  app.post("/api/orders/image/upload", uploadOrderImage.single("image"), requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/orders/image/upload", requireAuth, uploadOrderImage.single("image"), async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.user!;
 

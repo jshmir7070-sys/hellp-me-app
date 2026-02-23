@@ -1,5 +1,5 @@
-import React, { useCallback } from "react";
-import { View, StyleSheet, Alert, Platform } from "react-native";
+import React, { useState, useCallback } from "react";
+import { View, StyleSheet, Alert, Platform, Pressable } from "react-native";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -8,13 +8,16 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { OrderListPage } from "@/components/order/OrderListPage";
 import { adaptRequesterOrder, type OrderCardDTO } from "@/adapters/orderCardAdapter";
-import { Spacing, Typography, BrandColors } from "@/constants/theme";
+import { Spacing, Typography, BorderRadius, BrandColors } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
 type RequesterClosingScreenProps = NativeStackScreenProps<any, 'RequesterClosing'>;
 
+type RequesterFilterTab = 'all' | 'in_progress' | 'closing_submitted' | 'closing_completed';
+
 export default function RequesterClosingScreen({ navigation }: RequesterClosingScreenProps) {
-  const { theme } = useTheme();
+  const { theme, isDark } = useTheme();
   const queryClient = useQueryClient();
+  const [activeFilter, setActiveFilter] = useState<RequesterFilterTab>('all');
 
   // 마감 화면: completed 필터로 숨겨진 마감 오더도 포함 + 업무중 오더도 가져오기
   const { data: completedData, isLoading: isLoadingCompleted, isRefetching: isRefetchingCompleted, refetch: refetchCompleted } = useQuery<any[]>({
@@ -53,6 +56,23 @@ export default function RequesterClosingScreen({ navigation }: RequesterClosingS
       return ['closing_submitted', 'in_progress', 'scheduled', 'final_amount_confirmed', 'balance_paid', 'settlement_paid', 'closed'].includes(order.status?.toLowerCase() || '');
     });
   }, [completedData, activeData]);
+
+  const inProgressCount = closingOrders.filter(o => ['in_progress', 'scheduled'].includes(o.status)).length;
+  const closingSubmittedCount = closingOrders.filter(o => o.status === 'closing_submitted').length;
+  const closingCompletedCount = closingOrders.filter(o => ['final_amount_confirmed', 'balance_paid', 'settlement_paid', 'closed'].includes(o.status)).length;
+
+  const filteredOrders = React.useMemo(() => {
+    switch (activeFilter) {
+      case 'in_progress':
+        return closingOrders.filter(o => ['in_progress', 'scheduled'].includes(o.status));
+      case 'closing_submitted':
+        return closingOrders.filter(o => o.status === 'closing_submitted');
+      case 'closing_completed':
+        return closingOrders.filter(o => ['final_amount_confirmed', 'balance_paid', 'settlement_paid', 'closed'].includes(o.status));
+      default:
+        return closingOrders;
+    }
+  }, [activeFilter, closingOrders]);
 
   const confirmMutation = useMutation({
     mutationFn: async (orderId: number) => {
@@ -124,23 +144,51 @@ export default function RequesterClosingScreen({ navigation }: RequesterClosingS
   const headerComponent = (
     <View style={styles.header}>
       <Card style={styles.infoCard}>
-        <View style={styles.infoRow}>
-          <View style={styles.infoItem}>
-            <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>
-              마감 대기
+        <View style={styles.filterRow}>
+          <Pressable
+            style={[styles.filterTab, activeFilter === 'all' && { backgroundColor: isDark ? '#2d3748' : '#EDF2F7' }]}
+            onPress={() => setActiveFilter('all')}
+          >
+            <ThemedText style={[styles.filterLabel, { color: activeFilter === 'all' ? theme.text : theme.tabIconDefault }, activeFilter === 'all' && { fontWeight: '700' }]}>
+              전체
             </ThemedText>
-            <ThemedText style={[styles.infoValue, { color: BrandColors.requester }]}>
-              {closingOrders.filter(o => o.status === 'closing_submitted').length}건
+            <ThemedText style={[styles.filterValue, { color: activeFilter === 'all' ? BrandColors.requester : theme.tabIconDefault }]}>
+              {closingOrders.length}건
             </ThemedText>
-          </View>
-          <View style={styles.infoItem}>
-            <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>
+          </Pressable>
+          <Pressable
+            style={[styles.filterTab, activeFilter === 'in_progress' && { backgroundColor: isDark ? '#2d3320' : '#FFFBEB' }]}
+            onPress={() => setActiveFilter('in_progress')}
+          >
+            <ThemedText style={[styles.filterLabel, { color: activeFilter === 'in_progress' ? BrandColors.warning : theme.tabIconDefault }, activeFilter === 'in_progress' && { fontWeight: '700' }]}>
               업무중
             </ThemedText>
-            <ThemedText style={[styles.infoValue, { color: theme.text }]}>
-              {closingOrders.filter(o => ['in_progress', 'scheduled'].includes(o.status)).length}건
+            <ThemedText style={[styles.filterValue, { color: BrandColors.warning }]}>
+              {inProgressCount}건
             </ThemedText>
-          </View>
+          </Pressable>
+          <Pressable
+            style={[styles.filterTab, activeFilter === 'closing_submitted' && { backgroundColor: isDark ? '#1a2940' : '#FFF5F5' }]}
+            onPress={() => setActiveFilter('closing_submitted')}
+          >
+            <ThemedText style={[styles.filterLabel, { color: activeFilter === 'closing_submitted' ? BrandColors.requester : theme.tabIconDefault }, activeFilter === 'closing_submitted' && { fontWeight: '700' }]}>
+              마감 대기
+            </ThemedText>
+            <ThemedText style={[styles.filterValue, { color: BrandColors.requester }]}>
+              {closingSubmittedCount}건
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.filterTab, activeFilter === 'closing_completed' && { backgroundColor: isDark ? '#1a2e1a' : '#F0FFF4' }]}
+            onPress={() => setActiveFilter('closing_completed')}
+          >
+            <ThemedText style={[styles.filterLabel, { color: activeFilter === 'closing_completed' ? BrandColors.success : theme.tabIconDefault }, activeFilter === 'closing_completed' && { fontWeight: '700' }]}>
+              마감 완료
+            </ThemedText>
+            <ThemedText style={[styles.filterValue, { color: BrandColors.success }]}>
+              {closingCompletedCount}건
+            </ThemedText>
+          </Pressable>
         </View>
       </Card>
     </View>
@@ -148,7 +196,7 @@ export default function RequesterClosingScreen({ navigation }: RequesterClosingS
 
   return (
     <OrderListPage
-      data={closingOrders}
+      data={filteredOrders}
       context="requester_closing"
       adapter={adaptRequesterOrder}
       isLoading={isLoading}
@@ -158,8 +206,18 @@ export default function RequesterClosingScreen({ navigation }: RequesterClosingS
       onCardAction={handleCardAction}
       ListHeaderComponent={headerComponent}
       emptyIcon="document-text-outline"
-      emptyTitle="마감 대기 중인 오더가 없습니다"
-      emptySubtitle="헬퍼가 마감자료를 제출하면 여기에 표시됩니다"
+      emptyTitle={
+        activeFilter === 'all' ? '마감 관련 오더가 없습니다' :
+        activeFilter === 'in_progress' ? '업무중인 오더가 없습니다' :
+        activeFilter === 'closing_submitted' ? '마감 대기 중인 오더가 없습니다' :
+        '마감 완료된 오더가 없습니다'
+      }
+      emptySubtitle={
+        activeFilter === 'all' ? '헬퍼가 마감자료를 제출하면 여기에 표시됩니다' :
+        activeFilter === 'in_progress' ? '현재 진행 중인 오더가 없습니다' :
+        activeFilter === 'closing_submitted' ? '헬퍼가 마감자료를 제출하면 여기에 표시됩니다' :
+        '아직 마감 완료된 오더가 없습니다'
+      }
     />
   );
 }
@@ -169,21 +227,27 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
   infoCard: {
-    padding: Spacing.lg,
+    padding: Spacing.sm,
   },
-  infoRow: {
+  filterRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  infoItem: {
     alignItems: 'center',
+    gap: 4,
   },
-  infoLabel: {
+  filterTab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+  },
+  filterLabel: {
     ...Typography.small,
-    marginBottom: Spacing.xs,
+    fontSize: 11,
+    marginBottom: 2,
   },
-  infoValue: {
-    ...Typography.h3,
+  filterValue: {
+    ...Typography.body,
     fontWeight: '700',
+    fontSize: 16,
   },
 });

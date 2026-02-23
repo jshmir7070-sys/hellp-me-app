@@ -70,7 +70,11 @@ import {
   type PricingSnapshot, type InsertPricingSnapshot,
   type BalanceInvoice, type InsertBalanceInvoice,
   type Payout, type InsertPayout,
-  type PayoutEvent, type InsertPayoutEvent } from "@shared/schema";
+  type PayoutEvent, type InsertPayoutEvent,
+  monthlySettlementStatements,
+  type MonthlySettlementStatement, type InsertMonthlySettlementStatement,
+  settingChangeHistory,
+  type SettingChangeHistory, type InsertSettingChangeHistory } from "@shared/schema";
 import { eq, and, desc, inArray, notInArray, gte, isNull, isNotNull, lte, sql, not, or } from "drizzle-orm";
 import { ne } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -84,6 +88,7 @@ export interface IStorage {
   getUserByKakaoId(kakaoId: string): Promise<User | undefined>;
   getUserByNaverId(naverId: string): Promise<User | undefined>;
   getUserByPersonalCode(code: string): Promise<User | undefined>;
+  getUserByPhoneAndName(phoneNumber: string, name: string): Promise<User | undefined>;
   getUser(id: string): Promise<User | undefined>;
 
   // Helper credentials
@@ -140,6 +145,7 @@ export interface IStorage {
   // Orders
   getAllOrders(status?: string, options?: { includeHidden?: boolean }): Promise<Order[]>;
   getOrdersByRequesterId(requesterId: string, options?: { includeHidden?: boolean }): Promise<Order[]>;
+  getOrdersByMatchedHelper(helperId: string): Promise<Order[]>;
   getOrder(id: number): Promise<Order | undefined>;
   createOrder(order: InsertOrder): Promise<Order>;
   updateOrder(id: number, updates: Partial<InsertOrder>): Promise<Order>;
@@ -155,6 +161,7 @@ export interface IStorage {
 
   // Notifications
   getUserNotifications(userId: string): Promise<Notification[]>;
+  getNotification(id: number): Promise<Notification | undefined>;
   getUnreadNotificationCount(userId: string): Promise<number>;
   createNotification(notification: InsertNotification): Promise<Notification>;
   markNotificationAsRead(id: number): Promise<Notification>;
@@ -204,6 +211,7 @@ export interface IStorage {
   
   // Order contracts
   getOrderContracts(orderId: number): Promise<Contract[]>;
+  getOrderContract(orderId: number): Promise<Contract | null>;
 
   // Admin
   getAllUsers(): Promise<User[]>;
@@ -343,6 +351,7 @@ export interface IStorage {
   getAnnouncementRecipients(announcementId: number): Promise<AnnouncementRecipient[]>;
   getUserAnnouncements(userId: string, userRole: string): Promise<Announcement[]>;
   getPopupAnnouncements(userRole: string): Promise<Announcement[]>;
+  getBannerAnnouncements(userRole: string): Promise<Announcement[]>;
 
   // Job contracts (건별 전자계약)
   createJobContract(contract: InsertJobContract): Promise<JobContract>;
@@ -621,6 +630,26 @@ export interface IStorage {
   // Order Status Events (오더 상태 이벤트)
   getOrderStatusEvents(orderId: number): Promise<OrderStatusEvent[]>;
   createOrderStatusEvent(event: InsertOrderStatusEvent): Promise<OrderStatusEvent>;
+
+  // Monthly Settlement Statements (월 정산서)
+  createMonthlySettlementStatement(data: InsertMonthlySettlementStatement): Promise<MonthlySettlementStatement>;
+  getMonthlySettlementStatementsByHelper(helperId: string): Promise<MonthlySettlementStatement[]>;
+  getMonthlySettlementStatementByHelperAndMonth(helperId: string, year: number, month: number): Promise<MonthlySettlementStatement | undefined>;
+  getMonthlySettlementStatementById(id: number): Promise<MonthlySettlementStatement | undefined>;
+  updateMonthlySettlementStatement(id: number, updates: Partial<InsertMonthlySettlementStatement>): Promise<MonthlySettlementStatement>;
+  markMonthlyStatementViewed(id: number): Promise<MonthlySettlementStatement>;
+
+  // Setting Change History (설정 변경 이력)
+  createSettingChangeHistory(entry: InsertSettingChangeHistory): Promise<SettingChangeHistory>;
+  getSettingChangeHistory(filters?: {
+    settingType?: string;
+    status?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: SettingChangeHistory[]; total: number }>;
+  getPendingChanges(beforeDate?: Date): Promise<SettingChangeHistory[]>;
+  updateSettingChangeHistoryStatus(id: number, status: string, appliedAt?: Date): Promise<SettingChangeHistory>;
+  getSettingChangeHistoryById(id: number): Promise<SettingChangeHistory | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -658,6 +687,13 @@ export class DatabaseStorage implements IStorage {
 
   async getUserByPersonalCode(code: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.personalCode, code));
+    return user;
+  }
+
+  async getUserByPhoneAndName(phoneNumber: string, name: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(
+      and(eq(users.phoneNumber, phoneNumber), eq(users.name, name), eq(users.isHqStaff, false))
+    );
     return user;
   }
 
@@ -862,6 +898,12 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(orders).where(and(...conditions)).orderBy(desc(orders.createdAt));
   }
 
+  async getOrdersByMatchedHelper(helperId: string): Promise<Order[]> {
+    return await db.select().from(orders)
+      .where(eq(orders.matchedHelperId, helperId))
+      .orderBy(desc(orders.createdAt));
+  }
+
   // T-03: 헬퍼 중복 접수 제한용 - 헬퍼의 활성 오더 조회
   async getHelperActiveOrders(helperId: string, activeStatuses: string[]): Promise<Order[]> {
     return await db.select().from(orders)
@@ -1005,6 +1047,11 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(notifications)
       .where(eq(notifications.userId, userId))
       .orderBy(desc(notifications.createdAt));
+  }
+
+  async getNotification(id: number): Promise<Notification | undefined> {
+    const [notification] = await db.select().from(notifications).where(eq(notifications.id, id));
+    return notification;
   }
 
   async getUnreadNotificationCount(userId: string): Promise<number> {
@@ -1212,6 +1259,14 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(contracts)
       .where(eq(contracts.orderId, orderId))
       .orderBy(desc(contracts.createdAt));
+  }
+
+  async getOrderContract(orderId: number): Promise<Contract | null> {
+    const results = await db.select().from(contracts)
+      .where(eq(contracts.orderId, orderId))
+      .orderBy(desc(contracts.createdAt))
+      .limit(1);
+    return results[0] || null;
   }
 
   // Admin methods
@@ -1843,13 +1898,25 @@ export class DatabaseStorage implements IStorage {
 
   async getUserAnnouncements(userId: string, userRole: string): Promise<Announcement[]> {
     const allAnnouncements = await db.select().from(announcements).orderBy(desc(announcements.createdAt));
-    return allAnnouncements.filter(a =>
-      a.targetAudience === 'all' || a.targetAudience === userRole
-    );
+    const now = new Date();
+    return allAnnouncements
+      .filter(a =>
+        (a.targetAudience === 'all' || a.targetAudience === userRole) &&
+        (!a.expiresAt || new Date(a.expiresAt) > now)
+      )
+      .sort((a, b) => {
+        // priority 정렬: urgent > high > normal
+        const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2 };
+        const pa = priorityOrder[a.priority || 'normal'] ?? 2;
+        const pb = priorityOrder[b.priority || 'normal'] ?? 2;
+        if (pa !== pb) return pa - pb;
+        // 동일 우선순위면 최신순
+        return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
+      });
   }
 
   async getPopupAnnouncements(userRole: string): Promise<Announcement[]> {
-    return await db.select().from(announcements)
+    const results = await db.select().from(announcements)
       .where(and(
         eq(announcements.isPopup, true),
         or(
@@ -1861,8 +1928,46 @@ export class DatabaseStorage implements IStorage {
           gte(announcements.expiresAt, new Date())
         )
       ))
-      .orderBy(desc(announcements.createdAt))
-      .limit(5);
+      .orderBy(desc(announcements.createdAt));
+    // priority 정렬: urgent > high > normal
+    const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2 };
+    results.sort((a, b) => {
+      const pa = priorityOrder[a.priority || 'normal'] ?? 2;
+      const pb = priorityOrder[b.priority || 'normal'] ?? 2;
+      if (pa !== pb) return pa - pb;
+      return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
+    });
+    // 공지 최대 5개, 광고 최대 10개 분리 후 합쳐서 반환 (클라이언트에서 type으로 분리)
+    const notices = results.filter(r => r.type !== 'ad').slice(0, 5);
+    const ads = results.filter(r => r.type === 'ad').slice(0, 10);
+    return [...notices, ...ads];
+  }
+
+  async getBannerAnnouncements(userRole: string): Promise<Announcement[]> {
+    const results = await db.select().from(announcements)
+      .where(and(
+        eq(announcements.isBanner, true),
+        eq(announcements.type, 'ad'),
+        or(
+          eq(announcements.targetAudience, 'all'),
+          eq(announcements.targetAudience, userRole)
+        ),
+        or(
+          isNull(announcements.expiresAt),
+          gte(announcements.expiresAt, new Date())
+        )
+      ))
+      .orderBy(desc(announcements.createdAt));
+    // priority 정렬: urgent > high > normal
+    const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2 };
+    results.sort((a, b) => {
+      const pa = priorityOrder[a.priority || 'normal'] ?? 2;
+      const pb = priorityOrder[b.priority || 'normal'] ?? 2;
+      if (pa !== pb) return pa - pb;
+      return new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime();
+    });
+    // 최대 3개 배너만 반환
+    return results.slice(0, 3);
   }
 
   // Job contracts (건별 전자계약)
@@ -3635,6 +3740,121 @@ export class DatabaseStorage implements IStorage {
       )
     );
     return result;
+  }
+
+  // Monthly Settlement Statements (월 정산서)
+  async createMonthlySettlementStatement(data: InsertMonthlySettlementStatement): Promise<MonthlySettlementStatement> {
+    const [created] = await db.insert(monthlySettlementStatements).values(data).returning();
+    return created;
+  }
+
+  async getMonthlySettlementStatementsByHelper(helperId: string): Promise<MonthlySettlementStatement[]> {
+    return await db.select().from(monthlySettlementStatements)
+      .where(eq(monthlySettlementStatements.helperId, helperId))
+      .orderBy(desc(monthlySettlementStatements.year), desc(monthlySettlementStatements.month));
+  }
+
+  async getMonthlySettlementStatementByHelperAndMonth(helperId: string, year: number, month: number): Promise<MonthlySettlementStatement | undefined> {
+    const [statement] = await db.select().from(monthlySettlementStatements)
+      .where(and(
+        eq(monthlySettlementStatements.helperId, helperId),
+        eq(monthlySettlementStatements.year, year),
+        eq(monthlySettlementStatements.month, month)
+      ));
+    return statement;
+  }
+
+  async getMonthlySettlementStatementById(id: number): Promise<MonthlySettlementStatement | undefined> {
+    const [statement] = await db.select().from(monthlySettlementStatements)
+      .where(eq(monthlySettlementStatements.id, id));
+    return statement;
+  }
+
+  async updateMonthlySettlementStatement(id: number, updates: Partial<InsertMonthlySettlementStatement>): Promise<MonthlySettlementStatement> {
+    const [updated] = await db.update(monthlySettlementStatements)
+      .set(updates)
+      .where(eq(monthlySettlementStatements.id, id))
+      .returning();
+    return updated;
+  }
+
+  async markMonthlyStatementViewed(id: number): Promise<MonthlySettlementStatement> {
+    const [updated] = await db.update(monthlySettlementStatements)
+      .set({ status: "viewed", viewedAt: new Date() })
+      .where(eq(monthlySettlementStatements.id, id))
+      .returning();
+    return updated;
+  }
+
+  // ==========================================
+  // Setting Change History (설정 변경 이력)
+  // ==========================================
+  async createSettingChangeHistory(entry: InsertSettingChangeHistory): Promise<SettingChangeHistory> {
+    const [created] = await db.insert(settingChangeHistory).values(entry).returning();
+    return created;
+  }
+
+  async getSettingChangeHistory(filters?: {
+    settingType?: string;
+    status?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: SettingChangeHistory[]; total: number }> {
+    const conditions: any[] = [];
+    if (filters?.settingType) {
+      conditions.push(eq(settingChangeHistory.settingType, filters.settingType));
+    }
+    if (filters?.status) {
+      conditions.push(eq(settingChangeHistory.status, filters.status));
+    }
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // 총 개수 조회
+    const [countResult] = await db.select({ count: sql<number>`count(*)` })
+      .from(settingChangeHistory)
+      .where(whereClause);
+    const total = Number(countResult?.count || 0);
+
+    // 페이징
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 20;
+    const offset = (page - 1) * limit;
+
+    const data = await db.select().from(settingChangeHistory)
+      .where(whereClause)
+      .orderBy(desc(settingChangeHistory.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    return { data, total };
+  }
+
+  async getPendingChanges(beforeDate?: Date): Promise<SettingChangeHistory[]> {
+    const now = beforeDate || new Date();
+    const nowStr = now.toISOString().slice(0, 16).replace('T', ' ');
+
+    return db.select().from(settingChangeHistory)
+      .where(and(
+        eq(settingChangeHistory.status, "pending"),
+        lte(settingChangeHistory.effectiveFrom, nowStr)
+      ))
+      .orderBy(settingChangeHistory.effectiveFrom);
+  }
+
+  async updateSettingChangeHistoryStatus(id: number, status: string, appliedAt?: Date): Promise<SettingChangeHistory> {
+    const updates: any = { status };
+    if (appliedAt) updates.appliedAt = appliedAt;
+    const [updated] = await db.update(settingChangeHistory)
+      .set(updates)
+      .where(eq(settingChangeHistory.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getSettingChangeHistoryById(id: number): Promise<SettingChangeHistory | undefined> {
+    const [record] = await db.select().from(settingChangeHistory)
+      .where(eq(settingChangeHistory.id, id));
+    return record;
   }
 }
 

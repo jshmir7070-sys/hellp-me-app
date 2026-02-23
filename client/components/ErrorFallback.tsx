@@ -63,11 +63,11 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
 
       <View style={styles.content}>
         <Text style={[styles.title, { color: theme.text }]}>
-          Something went wrong
+          문제가 발생했습니다
         </Text>
 
         <Text style={[styles.message, { color: theme.text }]}>
-          Please reload the app to continue.
+          앱을 다시 로드해주세요.
         </Text>
 
         <Pressable
@@ -82,7 +82,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
           ]}
         >
           <Text style={[styles.buttonText, { color: theme.buttonText }]}>
-            Try Again
+            다시 시도
           </Text>
         </Pressable>
       </View>

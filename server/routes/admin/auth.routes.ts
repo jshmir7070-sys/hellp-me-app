@@ -570,7 +570,7 @@ export async function registerAuthRoutes(ctx: RouteContext): Promise<void> {
   });
 
   // Approve admin staff (generate new temp password and send SMS)
-  app.patch("/api/admin/staff/:id/approve", requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.patch("/api/admin/staff/:id/approve", adminAuth, requirePermission("staff.edit"), async (req: AuthenticatedRequest, res) => {
     try {
       const currentUser = req.user!;
 
@@ -629,7 +629,7 @@ export async function registerAuthRoutes(ctx: RouteContext): Promise<void> {
   });
 
   // Suspend admin staff
-  app.patch("/api/admin/staff/:id/suspend", requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.patch("/api/admin/staff/:id/suspend", adminAuth, requirePermission("staff.edit"), async (req: AuthenticatedRequest, res) => {
     try {
       const currentUser = req.user!;
 
@@ -666,7 +666,7 @@ export async function registerAuthRoutes(ctx: RouteContext): Promise<void> {
   });
 
   // Reactivate suspended admin staff
-  app.patch("/api/admin/staff/:id/reactivate", requireAuth, async (req: AuthenticatedRequest, res) => {
+  app.patch("/api/admin/staff/:id/reactivate", adminAuth, requirePermission("staff.edit"), async (req: AuthenticatedRequest, res) => {
     try {
       const currentUser = req.user!;
 

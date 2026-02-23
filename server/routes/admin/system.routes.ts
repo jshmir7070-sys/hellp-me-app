@@ -20,7 +20,9 @@ import {
   isOneOfStatus,
 } from "../../constants/order-status";
 import {
-  calculateVat
+  calculateVat,
+  calculateSettlement,
+  parseClosingReport,
 } from "../../lib/settlement-calculator";
 
 export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
@@ -102,7 +104,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     orderRegistrationFields, orderClosureReports, payments,
     taxInvoices, courierSettings, signupConsents, termsVersions, termsReConsents,
     auditLogs, teamIncentives, incentiveDetails, userLocationLatest, userLocationLogs,
-    destinationRegions, timeSlots,
+    destinationRegions, timeSlots, enterpriseAccounts,
     insertAdminBankAccountSchema, insertCarrierRateItemSchema, insertColdChainSettingSchema,
     insertCustomerServiceInquirySchema, insertDestinationPricingSchema, insertRefundPolicySchema,
     insertRequesterRefundAccountSchema, updateCustomerServiceInquirySchema,
@@ -114,6 +116,8 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
   const { SETTLEMENT_STATUS } = await import("../../utils/admin-audit");
   const { CAN_SELECT_HELPER_STATUSES } = await import("../../constants/order-status");
   const { DEFAULT_COURIERS } = await import("../../constants/defaultCouriers");
+  const { trackSettingChange } = await import("../../utils/setting-change-tracker");
+  const { settingChangeHistory } = schema;
   const { isValidImageBuffer, sanitizeFilename, MAX_FILE_SIZE } = await import("../../utils/file-validation");
   const { isNotNull } = await import("drizzle-orm");
 
@@ -139,6 +143,87 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
   }
 
   // ==================== ADMIN ROUTES ====================
+
+  // ==================== ADMIN DASHBOARD ROUTES ====================
+
+  // GET /api/admin/dashboard/charts - Dashboard data
+  app.get("/api/admin/dashboard/charts", adminAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+      // Get counts
+      const allOrders = await storage.getAllOrders();
+      const allUsers = await db.select().from(users);
+      const allDisputes = await db.select().from(disputes);
+
+      const activeOrders = allOrders.filter(o => !['completed', 'closed', 'cancelled'].includes(o.status)).length;
+      const newHelpers = allUsers.filter(u => u.role === 'helper' && new Date(u.createdAt) >= sevenDaysAgo).length;
+      const newRequesters = allUsers.filter(u => u.role === 'requester' && new Date(u.createdAt) >= sevenDaysAgo).length;
+      const openDisputes = allDisputes.filter(d => d.status === 'pending' || d.status === 'open').length;
+
+      // Daily orders for last 7 days
+      const dailyOrders: { date: string; count: number }[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+        const dateStr = d.toISOString().split('T')[0];
+        const count = allOrders.filter(o => o.createdAt && new Date(o.createdAt).toISOString().split('T')[0] === dateStr).length;
+        dailyOrders.push({ date: dateStr, count });
+      }
+
+      // Category data
+      const statusCounts: Record<string, number> = {};
+      allOrders.forEach(o => {
+        statusCounts[o.status] = (statusCounts[o.status] || 0) + 1;
+      });
+      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+      const categoryData = Object.entries(statusCounts).map(([name, value], i) => ({
+        name, value, color: colors[i % colors.length]
+      }));
+
+      res.json({
+        dailyOrders,
+        monthlyOrders: [],
+        categoryData,
+        courierData: [],
+        realtime: { activeOrders, newHelpers, newRequesters, openDisputes }
+      });
+    } catch (err: any) {
+      console.error("[Admin Dashboard] Charts error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // GET /api/admin/dashboard/settlement-stats - Settlement statistics
+  app.get("/api/admin/dashboard/settlement-stats", adminAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { year, month } = req.query as { year?: string; month?: string };
+      const targetYear = year ? parseInt(year) : new Date().getFullYear();
+      const targetMonth = month ? parseInt(month) : new Date().getMonth() + 1;
+      const period = `${targetYear}-${String(targetMonth).padStart(2, '0')}`;
+
+      const statements = await db.select().from(settlementStatements)
+        .where(eq(settlementStatements.period, period));
+
+      const totalAmount = statements.reduce((sum, s) => sum + Number(s.totalAmount || 0), 0);
+      const totalFees = statements.reduce((sum, s) => sum + Number(s.platformFee || 0), 0);
+      const completedCount = statements.filter(s => s.status === 'completed').length;
+      const pendingCount = statements.filter(s => s.status === 'pending').length;
+
+      res.json({
+        period,
+        totalAmount,
+        totalFees,
+        completedCount,
+        pendingCount,
+        totalCount: statements.length,
+        statements
+      });
+    } catch (err: any) {
+      console.error("[Admin Dashboard] Settlement stats error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
 
   // ==================== ADMIN SETTINGS ROUTES ====================
 
@@ -188,12 +273,13 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
   });
 
   // Update courier setting
-  app.patch("/api/admin/settings/couriers/:id", adminAuth, requirePermission("settings.edit"), async (req, res) => {
+  app.patch("/api/admin/settings/couriers/:id", adminAuth, requirePermission("settings.edit"), async (req: any, res) => {
     try {
       const {
         category, basePricePerBox, minDeliveryFee, minTotal,
         commissionRate, urgentCommissionRate, urgentSurchargeRate,
-        isDefault, isActive, sortOrder, applyToCategory
+        isDefault, isActive, sortOrder, applyToCategory,
+        effectiveFrom, changeReason
       } = req.body;
       const updates: Record<string, any> = {};
       if (category !== undefined) updates.category = category;
@@ -208,17 +294,34 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
       if (isActive !== undefined) updates.isActive = isActive;
       if (sortOrder !== undefined) updates.sortOrder = Number(sortOrder);
 
-      // 카테고리 기본값 변경 시 해당 카테고리 전체 택배사에 적용
+      // 변경 전 현재 값 조회
       const currentSetting = await storage.getCourierSettingById(Number(req.params.id));
-      if (currentSetting?.courierName.startsWith('(DEFAULT)') || applyToCategory) {
-        const targetCategory = currentSetting?.category || category;
-        if (targetCategory && minTotal !== undefined) {
-          await storage.updateCourierSettingsByCategory(targetCategory, { minTotal: Number(minTotal) });
-        }
-      }
 
-      const setting = await storage.updateCourierSetting(Number(req.params.id), updates);
-      res.json(setting);
+      const trackResult = await trackSettingChange(storage, {
+        settingType: "courier_settings",
+        entityId: String(req.params.id),
+        oldValue: currentSetting,
+        newValue: updates,
+        effectiveFrom,
+        reason: changeReason,
+        changedBy: req.user?.id,
+        changedByName: req.user?.name || req.user?.username,
+        applyFn: async () => {
+          // 카테고리 기본값 변경 시 해당 카테고리 전체 택배사에 적용
+          if (currentSetting?.courierName.startsWith('(DEFAULT)') || applyToCategory) {
+            const targetCategory = currentSetting?.category || category;
+            if (targetCategory && minTotal !== undefined) {
+              await storage.updateCourierSettingsByCategory(targetCategory, { minTotal: Number(minTotal) });
+            }
+          }
+          return storage.updateCourierSetting(Number(req.params.id), updates);
+        },
+      });
+
+      if (trackResult.scheduled) {
+        return res.json({ message: "예약 적용 등록됨", scheduled: true, effectiveFrom });
+      }
+      res.json(trackResult.result);
     } catch (err: any) {
       res.status(500).json({ message: "Internal server error" });
     }
@@ -516,7 +619,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.patch("/api/admin/settings/carrier-pricing-policies/:id", adminAuth, requirePermission("settings.edit"), async (req, res) => {
+  app.patch("/api/admin/settings/carrier-pricing-policies/:id", adminAuth, requirePermission("settings.edit"), async (req: any, res) => {
     try {
       const updates: Record<string, any> = { updatedAt: new Date() };
       const fields = ["carrierCode", "serviceType", "regionCode", "vehicleType", "unitType", "unitPriceSupply", "minChargeSupply", "effectiveFrom", "effectiveTo", "isActive"];
@@ -525,11 +628,33 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
           updates[f] = f.includes("Supply") || f.includes("Price") ? Number(req.body[f]) : req.body[f];
         }
       });
-      const [policy] = await db.update(carrierPricingPolicies)
-        .set(updates)
-        .where(eq(carrierPricingPolicies.id, Number(req.params.id)))
-        .returning();
-      res.json(policy);
+
+      // 변경 전 값 조회
+      const [currentPolicy] = await db.select().from(carrierPricingPolicies)
+        .where(eq(carrierPricingPolicies.id, Number(req.params.id)));
+
+      const trackResult = await trackSettingChange(storage, {
+        settingType: "carrier_pricing",
+        entityId: String(req.params.id),
+        oldValue: currentPolicy,
+        newValue: updates,
+        effectiveFrom: req.body.scheduledEffectiveFrom,
+        reason: req.body.changeReason,
+        changedBy: req.user?.id,
+        changedByName: req.user?.name || req.user?.username,
+        applyFn: async () => {
+          const [policy] = await db.update(carrierPricingPolicies)
+            .set(updates)
+            .where(eq(carrierPricingPolicies.id, Number(req.params.id)))
+            .returning();
+          return policy;
+        },
+      });
+
+      if (trackResult.scheduled) {
+        return res.json({ message: "예약 적용 등록됨", scheduled: true });
+      }
+      res.json(trackResult.result);
     } catch (err: any) {
       console.error("Update carrier pricing policy error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -580,7 +705,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.patch("/api/admin/settings/urgent-fee-policies/:id", adminAuth, requirePermission("settings.edit"), async (req, res) => {
+  app.patch("/api/admin/settings/urgent-fee-policies/:id", adminAuth, requirePermission("settings.edit"), async (req: any, res) => {
     try {
       const updates: Record<string, any> = { updatedAt: new Date() };
       const fields = ["carrierCode", "applyType", "value", "maxUrgentFeeSupply", "effectiveFrom", "effectiveTo", "isActive"];
@@ -589,11 +714,33 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
           updates[f] = f === "value" || f === "maxUrgentFeeSupply" ? Number(req.body[f]) : req.body[f];
         }
       });
-      const [policy] = await db.update(urgentFeePolicies)
-        .set(updates)
-        .where(eq(urgentFeePolicies.id, Number(req.params.id)))
-        .returning();
-      res.json(policy);
+
+      // 변경 전 값 조회
+      const [currentPolicy] = await db.select().from(urgentFeePolicies)
+        .where(eq(urgentFeePolicies.id, Number(req.params.id)));
+
+      const trackResult = await trackSettingChange(storage, {
+        settingType: "urgent_fee",
+        entityId: String(req.params.id),
+        oldValue: currentPolicy,
+        newValue: updates,
+        effectiveFrom: req.body.scheduledEffectiveFrom,
+        reason: req.body.changeReason,
+        changedBy: req.user?.id,
+        changedByName: req.user?.name || req.user?.username,
+        applyFn: async () => {
+          const [policy] = await db.update(urgentFeePolicies)
+            .set(updates)
+            .where(eq(urgentFeePolicies.id, Number(req.params.id)))
+            .returning();
+          return policy;
+        },
+      });
+
+      if (trackResult.scheduled) {
+        return res.json({ message: "예약 적용 등록됨", scheduled: true });
+      }
+      res.json(trackResult.result);
     } catch (err: any) {
       console.error("Update urgent fee policy error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -651,11 +798,8 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.patch("/api/admin/settings/platform-fee-policies/:id", adminAuth, requirePermission("settings.edit"), async (req, res) => {
+  app.patch("/api/admin/settings/platform-fee-policies/:id", adminAuth, requirePermission("settings.edit"), async (req: any, res) => {
     try {
-      if (req.body.isDefault) {
-        await db.update(platformFeePolicies).set({ isDefault: false }).where(eq(platformFeePolicies.isDefault, true));
-      }
       const updates: Record<string, any> = { updatedAt: new Date() };
       const fields = ["name", "baseOn", "feeType", "ratePercent", "fixedAmount", "minFee", "maxFee", "effectiveFrom", "effectiveTo", "isActive", "isDefault"];
       fields.forEach(f => {
@@ -663,11 +807,36 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
           updates[f] = ["ratePercent", "fixedAmount", "minFee", "maxFee"].includes(f) ? Number(req.body[f]) : req.body[f];
         }
       });
-      const [policy] = await db.update(platformFeePolicies)
-        .set(updates)
-        .where(eq(platformFeePolicies.id, Number(req.params.id)))
-        .returning();
-      res.json(policy);
+
+      // 변경 전 값 조회
+      const [currentPolicy] = await db.select().from(platformFeePolicies)
+        .where(eq(platformFeePolicies.id, Number(req.params.id)));
+
+      const trackResult = await trackSettingChange(storage, {
+        settingType: "platform_fee",
+        entityId: String(req.params.id),
+        oldValue: currentPolicy,
+        newValue: updates,
+        effectiveFrom: req.body.scheduledEffectiveFrom,
+        reason: req.body.changeReason,
+        changedBy: req.user?.id,
+        changedByName: req.user?.name || req.user?.username,
+        applyFn: async () => {
+          if (req.body.isDefault) {
+            await db.update(platformFeePolicies).set({ isDefault: false }).where(eq(platformFeePolicies.isDefault, true));
+          }
+          const [policy] = await db.update(platformFeePolicies)
+            .set(updates)
+            .where(eq(platformFeePolicies.id, Number(req.params.id)))
+            .returning();
+          return policy;
+        },
+      });
+
+      if (trackResult.scheduled) {
+        return res.json({ message: "예약 적용 등록됨", scheduled: true });
+      }
+      res.json(trackResult.result);
     } catch (err: any) {
       console.error("Update platform fee policy error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -710,24 +879,47 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.patch("/api/admin/settings/refund-policies/:id", adminAuth, requirePermission("settings.edit"), async (req, res) => {
+  app.patch("/api/admin/settings/refund-policies/:id", adminAuth, requirePermission("settings.edit"), async (req: any, res) => {
     try {
-      const { name, beforeMatchingRefundRate, afterMatchingRefundRate, effectiveFrom, effectiveTo, isActive, isDefault } = req.body;
-      const [updated] = await db
-        .update(refundPolicies)
-        .set({
-          name,
-          beforeMatchingRefundRate,
-          afterMatchingRefundRate,
-          effectiveFrom,
-          effectiveTo,
-          isActive,
-          isDefault,
-          updatedAt: new Date()
-        })
-        .where(eq(refundPolicies.id, Number(req.params.id)))
-        .returning();
-      res.json(updated);
+      const { name, beforeMatchingRefundRate, afterMatchingRefundRate, effectiveFrom, effectiveTo, isActive, isDefault, scheduledEffectiveFrom, changeReason } = req.body;
+      const updateData = {
+        name,
+        beforeMatchingRefundRate,
+        afterMatchingRefundRate,
+        effectiveFrom,
+        effectiveTo,
+        isActive,
+        isDefault,
+        updatedAt: new Date()
+      };
+
+      // 변경 전 값 조회
+      const [currentPolicy] = await db.select().from(refundPolicies)
+        .where(eq(refundPolicies.id, Number(req.params.id)));
+
+      const trackResult = await trackSettingChange(storage, {
+        settingType: "refund_policy",
+        entityId: String(req.params.id),
+        oldValue: currentPolicy,
+        newValue: updateData,
+        effectiveFrom: scheduledEffectiveFrom,
+        reason: changeReason,
+        changedBy: req.user?.id,
+        changedByName: req.user?.name || req.user?.username,
+        applyFn: async () => {
+          const [updated] = await db
+            .update(refundPolicies)
+            .set(updateData)
+            .where(eq(refundPolicies.id, Number(req.params.id)))
+            .returning();
+          return updated;
+        },
+      });
+
+      if (trackResult.scheduled) {
+        return res.json({ message: "예약 적용 등록됨", scheduled: true });
+      }
+      res.json(trackResult.result);
     } catch (err: any) {
       console.error("Update refund policy error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -1027,14 +1219,33 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
   });
 
   // Update team commission override
-  app.patch("/api/admin/settings/team-commissions/:id", adminAuth, requirePermission("settings.edit"), async (req, res) => {
+  app.patch("/api/admin/settings/team-commissions/:id", adminAuth, requirePermission("settings.edit"), async (req: any, res) => {
     try {
-      const { commissionRate, notes } = req.body;
+      const { commissionRate, notes, effectiveFrom, changeReason } = req.body;
       const updates: Record<string, any> = {};
       if (commissionRate !== undefined) updates.commissionRate = Number(commissionRate);
       if (notes !== undefined) updates.notes = notes;
-      const override = await storage.updateTeamCommissionOverride(Number(req.params.id), updates);
-      res.json(override);
+
+      // 변경 전 값 조회
+      const [currentOverride] = await db.select().from(schema.teamCommissionOverrides)
+        .where(eq(schema.teamCommissionOverrides.id, Number(req.params.id)));
+
+      const trackResult = await trackSettingChange(storage, {
+        settingType: "team_commission",
+        entityId: String(req.params.id),
+        oldValue: currentOverride,
+        newValue: updates,
+        effectiveFrom,
+        reason: changeReason,
+        changedBy: req.user?.id,
+        changedByName: req.user?.name || req.user?.username,
+        applyFn: async () => storage.updateTeamCommissionOverride(Number(req.params.id), updates),
+      });
+
+      if (trackResult.scheduled) {
+        return res.json({ message: "예약 적용 등록됨", scheduled: true, effectiveFrom });
+      }
+      res.json(trackResult.result);
     } catch (err: any) {
       res.status(500).json({ message: "Internal server error" });
     }
@@ -1269,18 +1480,221 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.post("/api/admin/settings/system", adminAuth, requirePermission("settings.edit"), async (req, res) => {
+  app.post("/api/admin/settings/system", adminAuth, requirePermission("settings.edit"), async (req: any, res) => {
     try {
-      const { key, value, description } = req.body;
+      const { key, value, description, effectiveFrom, changeReason } = req.body;
       if (!key || value === undefined) {
         return res.status(400).json({ message: "key와 value는 필수입니다" });
       }
-      const setting = await storage.upsertSystemSetting(key, String(value), description);
-      res.json(setting);
+
+      // 변경 전 값 조회
+      let oldValue = null;
+      try {
+        const existing = await storage.getSystemSetting(key);
+        oldValue = existing?.value || null;
+      } catch {}
+
+      const trackResult = await trackSettingChange(storage, {
+        settingType: "system_setting",
+        entityId: key,
+        oldValue: { value: oldValue, description },
+        newValue: { value: String(value), description },
+        effectiveFrom,
+        reason: changeReason,
+        changedBy: req.user?.id,
+        changedByName: req.user?.name || req.user?.username,
+        applyFn: async () => storage.upsertSystemSetting(key, String(value), description),
+      });
+
+      if (trackResult.scheduled) {
+        return res.json({ message: "예약 적용 등록됨", scheduled: true, effectiveFrom });
+      }
+      res.json(trackResult.result);
     } catch (err: any) {
       res.status(500).json({ message: "Internal server error" });
     }
   });
+
+  // ==========================================
+  // Setting Change History (설정 변경 이력) API
+  // ==========================================
+
+  // 변경 이력 조회 (페이징 + 필터)
+  app.get("/api/admin/settings/change-history", adminAuth, requirePermission("settings.view"), async (req: any, res: any) => {
+    try {
+      const { settingType, status, page, limit } = req.query;
+      const result = await storage.getSettingChangeHistory({
+        settingType: settingType as string | undefined,
+        status: status as string | undefined,
+        page: page ? Number(page) : 1,
+        limit: limit ? Number(limit) : 20,
+      });
+      res.json(result);
+    } catch (err: any) {
+      console.error("Error fetching change history:", err);
+      res.status(500).json({ message: "변경 이력 조회 실패" });
+    }
+  });
+
+  // 대기 중인 예약 변경 목록
+  app.get("/api/admin/settings/change-history/pending", adminAuth, requirePermission("settings.view"), async (req: any, res: any) => {
+    try {
+      // effectiveFrom 관계없이 모든 pending 조회 (미래 포함)
+      const allPending = await db.select().from(settingChangeHistory)
+        .where(eq(settingChangeHistory.status, "pending"))
+        .orderBy(settingChangeHistory.effectiveFrom);
+      res.json(allPending);
+    } catch (err: any) {
+      console.error("Error fetching pending changes:", err);
+      res.status(500).json({ message: "대기 변경 조회 실패" });
+    }
+  });
+
+  // 예약 변경 취소
+  app.post("/api/admin/settings/change-history/:id/cancel", adminAuth, requirePermission("settings.edit"), async (req: any, res: any) => {
+    try {
+      const id = Number(req.params.id);
+      const record = await storage.getSettingChangeHistoryById(id);
+      if (!record) {
+        return res.status(404).json({ message: "이력을 찾을 수 없습니다" });
+      }
+      if (record.status !== "pending") {
+        return res.status(400).json({ message: "대기 상태의 변경만 취소할 수 있습니다" });
+      }
+      const updated = await storage.updateSettingChangeHistoryStatus(id, "cancelled");
+      res.json(updated);
+    } catch (err: any) {
+      console.error("Error cancelling change:", err);
+      res.status(500).json({ message: "취소 실패" });
+    }
+  });
+
+  // 변경 롤백 (이전 값으로 복원)
+  app.post("/api/admin/settings/change-history/:id/rollback", adminAuth, requirePermission("settings.edit"), async (req: any, res: any) => {
+    try {
+      const id = Number(req.params.id);
+      const record = await storage.getSettingChangeHistoryById(id);
+      if (!record) {
+        return res.status(404).json({ message: "이력을 찾을 수 없습니다" });
+      }
+      if (record.status !== "active") {
+        return res.status(400).json({ message: "활성 상태의 변경만 롤백할 수 있습니다" });
+      }
+
+      // oldValue를 해당 테이블에 재적용
+      const { activatePendingChanges } = await import("../../utils/scheduled-settings");
+      // 롤백: oldValue를 newValue로, 현재 값을 oldValue로 하여 즉시 적용
+      const rollbackResult = await trackSettingChange(storage, {
+        settingType: record.settingType,
+        entityId: record.entityId || undefined,
+        fieldName: record.fieldName || undefined,
+        oldValue: record.newValue,  // 현재 값 (롤백 전)
+        newValue: record.oldValue,  // 복원할 값
+        reason: `롤백: 이력 #${record.id} 복원 (${req.body?.reason || ""})`,
+        changedBy: req.user?.id,
+        changedByName: req.user?.name || req.user?.username,
+        applyFn: async () => {
+          // scheduled-settings의 applyChange와 동일한 로직
+          const parsedOldValue = safeParseJSON(record.oldValue);
+          switch (record.settingType) {
+            case "courier_settings":
+              return storage.updateCourierSetting(Number(record.entityId), parsedOldValue);
+            case "team_commission":
+              return storage.updateTeamCommissionOverride(Number(record.entityId), parsedOldValue);
+            case "system_setting":
+              const val = typeof parsedOldValue === 'object' ? String(parsedOldValue.value) : String(parsedOldValue);
+              return storage.upsertSystemSetting(record.entityId!, val);
+            case "platform_fee":
+              return db.update(platformFeePolicies)
+                .set({ ...parsedOldValue, updatedAt: new Date() })
+                .where(eq(platformFeePolicies.id, Number(record.entityId)));
+            case "urgent_fee":
+              return db.update(urgentFeePolicies)
+                .set({ ...parsedOldValue, updatedAt: new Date() })
+                .where(eq(urgentFeePolicies.id, Number(record.entityId)));
+            case "carrier_pricing":
+              return db.update(carrierPricingPolicies)
+                .set({ ...parsedOldValue, updatedAt: new Date() })
+                .where(eq(carrierPricingPolicies.id, Number(record.entityId)));
+            case "refund_policy":
+              return db.update(refundPolicies)
+                .set({ ...parsedOldValue, updatedAt: new Date() })
+                .where(eq(refundPolicies.id, Number(record.entityId)));
+            default:
+              throw new Error(`Unknown settingType: ${record.settingType}`);
+          }
+        },
+      });
+
+      // 원본 이력 상태 → rolled_back
+      await db.update(settingChangeHistory)
+        .set({
+          status: "rolled_back",
+          rolledBackBy: req.user?.id,
+          rolledBackAt: new Date(),
+        })
+        .where(eq(settingChangeHistory.id, id));
+
+      res.json({ message: "롤백 완료", rollbackHistoryId: rollbackResult.historyId });
+    } catch (err: any) {
+      console.error("Error rolling back change:", err);
+      res.status(500).json({ message: "롤백 실패" });
+    }
+  });
+
+  // 계약서용 동적 설정값 제공 API
+  app.get("/api/settings/contract-values", async (req: any, res: any) => {
+    try {
+      // 계약금율
+      const depositRate = await getDepositRate();
+
+      // 수수료 상한 (system_settings에서 조회 또는 기본값 30%)
+      let commissionRateMax = 30;
+      try {
+        const maxSetting = await storage.getSystemSetting("commission_rate_max");
+        if (maxSetting) commissionRateMax = Number(maxSetting.value) || 30;
+      } catch {}
+
+      // 환불 정책 (활성 기본값)
+      let refundBeforeMatching = 100;
+      let refundAfterMatching = 90;
+      try {
+        const activePolicy = await getActiveRefundPolicy();
+        if (activePolicy) {
+          refundBeforeMatching = activePolicy.beforeMatchingRefundRate ?? 100;
+          refundAfterMatching = activePolicy.afterMatchingRefundRate ?? 90;
+        }
+      } catch {}
+
+      // 플랫폼 수수료율 (기본 정책)
+      let platformFeeRate = 8;
+      try {
+        const [defaultPolicy] = await db.select().from(platformFeePolicies)
+          .where(and(
+            eq(platformFeePolicies.isActive, true),
+            eq(platformFeePolicies.isDefault, true)
+          ))
+          .limit(1);
+        if (defaultPolicy?.ratePercent) platformFeeRate = defaultPolicy.ratePercent;
+      } catch {}
+
+      res.json({
+        depositRate,
+        commissionRateMax,
+        refundBeforeMatching,
+        refundAfterMatching,
+        platformFeeRate,
+      });
+    } catch (err: any) {
+      console.error("Error fetching contract values:", err);
+      res.status(500).json({ message: "설정값 조회 실패" });
+    }
+  });
+
+  function safeParseJSON(str: string | null): any {
+    if (str === null || str === undefined) return null;
+    try { return JSON.parse(str); } catch { return str; }
+  }
 
   // Payment reminders routes
   app.get("/api/admin/payment-reminders", adminAuth, requirePermission("payments.view"), async (req, res) => {
@@ -1433,6 +1847,18 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
+  // GET /api/announcements/banners — 인라인 배너 광고 조회 (앱 클라이언트용)
+  app.get("/api/announcements/banners", requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const user = req.user!;
+      const banners = await storage.getBannerAnnouncements(user.role);
+      res.json(banners);
+    } catch (err: any) {
+      console.error("Banner announcements error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Announcement routes (본사 공지)
   app.get("/api/announcements", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
@@ -1485,23 +1911,37 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.post("/api/admin/announcements", adminAuth, requirePermission("notifications.send"), async (req, res) => {
+  app.post("/api/admin/announcements", adminAuth, requirePermission("notifications.send"), async (req: AuthenticatedRequest, res) => {
     try {
-      const { title, content, targetAudience, createdBy, imageUrl, linkUrl, isPopup, priority, expiresAt } = req.body;
-      if (!title || !content || !targetAudience || !createdBy) {
+      const { title, content, targetAudience, createdBy, imageUrl, linkUrl, isPopup, isBanner, type, priority, expiresAt } = req.body;
+
+      // createdBy: 클라이언트에서 보낸 값 사용, 없으면 인증된 admin의 userId 사용
+      const resolvedCreatedBy = createdBy || req.user?.id;
+
+      if (!title || !content || !targetAudience || !resolvedCreatedBy) {
         return res.status(400).json({ message: "필수 필드를 모두 입력해주세요" });
       }
+
+      // 광고 타입은 이미지 필수
+      if (type === 'ad' && !imageUrl) {
+        return res.status(400).json({ message: "광고 타입은 이미지가 필수입니다" });
+      }
+
+      // expiresAt 처리: 빈 문자열이면 null, 유효한 날짜면 그대로
+      const resolvedExpiresAt = expiresAt && expiresAt.trim() !== '' ? expiresAt : null;
 
       const announcement = await storage.createAnnouncement({
         title,
         content,
         targetAudience,
-        createdBy,
+        createdBy: resolvedCreatedBy,
         imageUrl: imageUrl || null,
         linkUrl: linkUrl || null,
         isPopup: isPopup || false,
+        isBanner: isBanner || false,
+        type: type || "notice",
         priority: priority || "normal",
-        expiresAt: expiresAt || null,
+        expiresAt: resolvedExpiresAt,
       });
 
       // Create notifications for target users
@@ -1532,8 +1972,9 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         recipientCount: targetUsers.length,
       });
     } catch (err: any) {
-      console.error("Announcement creation error:", err);
-      res.status(500).json({ message: "Internal server error" });
+      console.error("Announcement creation error:", err?.message || err);
+      console.error("Announcement creation detail:", JSON.stringify({ title, content, targetAudience, createdBy, type, isPopup, isBanner }));
+      res.status(500).json({ message: err?.message || "Internal server error" });
     }
   });
 
@@ -1699,7 +2140,10 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         email: user.email || "",
         nickname: user.nickname || credentials?.name || "",
         address: user.address || credentials?.address || "",
+        addressDetail: user.addressDetail || "",
         birthDate: user.birthDate || "",
+        profileImageUrl: (user as any).profileImageUrl || null,
+        profileImage: (user as any).profileImageUrl || null,
         categories: credentials?.category ? [credentials.category] : [],
         regions: [],
         vehicleType: vehicle?.vehicleType || "",
@@ -2113,7 +2557,8 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
   // 정산 명세서 (Settlement Statements)
   app.post("/api/settlement-statements", requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const { orderId, helperId, basePay, additionalPay, penalty, deduction, lineItems, ...rest } = req.body;
+      const { orderId, helperId, basePay, additionalPay, penalty, deduction, lineItems,
+        notes, settlementDate, status: stmtStatus, periodStart, periodEnd } = req.body;
 
       // 수수료율 결정 로직
       let commissionRate = 0;
@@ -2145,27 +2590,37 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         }
       }
 
-      // 3. 금액 계산
+      // 3. 금액 계산 (basePay, additionalPay는 공급가 기준 → VAT 별도 계산)
       const basePayAmount = Number(basePay) || 0;
       const additionalPayAmount = Number(additionalPay) || 0;
       const penaltyAmount = Number(penalty) || 0;
       const deductionAmount = Number(deduction) || 0;
 
-      const totalAmount = basePayAmount + additionalPayAmount;
+      const supplyAmount = basePayAmount + additionalPayAmount;
+      const vatAmount = Math.round(supplyAmount * 0.1);
+      const totalAmount = supplyAmount + vatAmount;
       const commissionAmount = Math.round(totalAmount * (commissionRate / 100));
       const netAmount = totalAmount - commissionAmount - penaltyAmount - deductionAmount;
 
+      // 허용된 필드만 명시적으로 전달 (...rest 사용 금지 — injection 방지)
       const statement = await storage.createSettlementStatement({
         orderId,
+        helperId,
         basePay: basePayAmount,
         additionalPay: additionalPayAmount,
         penalty: penaltyAmount,
         deduction: deductionAmount,
         commissionRate,
         commissionAmount,
+        supplyAmount,
+        vatAmount,
         totalAmount,
         netAmount,
-        ...rest,
+        ...(notes != null && { notes }),
+        ...(settlementDate != null && { settlementDate }),
+        ...(stmtStatus != null && { status: stmtStatus }),
+        ...(periodStart != null && { periodStart }),
+        ...(periodEnd != null && { periodEnd }),
       });
 
       // 정산 항목 상세 생성
@@ -2339,7 +2794,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.get("/api/incident-reports/:id", async (req, res) => {
+  app.get("/api/incident-reports/:id", requireAuth, async (req, res) => {
     try {
       const report = await storage.getIncidentReport(Number(req.params.id));
       if (!report) return res.status(404).json({ message: "Report not found" });
@@ -2453,7 +2908,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.get("/api/substitute-requests/pending", async (req, res) => {
+  app.get("/api/substitute-requests/pending", requireAuth, async (req, res) => {
     try {
       const requests = await storage.getPendingSubstituteRequests();
       res.json(requests);
@@ -3298,7 +3753,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
   });
 
   // 분쟁 액션 이력 조회
-  app.get("/api/incidents/:id/actions", async (req, res) => {
+  app.get("/api/incidents/:id/actions", requireAuth, async (req, res) => {
     try {
       const actions = await storage.getIncidentActions(Number(req.params.id));
       res.json(actions);
@@ -3308,7 +3763,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
   });
 
   // 계약 실행 이벤트 조회
-  app.get("/api/contracts/:id/execution-events", async (req, res) => {
+  app.get("/api/contracts/:id/execution-events", requireAuth, async (req, res) => {
     try {
       const events = await storage.getContractExecutionEventsByContract(
         Number(req.params.id),
@@ -3320,7 +3775,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.get("/api/job-contracts/:id/execution-events", async (req, res) => {
+  app.get("/api/job-contracts/:id/execution-events", requireAuth, async (req, res) => {
     try {
       const events = await storage.getContractExecutionEventsByContract(
         Number(req.params.id),
@@ -3350,7 +3805,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  app.get("/api/contracts/:id/documents", async (req, res) => {
+  app.get("/api/contracts/:id/documents", requireAuth, async (req, res) => {
     try {
       const documents = await storage.getContractDocuments(Number(req.params.id));
       res.json(documents);
@@ -3588,18 +4043,27 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         return res.status(404).json({ message: "요청자를 찾을 수 없습니다" });
       }
 
-      const [business, serviceAgreement, refundAccountResult] = await Promise.all([
+      const [business, serviceAgreement, refundAccountResult, userOrders, consentResult, allSanctions] = await Promise.all([
         storage.getRequesterBusiness(requesterId),
         storage.getRequesterServiceAgreement(requesterId),
         db.select().from(requesterRefundAccounts).where(eq(requesterRefundAccounts.userId, requesterId)).limit(1),
+        storage.getOrders().then(orders => orders.filter(o => o.requesterId === requesterId)),
+        db.select().from(signupConsents).where(eq(signupConsents.userId, requesterId)).limit(1),
+        storage.getAllUserSanctions(),
       ]);
       const refundAccount = refundAccountResult[0] || null;
+      const consent = consentResult[0] || null;
+      const userSanctionsList = allSanctions.filter(s => s.userId === requesterId);
 
       // 요청자 고유번호 생성 (12자리)
       const generateRequesterCode = (id: string) => {
         const hash = id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
         return String(hash).padStart(12, '0').slice(-12);
       };
+
+      // 관리자 이름 매핑 (제재 생성자)
+      const adminUsers = await storage.getAllUsers();
+      const adminMap = new Map(adminUsers.map(u => [u.id, u.name]));
 
       res.json({
         user: {
@@ -3608,11 +4072,18 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
           email: user.email,
           phoneNumber: user.phoneNumber,
           address: user.address,
+          profileImageUrl: user.profileImageUrl,
           onboardingStatus: user.onboardingStatus,
           onboardingReviewedAt: user.onboardingReviewedAt,
           onboardingRejectReason: user.onboardingRejectReason,
           requesterCode: generateRequesterCode(user.id),
           createdAt: user.createdAt,
+        },
+        orderStats: {
+          total: userOrders.length,
+          active: userOrders.filter(o => !['completed', 'cancelled', 'deleted'].includes(o.status || '')).length,
+          completed: userOrders.filter(o => o.status === 'completed').length,
+          cancelled: userOrders.filter(o => o.status === 'cancelled').length,
         },
         business: business ? {
           businessNumber: business.businessNumber,
@@ -3641,6 +4112,42 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
           createdAt: refundAccount.createdAt,
           updatedAt: refundAccount.updatedAt,
         } : null,
+        // 가입시 동의사항
+        signupConsent: consent ? {
+          termsAgreed: consent.termsAgreed,
+          privacyAgreed: consent.privacyAgreed,
+          locationAgreed: consent.locationAgreed,
+          paymentAgreed: consent.paymentAgreed,
+          liabilityAgreed: consent.liabilityAgreed,
+          electronicAgreed: consent.electronicAgreed,
+          marketingAgreed: consent.marketingAgreed,
+          agreedAt: consent.agreedAt,
+        } : null,
+        // 제재 이력
+        sanctions: userSanctionsList.map(s => ({
+          id: s.id,
+          sanctionType: s.sanctionType,
+          reason: s.reason,
+          evidence: s.evidence,
+          startDate: s.startDate,
+          endDate: s.endDate,
+          isActive: s.isActive,
+          createdBy: s.createdBy,
+          createdByName: adminMap.get(s.createdBy || '') || '-',
+          createdAt: s.createdAt,
+        })),
+        // 오더 이력 (날짜 + 오더번호 + 상태)
+        orderHistory: userOrders
+          .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+          .map(o => ({
+            id: o.id,
+            orderNumber: o.orderNumber || null,
+            status: o.status,
+            createdAt: o.createdAt,
+            closedAt: o.closedAt,
+            companyName: o.companyName,
+            deliveryArea: o.deliveryArea,
+          })),
       });
     } catch (err: any) {
       console.error("Requester detail error:", err);
@@ -3878,11 +4385,18 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
       // 각 문의에 사용자 정보 추가
       const users = await storage.getAllUsers();
       const userMap = new Map<string, any>(users.map(u => [u.id, u]));
+      // orderNumber 매핑
+      const csOrderIds = [...new Set(inquiries.filter(i => i.orderId).map(i => i.orderId!))];
+      const csOrderList = csOrderIds.length > 0
+        ? await db.select({ id: orders.id, orderNumber: orders.orderNumber }).from(orders).where(inArray(orders.id, csOrderIds))
+        : [];
+      const csOrderMap = new Map(csOrderList.map(o => [o.id, o.orderNumber]));
       const result = inquiries.map(inq => ({
         ...inq,
         userName: userMap.get(inq.userId)?.name || "알 수 없음",
         userPhone: userMap.get(inq.userId)?.phoneNumber || "",
         userEmail: userMap.get(inq.userId)?.email || "",
+        orderNumber: inq.orderId ? csOrderMap.get(inq.orderId) || null : null,
       }));
       res.json(result);
     } catch (err: any) {
@@ -4154,7 +4668,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  // 오더에 기사 배정
+  // 오더에 헬퍼 신청 (관리자가 대신 신청 — 배정이 아님)
   app.post("/api/admin/orders/:orderId/assign", adminAuth, requirePermission("orders.assign"), async (req, res) => {
     try {
       const orderId = Number(req.params.orderId);
@@ -4169,11 +4683,11 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         return res.status(404).json({ message: "오더를 찾을 수 없습니다" });
       }
 
-      // 배정은 open 상태에서만 가능 (매칭 전 단계 - 표준)
+      // 신청은 open 상태에서만 가능
       const assignOrderStatus = normalizeOrderStatus(order.status);
       if (!isOneOfStatus(assignOrderStatus, CAN_SELECT_HELPER_STATUSES)) {
         return res.status(400).json({
-          message: "배정은 'OPEN' 상태에서만 가능합니다. 현재 상태: " + order.status
+          message: "신청은 'OPEN' 상태에서만 가능합니다. 현재 상태: " + order.status
         });
       }
 
@@ -4182,78 +4696,486 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         return res.status(404).json({ message: "기사를 찾을 수 없습니다" });
       }
 
-      // 기사가 이미 다른 오더에 배정되어 있는지 확인
-      const helperApps = await storage.getHelperApplications(helperId);
-      const activeApps = helperApps.filter(a => a.status === "matched" || a.status === "accepted");
-
-      // 오더 지원 생성 또는 업데이트 (approved 상태로 = 관리자 배정)
+      // 이미 신청한 헬퍼인지 확인
       const existingApp = await storage.getOrderApplication(orderId, helperId);
       if (existingApp) {
-        await storage.updateOrderApplication(existingApp.id, { status: "approved" });
-      } else {
-        await storage.createOrderApplication({
-          orderId,
-          status: "approved",
-        });
+        return res.status(400).json({ message: "이미 신청한 헬퍼입니다" });
       }
 
-      // 오더 상태 업데이트
-      const updatedOrder = await storage.updateOrder(orderId, {
-        status: "scheduled",
+      // 최대 신청 인원 확인 (order.maxHelpers, 기본값 3)
+      const maxHelpers = order.maxHelpers || 3;
+      const currentApplications = await storage.getOrderApplications(orderId);
+      const activeApplications = currentApplications.filter((a: any) =>
+        a.status === "applied" || a.status === "selected" || a.status === "scheduled" || a.status === "in_progress"
+      );
+      if (activeApplications.length >= maxHelpers) {
+        return res.status(400).json({ message: `최대 신청 인원(${maxHelpers}명)에 도달했습니다` });
+      }
+
+      // 신청 생성 (applied 상태 = 관리자가 대신 신청)
+      const application = await storage.createOrderApplication({
+        orderId,
+        helperId,
+        status: "applied",
       });
 
-      // 기사 상태를 working으로 업데이트
-      await storage.updateUser(helperId, { dailyStatus: "working" });
+      const newHelperCount = activeApplications.length + 1;
 
-      // 의뢰인 정보 조회 (오더에서 requesterId)
-      const requesterId = order.requesterId;
-      const requester = requesterId ? await storage.getUser(requesterId) : null;
-      const requesterPhone = requester?.phoneNumber || "연락처 미등록";
-      const helperPhone = helper?.phoneNumber || "연락처 미등록";
+      // 오더 상태는 변경하지 않음 (open 유지) — 신청이므로
+      // 기사 상태도 변경하지 않음 — 아직 매칭 아님
 
-      // 헬퍼에게 알림 (의뢰인 연락처 포함)
+      // 헬퍼에게 알림
       await storage.createNotification({
         userId: helperId,
-        type: "matching_success",
-        title: "오더 배정 완료",
-        message: `${order.companyName || "배송"} 오더에 배정되었습니다.\n의뢰인: ${requester?.name || "의뢰인"}\n연락처: ${requesterPhone}`,
+        type: "helper_applied",
+        title: "오더 신청 완료",
+        message: `관리자가 ${order.companyName || "배송"} 오더에 신청했습니다. (${newHelperCount}/${maxHelpers}명)`,
+        relatedId: orderId,
       });
-      console.log(`[Push Notification] Admin assigned order ${orderId} to Helper ${helperId}`);
+      console.log(`[Admin Apply] Admin applied order ${orderId} for Helper ${helperId}`);
 
-      // 의뢰인에게 알림 (헬퍼 연락처 포함)
-      if (requesterId) {
+      // 의뢰인에게 알림
+      if (order.requesterId) {
         await storage.createNotification({
-          userId: requesterId,
-          type: "matching_success",
-          title: "헬퍼 배정 완료",
-          message: `${helper.name || "헬퍼"}님이 ${order.companyName || "배송"} 오더에 배정되었습니다.\n헬퍼 연락처: ${helperPhone}`,
+          userId: order.requesterId,
+          type: "helper_applied",
+          title: "헬퍼 업무 신청",
+          message: `${helper.name || "헬퍼"}님이 ${order.companyName || "배송"} 오더에 신청했습니다. (${newHelperCount}/${maxHelpers}명)`,
+          relatedId: orderId,
         });
 
-        // Real-time update to requester
-        notificationWS.sendOrderStatusUpdate(requesterId, {
+        // Real-time update to requester (상태는 open 유지)
+        notificationWS.sendOrderStatusUpdate(order.requesterId, {
           orderId,
-          status: "matched",
-          currentHelpers: (order.currentHelpers || 0) + 1,
+          status: order.status || "open",
+          applicantCount: newHelperCount,
         });
       }
 
       // Real-time update to helper
       notificationWS.sendOrderStatusUpdate(helperId, {
         orderId,
-        status: "matched",
-        currentHelpers: (order.currentHelpers || 0) + 1,
+        status: order.status || "open",
+        applicantCount: newHelperCount,
       });
 
       // Broadcast to all admins for real-time updates
-      broadcastToAllAdmins("order", "assigned", orderId, {
+      broadcastToAllAdmins("order_application", "helper_applied", orderId, {
         orderId,
         helperId,
-        status: "matched"
+        helperName: helper.name,
+        companyName: order.companyName,
+        applicationsCount: newHelperCount,
       });
 
-      res.json({ success: true, order: updatedOrder, helperId });
+      res.json({ success: true, application, helperId });
     } catch (err: any) {
+      console.error("[Admin Apply] Error:", err);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // 오더 전체 배정 (신청된 헬퍼 일괄 배정 + 푸시알림 + 전화번호 전송)
+  app.post("/api/admin/orders/:orderId/bulk-assign", adminAuth, requirePermission("orders.assign"), async (req, res) => {
+    try {
+      const orderId = Number(req.params.orderId);
+
+      const order = await storage.getOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ message: "오더를 찾을 수 없습니다" });
+      }
+
+      // open 상태에서만 전체 배정 가능
+      const bulkAssignStatus = normalizeOrderStatus(order.status);
+      if (!isOneOfStatus(bulkAssignStatus, CAN_SELECT_HELPER_STATUSES)) {
+        return res.status(400).json({
+          message: "전체 배정은 'OPEN' 상태에서만 가능합니다. 현재 상태: " + order.status
+        });
+      }
+
+      // 신청된(applied) 헬퍼 목록 조회
+      const allApplications = await storage.getOrderApplications(orderId);
+      const appliedApps = allApplications.filter((a: any) => a.status === "applied");
+
+      if (appliedApps.length === 0) {
+        return res.status(400).json({ message: "신청된 헬퍼가 없습니다" });
+      }
+
+      // 의뢰인 정보 조회
+      const requester = order.requesterId ? await storage.getUser(order.requesterId) : null;
+      const requesterPhone = requester?.phoneNumber || "연락처 미등록";
+
+      // 전체 헬퍼 정보 조회
+      const helperInfos: { id: string; name: string; phone: string }[] = [];
+      for (const app of appliedApps) {
+        const helper = await storage.getUser(app.helperId);
+        if (helper) {
+          helperInfos.push({
+            id: helper.id,
+            name: helper.name || "헬퍼",
+            phone: helper.phoneNumber || "연락처 미등록",
+          });
+        }
+      }
+
+      // 일괄 배정 처리: applied → approved, 오더 → scheduled
+      for (const app of appliedApps) {
+        await storage.updateOrderApplication(app.id, { status: "approved" });
+      }
+
+      // 첫 번째 헬퍼를 대표 matchedHelperId로 설정 (복수 배정이지만 DB 호환)
+      const firstHelper = helperInfos[0];
+      await storage.updateOrder(orderId, {
+        status: "scheduled",
+        matchedHelperId: firstHelper?.id || null,
+        currentHelpers: appliedApps.length,
+      });
+
+      // 전체 헬퍼 연락처 목록 (알림 메시지용)
+      const helperListText = helperInfos
+        .map((h, i) => `${i + 1}. ${h.name} (${h.phone})`)
+        .join("\n");
+
+      // 각 헬퍼에게 배정 알림 + 의뢰인 전화번호 전송
+      for (const helperInfo of helperInfos) {
+        // 헬퍼 상태 업데이트
+        await storage.updateUser(helperInfo.id, { dailyStatus: "working" });
+
+        // 알림 생성
+        await storage.createNotification({
+          userId: helperInfo.id,
+          type: "matching_success",
+          title: "오더 배정 완료",
+          message: `${order.companyName || "배송"} 오더에 배정되었습니다.\n의뢰인: ${requester?.name || "의뢰인"}\n연락처: ${requesterPhone}\n\n배정 인원: ${helperInfos.length}명`,
+          relatedId: orderId,
+        });
+
+        // 푸시 알림
+        sendPushToUser(helperInfo.id, {
+          title: "오더 배정 완료",
+          body: `${order.companyName || "배송"} 오더에 배정되었습니다. 의뢰인: ${requesterPhone}`,
+          url: "/helper-dashboard",
+          tag: `bulk-assign-${orderId}`,
+        });
+
+        // SMS: 배정 알림 (헬퍼에게)
+        if (helperInfo.phone && helperInfo.phone !== "연락처 미등록") {
+          try {
+            await smsService.sendCustomMessage(helperInfo.phone,
+              `[헬프미] ${order.companyName || "배송"} 오더에 배정되었습니다. 의뢰인: ${requester?.name || "의뢰인"} (${requesterPhone}). 앱에서 확인하세요.`);
+          } catch (smsErr) { console.error("[SMS Error] bulk-assign helper:", smsErr); }
+        }
+
+        // WebSocket 실시간 알림
+        notificationWS.sendOrderStatusUpdate(helperInfo.id, {
+          orderId,
+          status: "scheduled",
+          currentHelpers: appliedApps.length,
+        });
+      }
+
+      // 의뢰인에게 알림 (전체 헬퍼 연락처 포함)
+      if (order.requesterId) {
+        await storage.createNotification({
+          userId: order.requesterId,
+          type: "matching_success",
+          title: "헬퍼 전체 배정 완료",
+          message: `${order.companyName || "배송"} 오더에 ${helperInfos.length}명이 배정되었습니다.\n\n${helperListText}`,
+          relatedId: orderId,
+        });
+
+        sendPushToUser(order.requesterId, {
+          title: "헬퍼 배정 완료",
+          body: `${order.companyName || "배송"} 오더에 ${helperInfos.length}명이 배정되었습니다.`,
+          url: "/requester-home",
+          tag: `bulk-assign-requester-${orderId}`,
+        });
+
+        notificationWS.sendOrderStatusUpdate(order.requesterId, {
+          orderId,
+          status: "scheduled",
+          currentHelpers: appliedApps.length,
+        });
+
+        // SMS: 배정 완료 알림 (의뢰인에게)
+        const bulkRequester = await storage.getUser(order.requesterId);
+        if (bulkRequester?.phoneNumber) {
+          try {
+            const helperNamesText = helperInfos.map(h => h.name).join(", ");
+            await smsService.sendCustomMessage(bulkRequester.phoneNumber,
+              `[헬프미] ${order.companyName || "배송"} 오더에 ${helperInfos.length}명 배정 완료. (${helperNamesText}). 앱에서 확인하세요.`);
+          } catch (smsErr) { console.error("[SMS Error] bulk-assign requester:", smsErr); }
+        }
+      }
+
+      // 관리자 브로드캐스트
+      broadcastToAllAdmins("order", "bulk_assigned", orderId, {
+        orderId,
+        helperCount: helperInfos.length,
+        status: "scheduled",
+      });
+
+      console.log(`[Admin Bulk Assign] Order ${orderId}: ${helperInfos.length} helpers assigned`);
+
+      res.json({
+        success: true,
+        assignedCount: helperInfos.length,
+        helpers: helperInfos.map(h => ({ id: h.id, name: h.name, phone: h.phone })),
+      });
+    } catch (err: any) {
+      console.error("[Admin Bulk Assign] Error:", err);
+      res.status(500).json({ message: "전체 배정에 실패했습니다" });
+    }
+  });
+
+  // 본사 오더 직접 배정 (다중 헬퍼 원스텝 배정)
+  app.post("/api/admin/orders/:orderId/direct-assign", adminAuth, requirePermission("orders.assign"), async (req, res) => {
+    try {
+      const orderId = Number(req.params.orderId);
+      const { helperIds } = req.body;
+
+      if (!helperIds || !Array.isArray(helperIds) || helperIds.length === 0) {
+        return res.status(400).json({ message: "배정할 헬퍼를 선택해주세요" });
+      }
+
+      const order = await storage.getOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ message: "오더를 찾을 수 없습니다" });
+      }
+
+      // open 상태에서만 배정 가능
+      const directAssignStatus = normalizeOrderStatus(order.status);
+      if (!isOneOfStatus(directAssignStatus, CAN_SELECT_HELPER_STATUSES)) {
+        return res.status(400).json({
+          message: "배정은 'OPEN' 상태에서만 가능합니다. 현재 상태: " + order.status
+        });
+      }
+
+      // 최대 헬퍼 수 확인
+      const maxHelpers = order.maxHelpers || 3;
+      const existingApps = await storage.getOrderApplications(orderId);
+      const activeApps = existingApps.filter((a: any) =>
+        a.status === "applied" || a.status === "approved" || a.status === "selected" || a.status === "scheduled" || a.status === "in_progress"
+      );
+      const availableSlots = maxHelpers - activeApps.length;
+      if (helperIds.length > availableSlots) {
+        return res.status(400).json({
+          message: `최대 ${maxHelpers}명까지 배정 가능합니다. 현재 ${activeApps.length}명 배정 중, ${availableSlots}명 추가 가능.`
+        });
+      }
+
+      // 의뢰인 정보 조회
+      const requester = order.requesterId ? await storage.getUser(order.requesterId) : null;
+      const requesterPhone = requester?.phoneNumber || "연락처 미등록";
+
+      // 각 헬퍼에 대해 application 생성 (status: approved 바로)
+      const assignedHelpers: { id: string; name: string; phone: string }[] = [];
+      for (const helperId of helperIds) {
+        const helper = await storage.getUser(helperId);
+        if (!helper || helper.role !== "helper") {
+          console.warn(`[Direct Assign] Helper ${helperId} not found or not helper role, skipping`);
+          continue;
+        }
+
+        // 이미 신청한 헬퍼인지 확인
+        const existingApp = await storage.getOrderApplication(orderId, helperId);
+        if (existingApp) {
+          // 이미 applied 상태면 approved로 변경
+          if (existingApp.status === "applied") {
+            await storage.updateOrderApplication(existingApp.id, { status: "approved" });
+          }
+          assignedHelpers.push({
+            id: helper.id,
+            name: helper.name || "헬퍼",
+            phone: helper.phoneNumber || "연락처 미등록",
+          });
+          continue;
+        }
+
+        // 새로 application 생성 (바로 approved)
+        await storage.createOrderApplication({
+          orderId,
+          helperId,
+          status: "approved",
+        });
+
+        assignedHelpers.push({
+          id: helper.id,
+          name: helper.name || "헬퍼",
+          phone: helper.phoneNumber || "연락처 미등록",
+        });
+      }
+
+      if (assignedHelpers.length === 0) {
+        return res.status(400).json({ message: "유효한 헬퍼가 없습니다" });
+      }
+
+      // 첫 번째 헬퍼를 대표 matchedHelperId로 설정
+      const firstHelper = assignedHelpers[0];
+      await storage.updateOrder(orderId, {
+        status: "scheduled",
+        matchedHelperId: firstHelper.id,
+        currentHelpers: activeApps.length + assignedHelpers.length,
+      });
+
+      // 전체 헬퍼 연락처 목록 (알림 메시지용)
+      const helperListText = assignedHelpers
+        .map((h, i) => `${i + 1}. ${h.name} (${h.phone})`)
+        .join("\n");
+
+      // 각 헬퍼에게 배정 알림 + 푸시 + SMS
+      for (const helperInfo of assignedHelpers) {
+        await storage.updateUser(helperInfo.id, { dailyStatus: "working" });
+
+        await storage.createNotification({
+          userId: helperInfo.id,
+          type: "matching_success",
+          title: "오더 배정 완료",
+          message: `${order.companyName || "배송"} 오더에 배정되었습니다.\n${requester ? `의뢰인: ${requester.name || "의뢰인"}\n연락처: ${requesterPhone}\n` : ""}배정 인원: ${assignedHelpers.length}명`,
+          relatedId: orderId,
+        });
+
+        sendPushToUser(helperInfo.id, {
+          title: "오더 배정 완료",
+          body: `${order.companyName || "배송"} 오더에 배정되었습니다.${requester ? ` 의뢰인: ${requesterPhone}` : ""}`,
+          url: "/helper-dashboard",
+          tag: `direct-assign-${orderId}`,
+        });
+
+        if (helperInfo.phone && helperInfo.phone !== "연락처 미등록") {
+          try {
+            await smsService.sendCustomMessage(helperInfo.phone,
+              `[헬프미] ${order.companyName || "배송"} 오더에 배정되었습니다.${requester ? ` 의뢰인: ${requester.name || "의뢰인"} (${requesterPhone})` : ""} 앱에서 확인하세요.`);
+          } catch (smsErr) { console.error("[SMS Error] direct-assign helper:", smsErr); }
+        }
+
+        notificationWS.sendOrderStatusUpdate(helperInfo.id, {
+          orderId,
+          status: "scheduled",
+          currentHelpers: activeApps.length + assignedHelpers.length,
+        });
+      }
+
+      // 의뢰인에게 알림 (있을 경우)
+      if (order.requesterId) {
+        await storage.createNotification({
+          userId: order.requesterId,
+          type: "matching_success",
+          title: "헬퍼 배정 완료",
+          message: `${order.companyName || "배송"} 오더에 ${assignedHelpers.length}명이 배정되었습니다.\n\n${helperListText}`,
+          relatedId: orderId,
+        });
+
+        sendPushToUser(order.requesterId, {
+          title: "헬퍼 배정 완료",
+          body: `${order.companyName || "배송"} 오더에 ${assignedHelpers.length}명이 배정되었습니다.`,
+          url: "/requester-home",
+          tag: `direct-assign-requester-${orderId}`,
+        });
+
+        notificationWS.sendOrderStatusUpdate(order.requesterId, {
+          orderId,
+          status: "scheduled",
+          currentHelpers: activeApps.length + assignedHelpers.length,
+        });
+      }
+
+      broadcastToAllAdmins("order", "direct_assigned", orderId, {
+        orderId,
+        helperCount: assignedHelpers.length,
+        status: "scheduled",
+      });
+
+      console.log(`[Admin Direct Assign] Order ${orderId}: ${assignedHelpers.length} helpers directly assigned`);
+
+      res.json({
+        success: true,
+        assignedCount: assignedHelpers.length,
+        helpers: assignedHelpers.map(h => ({ id: h.id, name: h.name, phone: h.phone })),
+      });
+    } catch (err: any) {
+      console.error("[Admin Direct Assign] Error:", err);
+      res.status(500).json({ message: "직접 배정에 실패했습니다" });
+    }
+  });
+
+  // 개별 헬퍼 배정 해제
+  app.delete("/api/admin/orders/:orderId/applications/:helperId", adminAuth, requirePermission("orders.assign"), async (req, res) => {
+    try {
+      const orderId = Number(req.params.orderId);
+      const { helperId } = req.params;
+
+      const order = await storage.getOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ message: "오더를 찾을 수 없습니다" });
+      }
+
+      // in_progress 이후 상태에서는 해제 불가
+      const removeStatus = normalizeOrderStatus(order.status);
+      if (removeStatus !== ORDER_STATUS.OPEN && removeStatus !== ORDER_STATUS.SCHEDULED) {
+        return res.status(400).json({
+          message: "업무 진행 중에는 배정 해제가 불가합니다. 현재 상태: " + order.status
+        });
+      }
+
+      const application = await storage.getOrderApplication(orderId, helperId);
+      if (!application) {
+        return res.status(404).json({ message: "해당 헬퍼의 신청 내역을 찾을 수 없습니다" });
+      }
+
+      // application을 rejected로 변경
+      await storage.updateOrderApplication(application.id, { status: "rejected" });
+
+      // 남은 active 헬퍼 확인
+      const allApps = await storage.getOrderApplications(orderId);
+      const remainingApproved = allApps.filter((a: any) =>
+        a.helperId !== helperId &&
+        (a.status === "approved" || a.status === "selected" || a.status === "scheduled" || a.status === "in_progress")
+      );
+
+      if (remainingApproved.length === 0) {
+        // 배정된 헬퍼가 없으면 open으로 복귀
+        await storage.updateOrder(orderId, {
+          status: "open",
+          matchedHelperId: null,
+          currentHelpers: 0,
+        });
+      } else {
+        // 첫 번째 남은 헬퍼를 대표로 재설정
+        await storage.updateOrder(orderId, {
+          matchedHelperId: remainingApproved[0].helperId,
+          currentHelpers: remainingApproved.length,
+        });
+      }
+
+      // 해제된 헬퍼에게 알림
+      await storage.createNotification({
+        userId: helperId,
+        type: "order_update",
+        title: "오더 배정 해제",
+        message: `${order.companyName || "배송"} 오더의 배정이 해제되었습니다.`,
+        relatedId: orderId,
+      });
+
+      // 헬퍼 상태 복귀
+      await storage.updateUser(helperId, { dailyStatus: "available" });
+
+      broadcastToAllAdmins("order", "assignment_removed", orderId, {
+        orderId,
+        helperId,
+        remainingHelpers: remainingApproved.length,
+      });
+
+      console.log(`[Admin Remove Assignment] Order ${orderId}: Helper ${helperId} removed, ${remainingApproved.length} remaining`);
+
+      res.json({
+        success: true,
+        remainingHelpers: remainingApproved.length,
+        newStatus: remainingApproved.length === 0 ? "open" : order.status,
+      });
+    } catch (err: any) {
+      console.error("[Admin Remove Assignment] Error:", err);
+      res.status(500).json({ message: "배정 해제에 실패했습니다" });
     }
   });
 
@@ -4431,8 +5353,11 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         user: {
           id: user.id,
           name: user.name,
+          nickname: user.nickname,
           email: user.email,
           phoneNumber: user.phoneNumber,
+          profileImageUrl: user.profileImageUrl,
+          address: user.address,
           dailyStatus: user.dailyStatus,
           isTeamLeader: user.isTeamLeader,
           helperVerified: user.helperVerified,
@@ -4576,7 +5501,13 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         }
       })();
 
+      const { generateOrderNumber: genEntOrderNum } = await import("../../utils/order-number");
       for (let i = 0; i < numOrders; i++) {
+        const entOrderNum = await genEntOrderNum({
+          isEnterprise: true,
+          deliveryArea: deliveryArea || "전국",
+          enterpriseContactPhone: company.contactPhone,
+        });
         const order = await storage.createOrder({
           requesterId: null, // Enterprise orders don't have individual requesters
           companyName: `${company.name} - ${projectCode}`,
@@ -4589,6 +5520,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
           status: ORDER_STATUS.OPEN,
           maxHelpers: 1,
           currentHelpers: 0,
+          orderNumber: entOrderNum,
         });
         createdOrders.push(order);
       }
@@ -4648,7 +5580,13 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         }
       })();
 
+      const { generateOrderNumber: genEntOrderNum2 } = await import("../../utils/order-number");
       for (let i = 0; i < numOrders; i++) {
+        const entOrderNum2 = await genEntOrderNum2({
+          isEnterprise: true,
+          deliveryArea: deliveryArea || "전국",
+          enterpriseContactPhone: company.contactPhone,
+        });
         const order = await storage.createOrder({
           requesterId: null,
           companyName: `${company.name} - ${projectCode}`,
@@ -4661,6 +5599,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
           status: ORDER_STATUS.OPEN,
           maxHelpers: 1,
           currentHelpers: 0,
+          orderNumber: entOrderNum2,
         });
         createdOrders.push(order);
       }
@@ -4750,6 +5689,12 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
           }
           processedKeys.add(rowKey);
 
+          const { generateOrderNumber: genExcelOrderNum } = await import("../../utils/order-number");
+          const excelOrderNum = await genExcelOrderNum({
+            isEnterprise: true,
+            deliveryArea: row.deliveryArea || "",
+            enterpriseContactPhone: enterprise.contactPhone,
+          });
           const order = await storage.createOrder({
             companyName: row.companyName || enterprise.name,
             pricePerUnit: price || 0,
@@ -4761,6 +5706,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
             status: ORDER_STATUS.OPEN,
             maxHelpers: parseInt(row.maxHelpers) || 3,
             currentHelpers: 0,
+            orderNumber: excelOrderNum,
           });
           createdOrders.push(order);
         } catch (rowErr) {
@@ -7590,7 +8536,7 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  // Reset all data (dangerous!)
+  // Reset all operational data (사용자/설정 유지, 운영 데이터 전체 초기화)
   app.post("/api/admin/data-management/reset-all", adminAuth, requireSuperAdmin, async (req, res) => {
     const { confirmCode, confirmText } = req.body;
 
@@ -7600,52 +8546,173 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     }
 
     try {
-      // Helper to safely delete from table (ignores if table doesn't exist)
-      const safeDelete = async (tableName: string) => {
+      const user = (req as any).adminUser || (req as any).user;
+      console.log(`[DATA_MANAGEMENT] User ${user?.id} starting FULL OPERATIONAL DATA RESET...`);
+
+      // TRUNCATE CASCADE로 FK 제약 자동 처리
+      // 순서: 자식 테이블 → 부모 테이블 (CASCADE가 처리하지만 명시적 순서 유지)
+      const safeTruncate = async (tableName: string) => {
         try {
-          await db.execute(sql.raw(`DELETE FROM ${tableName}`));
+          await db.execute(sql.raw(`TRUNCATE TABLE "${tableName}" CASCADE`));
         } catch (e: any) {
-          if (!e.message?.includes('does not exist')) {
-            throw e;
+          if (!e.message?.includes('does not exist') && !e.message?.includes('relation') ) {
+            console.warn(`[RESET] Failed to truncate ${tableName}:`, e.message);
           }
         }
       };
 
-      // Delete in order (respect foreign key constraints)
-      await safeDelete('work_proof_events');
-      await safeDelete('check_in_records');
-      await safeDelete('settlements');
-      await safeDelete('helper_applications');
-      await safeDelete('orders');
-      await safeDelete('contracts');
-      await safeDelete('help_posts');
-      await safeDelete('helper_credentials');
-      await safeDelete('helper_terms_agreements');
-      await safeDelete('push_subscriptions');
-      await safeDelete('fcm_tokens');
+      // ========== 1. 오더 관련 (자식 먼저) ==========
+      await safeTruncate('work_proof_events');
+      await safeTruncate('work_sessions');
+      await safeTruncate('work_confirmations');
+      await safeTruncate('order_status_events');
+      await safeTruncate('order_force_status_logs');
+      await safeTruncate('order_policy_snapshots');
+      await safeTruncate('order_cost_items');
+      await safeTruncate('order_closure_reports');
+      await safeTruncate('order_registration_fields');
+      await safeTruncate('order_start_tokens');
+      await safeTruncate('order_candidates');
+      await safeTruncate('order_applications');
+      await safeTruncate('manual_dispatch_logs');
+      await safeTruncate('dispatch_requests');
+      await safeTruncate('pricing_snapshots');
+      await safeTruncate('carrier_proof_uploads');
+      await safeTruncate('proof_upload_failures');
+      await safeTruncate('balance_invoices');
+      await safeTruncate('reassignments');
+      await safeTruncate('substitute_requests');
 
-      // Keep admin users and HQ staff
-      try {
-        await db.execute(sql`
-          DELETE FROM users 
-          WHERE role != 'admin' 
-          AND id NOT IN (SELECT user_id FROM hq_staff WHERE user_id IS NOT NULL)
-        `);
-      } catch (e: any) {
-        // If hq_staff doesn't exist, just delete non-admin users
-        if (e.message?.includes('does not exist')) {
-          await db.execute(sql`DELETE FROM users WHERE role != 'admin'`);
-        } else {
-          throw e;
-        }
-      }
+      // ========== 2. 계약/작업 ==========
+      await safeTruncate('contract_execution_events');
+      await safeTruncate('contract_documents');
+      await safeTruncate('job_contracts');
+      await safeTruncate('contracts');
+      await safeTruncate('job_postings');
 
-      const user = (req as any).adminUser || (req as any).user;
-      console.log(`[DATA_MANAGEMENT] User ${user?.id} performed FULL DATA RESET`);
+      // ========== 3. 마감보고서 ==========
+      await safeTruncate('closing_reports');
+
+      // ========== 4. 정산 ==========
+      await safeTruncate('settlement_audit_logs');
+      await safeTruncate('settlement_payout_attempts');
+      await safeTruncate('settlement_line_items');
+      await safeTruncate('settlement_records');
+      await safeTruncate('settlement_statements');
+      await safeTruncate('monthly_settlement_statements');
+      await safeTruncate('payout_events');
+      await safeTruncate('payouts');
+
+      // ========== 5. 사고/분쟁/환불/차감 ==========
+      await safeTruncate('incident_actions');
+      await safeTruncate('incident_evidence');
+      await safeTruncate('team_incidents');
+      await safeTruncate('incident_reports');
+      await safeTruncate('disputes');
+      await safeTruncate('refunds');
+      await safeTruncate('deductions');
+
+      // ========== 6. 결제/세금계산서 ==========
+      await safeTruncate('payment_status_events');
+      await safeTruncate('payment_reminders');
+      await safeTruncate('payment_intents');
+      await safeTruncate('payments');
+      await safeTruncate('tax_invoices');
+      await safeTruncate('virtual_accounts');
+
+      // ========== 7. 고객문의/티켓 ==========
+      await safeTruncate('inquiry_comments');
+      await safeTruncate('ticket_escalations');
+      await safeTruncate('support_ticket_escalations');
+      await safeTruncate('customer_inquiries');
+      await safeTruncate('customer_service_inquiries');
+      await safeTruncate('team_cs_inquiries');
+
+      // ========== 8. 알림/SMS/푸시 로그 ==========
+      await safeTruncate('push_deliveries');
+      await safeTruncate('push_events');
+      await safeTruncate('push_messages');
+      await safeTruncate('push_notification_logs');
+      await safeTruncate('notification_logs');
+      await safeTruncate('notifications');
+      await safeTruncate('sms_logs');
+
+      // ========== 9. 시스템 로그/이벤트 ==========
+      await safeTruncate('webhook_logs');
+      await safeTruncate('integration_events');
+      await safeTruncate('integration_health');
+      await safeTruncate('system_events');
+      await safeTruncate('audit_logs');
+      await safeTruncate('auth_audit_logs');
+      await safeTruncate('instruction_logs');
+      await safeTruncate('client_errors');
+
+      // ========== 10. 리뷰/공지/체크인 ==========
+      await safeTruncate('reviews');
+      await safeTruncate('helper_rating_summary');
+      await safeTruncate('announcement_recipients');
+      await safeTruncate('announcements');
+      await safeTruncate('check_in_records');
+      await safeTruncate('contact_share_events');
+
+      // ========== 11. 인센티브/기업 ==========
+      await safeTruncate('incentive_details');
+      await safeTruncate('team_incentives');
+      await safeTruncate('incentive_policies');
+      await safeTruncate('enterprise_order_batches');
+      await safeTruncate('enterprise_accounts');
+
+      // ========== 12. 제재/QR/멱등성 ==========
+      await safeTruncate('user_sanctions');
+      await safeTruncate('qr_scan_logs');
+      await safeTruncate('idempotency_keys');
+
+      // ========== 13. 위치/인증/기기 ==========
+      await safeTruncate('user_location_logs');
+      await safeTruncate('user_location_latest');
+      await safeTruncate('phone_verification_codes');
+
+      // ========== 14. 문서/본인확인 ==========
+      await safeTruncate('document_reviews');
+      await safeTruncate('document_review_tasks');
+      await safeTruncate('documents');
+      await safeTruncate('identity_verifications');
+
+      // ========== 15. MG(최저보장) ==========
+      await safeTruncate('mg_topups');
+      await safeTruncate('mg_period_summaries');
+      await safeTruncate('mg_enrollments');
+      await safeTruncate('minimum_guarantee_applications');
+
+      // ========== 16. 정책 스냅샷/변경 이력 ==========
+      await safeTruncate('policy_snapshots');
+      await safeTruncate('rate_change_logs');
+      await safeTruncate('setting_change_history');
+
+      // ========== 17. 세션/토큰/동의 ==========
+      await safeTruncate('refresh_tokens');
+      await safeTruncate('push_subscriptions');
+      await safeTruncate('fcm_tokens');
+      await safeTruncate('user_devices');
+      await safeTruncate('helper_terms_agreements');
+      await safeTruncate('signup_consents');
+      await safeTruncate('terms_re_consents');
+      await safeTruncate('policy_consents');
+      await safeTruncate('requester_service_agreements');
+
+      // ========== 18. 기타 ==========
+      await safeTruncate('help_posts');
+      await safeTruncate('user_permissions');
+      await safeTruncate('staff_role_assignments');
+
+      // ========== 19. 오더 (부모 테이블 — 마지막) ==========
+      await safeTruncate('orders');
+
+      console.log(`[DATA_MANAGEMENT] User ${user?.id} completed FULL OPERATIONAL DATA RESET`);
 
       res.json({
         success: true,
-        message: "모든 데이터가 초기화되었습니다 (관리자 계정 제외)"
+        message: "전체 운영 데이터가 초기화되었습니다 (사용자 계정 및 시스템 설정 유지)"
       });
     } catch (err: any) {
       console.error("Data reset error:", err);
@@ -8029,6 +9096,146 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
   // Run monthly settlement email scheduler every hour (checks if it's 1st of month at 9am)
   setInterval(runMonthlySettlementEmailScheduler, 60 * 60 * 1000);
   console.log("Monthly settlement email scheduler initialized");
+
+  // ==================== 잔금 입금일 3일전 리마인더 스케줄러 ====================
+  const runBalancePaymentReminder = async () => {
+    try {
+      // 3일 후 날짜 계산
+      const now = new Date();
+      const threeDaysLater = new Date(now);
+      threeDaysLater.setDate(threeDaysLater.getDate() + 3);
+      const targetDateStr = threeDaysLater.toISOString().split("T")[0]; // YYYY-MM-DD
+
+      // 잔금 미결제 + 잔금결제예정일이 3일 후인 오더 조회
+      const dueSoonOrders = await db.select().from(orders)
+        .where(and(
+          eq(orders.balancePaymentDueDate, targetDateStr),
+          not(eq(orders.status, "cancelled")),
+          not(eq(orders.status, "completed")),
+        ));
+
+      if (dueSoonOrders.length === 0) return;
+
+      console.log(`[BALANCE_REMINDER] Found ${dueSoonOrders.length} orders with balance due in 3 days (${targetDateStr})`);
+
+      for (const order of dueSoonOrders) {
+        if (!order.requesterId) continue;
+
+        // 이미 오늘 리마인더 보냈는지 확인 (중복 방지)
+        const todayStr = now.toISOString().split("T")[0];
+        const existingNotifs = await storage.getUserNotifications(order.requesterId);
+        const alreadySent = existingNotifs.some((n: any) =>
+          n.type === "balance_reminder" && n.relatedId === order.id &&
+          n.createdAt && new Date(n.createdAt).toISOString().split("T")[0] === todayStr
+        );
+        if (alreadySent) continue;
+
+        // 인앱 알림
+        await storage.createNotification({
+          userId: order.requesterId,
+          type: "balance_reminder" as any,
+          title: "잔금 결제 안내",
+          message: `${order.companyName} 오더의 잔금 결제일이 3일 후(${targetDateStr})입니다. 기한 내 결제해주세요.`,
+          relatedId: order.id,
+        });
+
+        // 푸시 알림
+        sendPushToUser(order.requesterId, {
+          title: "잔금 결제 안내",
+          body: `${order.companyName} 오더 잔금 결제일이 3일 후입니다. 앱에서 결제해주세요.`,
+          url: "/requester-home",
+          tag: `balance-reminder-${order.id}`,
+        });
+
+        // SMS: 잔금 입금일 3일전 리마인더
+        const reminderRequester = await storage.getUser(order.requesterId);
+        if (reminderRequester?.phoneNumber) {
+          try {
+            await smsService.sendCustomMessage(reminderRequester.phoneNumber,
+              `[헬프미] ${order.companyName} 오더 잔금 결제일이 3일 후(${targetDateStr})입니다. 기한 내 결제 부탁드립니다.`);
+          } catch (smsErr) { console.error("[SMS Error] balance reminder:", smsErr); }
+        }
+
+        console.log(`[BALANCE_REMINDER] Sent reminder for order ${order.id} to requester ${order.requesterId}`);
+      }
+    } catch (err: any) {
+      console.error("[BALANCE_REMINDER] Scheduler error:", err);
+    }
+  };
+
+  // 잔금 리마인더: 매 6시간마다 실행 (하루 중 한 번만 알림 — 중복 체크 포함)
+  setInterval(runBalancePaymentReminder, 6 * 60 * 60 * 1000);
+  // 서버 시작 시 1분 후 첫 실행
+  setTimeout(runBalancePaymentReminder, 60 * 1000);
+  console.log("Balance payment 3-day reminder scheduler initialized");
+
+  // ============================================
+  // 스케줄러: 화물사고 자동 차감 (헬퍼 응답 기한 만료 시)
+  // 비즈니스 규칙:
+  // - 요청자가 접수 → 헬퍼 응답 기한 내 동의 시 차감
+  // - 미액션(기한 초과) 시 자동 차감
+  // - 분쟁(dispute) 시 미차감
+  // ============================================
+  async function runIncidentAutoDeduction() {
+    try {
+      const now = new Date();
+      // 응답 기한이 지났고, 헬퍼가 미응답이며, 아직 차감 안 된 사고 건 조회
+      const expiredIncidents = await db.select()
+        .from(incidentReports)
+        .where(and(
+          eq(incidentReports.helperDeductionApplied, false),
+          eq(incidentReports.helperResponseRequired, true),
+          // 분쟁(dispute) 상태가 아닌 건만
+          or(
+            isNull(incidentReports.helperStatus),
+            not(eq(incidentReports.helperStatus, 'dispute'))
+          ),
+          // 응답 기한이 지난 건
+          lte(incidentReports.helperResponseDeadline, now),
+          // 관리자 강제 처리 안 된 건
+          eq(incidentReports.adminForceProcessed, false)
+        ));
+
+      if (expiredIncidents.length === 0) return;
+
+      let appliedCount = 0;
+      for (const incident of expiredIncidents) {
+        // 헬퍼가 이미 응답(confirmed, item_found, request_handling)한 건은 스킵
+        if (incident.helperStatus === 'confirmed' || incident.helperStatus === 'item_found' || incident.helperStatus === 'request_handling') {
+          continue;
+        }
+
+        // 차감 금액이 0이면 스킵
+        if (!incident.deductionAmount || incident.deductionAmount <= 0) {
+          continue;
+        }
+
+        // 자동 차감 적용
+        await db.update(incidentReports)
+          .set({
+            helperDeductionApplied: true,
+            deductionConfirmedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(incidentReports.id, incident.id));
+
+        appliedCount++;
+        console.log(`[Incident Auto-Deduction] Applied deduction for incident #${incident.id}, order #${incident.orderId}, amount: ${incident.deductionAmount}원`);
+      }
+
+      if (appliedCount > 0) {
+        console.log(`[Incident Auto-Deduction] Auto-applied ${appliedCount} incident deductions`);
+      }
+    } catch (err) {
+      console.error("[Incident Auto-Deduction] Scheduler error:", err);
+    }
+  }
+
+  // 매 1시간마다 실행
+  setInterval(runIncidentAutoDeduction, 60 * 60 * 1000);
+  // 서버 시작 2분 후 첫 실행
+  setTimeout(runIncidentAutoDeduction, 2 * 60 * 1000);
+  console.log("Incident auto-deduction scheduler initialized (runs every hour)");
 
   // ==================== 운영 핵심 기능 API ====================
 
@@ -8754,6 +9961,63 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         userAgent: req.headers["user-agent"],
       });
 
+      // 알림 발송 (요청자 + 영향받는 헬퍼)
+      const statusLabel = newStatus === "cancelled" ? "취소" : newStatus === "completed" ? "완료" : newStatus;
+      const notifTitle = "오더 상태 변경";
+      const notifMessage = `오더 #${orderId}의 상태가 관리자에 의해 "${statusLabel}"(으)로 변경되었습니다.`;
+
+      // 요청자 알림
+      if (order.requesterId) {
+        try {
+          await storage.createNotification({
+            userId: order.requesterId,
+            type: "order_status_changed",
+            title: notifTitle,
+            message: notifMessage,
+            relatedId: orderId,
+          });
+          sendPushToUser(order.requesterId, {
+            title: notifTitle,
+            body: notifMessage,
+            url: `/orders/${orderId}`,
+            tag: "order_status_changed",
+          });
+          notificationWS.sendOrderStatusUpdate(order.requesterId, {
+            orderId,
+            status: newStatus,
+            previousStatus,
+          });
+        } catch (notifErr) {
+          console.error("[Force-Status] Requester notification error:", notifErr);
+        }
+      }
+
+      // 영향받는 헬퍼 알림
+      if (affectedHelperId) {
+        try {
+          await storage.createNotification({
+            userId: affectedHelperId,
+            type: "order_status_changed",
+            title: notifTitle,
+            message: notifMessage,
+            relatedId: orderId,
+          });
+          sendPushToUser(affectedHelperId, {
+            title: notifTitle,
+            body: notifMessage,
+            url: `/orders/${orderId}`,
+            tag: "order_status_changed",
+          });
+          notificationWS.sendOrderStatusUpdate(affectedHelperId, {
+            orderId,
+            status: newStatus,
+            previousStatus,
+          });
+        } catch (notifErr) {
+          console.error("[Force-Status] Helper notification error:", notifErr);
+        }
+      }
+
       res.json(updated);
     } catch (err: any) {
       console.error("Force status change error:", err);
@@ -8773,6 +10037,107 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     } catch (err: any) {
       console.error("Get force status logs error:", err);
       res.status(500).json({ message: "Failed to get force status logs" });
+    }
+  });
+
+  // ============================================
+  // Admin: 데이터 무결성 진단 & 복구 API
+  // ============================================
+
+  // GET /api/admin/data-integrity/orphaned-orders - 마감 보고서 없는 post-closing 오더 목록
+  app.get("/api/admin/data-integrity/orphaned-orders", adminAuth, requirePermission("orders.edit"), async (req, res) => {
+    try {
+      const postClosingStatuses = ['closing_submitted', 'final_amount_confirmed', 'balance_paid', 'settlement_paid', 'closed'];
+      const allOrders2 = await db.select({
+        id: orders.id,
+        status: orders.status,
+        matchedHelperId: orders.matchedHelperId,
+        companyName: orders.companyName,
+        scheduledDate: orders.scheduledDate,
+        createdAt: orders.createdAt,
+      }).from(orders);
+
+      const postClosingOrders2 = allOrders2.filter(o => postClosingStatuses.includes(o.status || ''));
+      const postClosingIds = postClosingOrders2.map(o => o.id);
+
+      if (postClosingIds.length === 0) {
+        return res.json({ orphanedOrders: [], total: 0 });
+      }
+
+      const existingReports2 = await db.select({ orderId: closingReports.orderId })
+        .from(closingReports)
+        .where(inArray(closingReports.orderId, postClosingIds));
+      const reportOrderIds2 = new Set(existingReports2.map(r => r.orderId));
+
+      const orphaned2 = postClosingOrders2.filter(o => !reportOrderIds2.has(o.id)).map(o => ({
+        orderId: o.id,
+        status: o.status,
+        matchedHelperId: o.matchedHelperId,
+        companyName: o.companyName,
+        scheduledDate: o.scheduledDate,
+        createdAt: o.createdAt,
+      }));
+
+      res.json({ orphanedOrders: orphaned2, total: orphaned2.length });
+    } catch (err: any) {
+      console.error("Orphaned orders check error:", err);
+      res.status(500).json({ message: "데이터 무결성 체크 실패" });
+    }
+  });
+
+  // POST /api/admin/data-integrity/reset-to-in-progress - 마감 보고서 없는 오더를 in_progress로 복구
+  app.post("/api/admin/data-integrity/reset-to-in-progress", adminAuth, requirePermission("orders.edit"), async (req, res) => {
+    try {
+      const { orderIds } = req.body;
+      if (!orderIds || !Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ message: "orderIds 배열이 필요합니다" });
+      }
+
+      const adminUser = (req as any).adminUser;
+      const results: any[] = [];
+
+      for (const orderId of orderIds) {
+        const order = await storage.getOrder(orderId);
+        if (!order) {
+          results.push({ orderId, success: false, reason: "오더를 찾을 수 없음" });
+          continue;
+        }
+
+        // closing report 존재 여부 확인
+        const [existingReport] = await db.select({ id: closingReports.id })
+          .from(closingReports)
+          .where(eq(closingReports.orderId, orderId))
+          .limit(1);
+
+        if (existingReport) {
+          results.push({ orderId, success: false, reason: "마감 보고서가 이미 존재함" });
+          continue;
+        }
+
+        // in_progress로 복구 (헬퍼가 마감을 다시 제출할 수 있도록)
+        await db.update(orders)
+          .set({ status: "in_progress", updatedAt: new Date() })
+          .where(eq(orders.id, orderId));
+
+        // 강제 상태 변경 로그
+        await db.insert(orderForceStatusLogs).values({
+          orderId,
+          previousStatus: order.status,
+          newStatus: "in_progress",
+          reason: "데이터 무결성 복구: closing report 없이 post-closing 상태여서 in_progress로 리셋",
+          changedBy: adminUser?.id || "system",
+        });
+
+        results.push({ orderId, success: true, previousStatus: order.status });
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      console.log(`[Integrity Recovery] Admin reset ${successCount}/${orderIds.length} orders to in_progress`);
+
+      res.json({ results, successCount, totalRequested: orderIds.length });
+    } catch (err: any) {
+      console.error("Reset to in_progress error:", err);
+      res.status(500).json({ message: "오더 복구 실패" });
     }
   });
 
@@ -9686,14 +11051,20 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
       const reports = await db.select({
         id: closingReports.id,
         orderId: closingReports.orderId,
+        helperId: closingReports.helperId,
         deliveredCount: closingReports.deliveredCount,
         returnedCount: closingReports.returnedCount,
+        etcCount: closingReports.etcCount,
+        etcPricePerUnit: closingReports.etcPricePerUnit,
         extraCostsJson: closingReports.extraCostsJson,
         deliveryHistoryImagesJson: closingReports.deliveryHistoryImagesJson,
         etcImagesJson: closingReports.etcImagesJson,
         memo: closingReports.memo,
         status: closingReports.status,
         calculatedAmount: closingReports.calculatedAmount,
+        supplyAmount: closingReports.supplyAmount,
+        vatAmount: closingReports.vatAmount,
+        totalAmount: closingReports.totalAmount,
         reviewedAt: closingReports.reviewedAt,
         reviewedBy: closingReports.reviewedBy,
         rejectReason: closingReports.rejectReason,
@@ -9715,7 +11086,9 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
           helperName: helper?.name || "알 수 없음",
           deliveredCount: report.deliveredCount,
           returnedCount: report.returnedCount,
-          actualDeliveryCount: report.deliveredCount + report.returnedCount,
+          etcCount: report.etcCount || 0,
+          etcPricePerUnit: report.etcPricePerUnit || 0,
+          actualDeliveryCount: (report.deliveredCount || 0) + (report.returnedCount || 0),
           extraCosts,
           memo: report.memo,
           status: report.status,
@@ -9733,10 +11106,12 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
             requesterName: order.requesterName,
           } : null,
           pricing: {
-            baseAmount: report.calculatedAmount || 0,
+            // closing report DB에 저장된 SSOT 값 사용
+            supplyAmount: report.supplyAmount || Math.round((report.calculatedAmount || 0) / 1.1),
             additionalCosts: extraCosts.reduce((sum: number, c: any) => sum + (c.amount || c.unitPriceSupply || 0), 0),
-            vat: calculateVat(report.calculatedAmount || 0),
-            totalWithVat: Math.round((report.calculatedAmount || 0) * 1.1),
+            vat: report.vatAmount || calculateVat(report.supplyAmount || Math.round((report.calculatedAmount || 0) / 1.1)),
+            totalWithVat: report.totalAmount || report.calculatedAmount || 0,
+            baseAmount: report.calculatedAmount || 0,
             deposit: 0,
             balance: 0,
           },
@@ -10419,9 +11794,27 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     try {
       const actorId = (req as any).adminUser?.id;
       const refundId = parseInt(req.params.id);
-      const { status } = req.body;
+      const { status, reason, notes } = req.body;
 
-      const updateData: any = { ...req.body };
+      // 현재 환불 상태 조회 (이중 환불 방지)
+      const [existingRefund] = await db.select().from(refunds).where(eq(refunds.id, refundId));
+      if (!existingRefund) {
+        return res.status(404).json({ message: "Refund not found" });
+      }
+
+      // 이미 완료/실패된 환불은 상태 변경 불가
+      const terminalStatuses = ["completed", "failed"];
+      if (terminalStatuses.includes(existingRefund.status)) {
+        return res.status(400).json({
+          message: `이미 ${existingRefund.status === "completed" ? "완료" : "실패"} 처리된 환불입니다. 상태를 변경할 수 없습니다.`,
+        });
+      }
+
+      // 허용된 필드만 명시적 전달 (...req.body 제거)
+      const updateData: any = {};
+      if (status) updateData.status = status;
+      if (reason !== undefined) updateData.reason = reason;
+      if (notes !== undefined) updateData.notes = notes;
 
       if (status === "completed") {
         updateData.approvedBy = actorId;
@@ -10862,77 +12255,103 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
       const startDate = req.query.startDate as string | undefined;
       const endDate = req.query.endDate as string | undefined;
 
+      console.log(`[closings] Query params: status=${status}, startDate=${startDate}, endDate=${endDate}`);
+
       // 간단한 쿼리 - closing_reports만 조회 후 order 정보 별도 조회
       const reports = await db.select().from(closingReports).orderBy(desc(closingReports.createdAt));
+      console.log(`[closings] Found ${reports.length} closing_reports`);
 
       const courierSettings = await storage.getAllCourierSettings();
 
       const enriched = await Promise.all(
         reports.map(async (cr) => {
-          const order = await storage.getOrder(cr.orderId);
-          if (!order) return null;
+          try {
+            const order = await storage.getOrder(cr.orderId);
+            if (!order) {
+              console.log(`[closings] Report ${cr.id}: order ${cr.orderId} not found, skipping`);
+              return null;
+            }
 
-          const helper = await storage.getUser(cr.helperId);
-          const requester = order.requesterId ? await storage.getUser(order.requesterId) : null;
-          const settlement = await db
-            .select()
-            .from(settlementRecords)
-            .where(eq(settlementRecords.orderId, cr.orderId))
-            .limit(1);
+            const helper = await storage.getUser(cr.helperId);
+            const requester = order.requesterId ? await storage.getUser(order.requesterId) : null;
+            const settlement = await db
+              .select()
+              .from(settlementRecords)
+              .where(eq(settlementRecords.orderId, cr.orderId))
+              .limit(1);
 
-          // Get category from courier_settings
-          const courierSetting = courierSettings.find(c => c.courierName === order.companyName);
-          const category = courierSetting?.category || "parcel";
-          const categoryBasePrice = courierSetting?.basePricePerBox || 0;
-          const categoryEtcPrice = courierSetting?.etcPricePerBox || 0;
+            // Get category from courier_settings
+            const courierSetting = courierSettings.find(c => c.courierName === order.companyName);
+            const category = courierSetting?.category || "parcel";
+            const categoryBasePrice = courierSetting?.basePricePerBox || 0;
+            const categoryEtcPrice = courierSetting?.etcPricePerBox || 0;
 
-          let closingStatus = 'pending';
-          const os = order.status;
-          if (os === 'closing_submitted') closingStatus = 'pending';
-          else if (['final_amount_confirmed', 'balance_paid', 'settlement_paid', 'closed'].includes(os || '')) closingStatus = 'approved';
-          else if (['open', 'scheduled'].includes(os || '')) closingStatus = 'rejected';
+            let closingStatus = 'pending';
+            const os = order.status;
+            if (os === 'closing_submitted') closingStatus = 'pending';
+            else if (['final_amount_confirmed', 'balance_paid', 'settlement_paid', 'closed'].includes(os || '')) closingStatus = 'approved';
+            else if (['open', 'scheduled'].includes(os || '')) closingStatus = 'rejected';
 
-          if (status !== 'all') {
-            if (status === 'pending' && closingStatus !== 'pending') return null;
-            if (status === 'approved' && closingStatus !== 'approved') return null;
-            if (status === 'rejected' && closingStatus !== 'rejected') return null;
+            if (status !== 'all') {
+              if (status === 'pending' && closingStatus !== 'pending') return null;
+              if (status === 'approved' && closingStatus !== 'approved') return null;
+              if (status === 'rejected' && closingStatus !== 'rejected') return null;
+            }
+
+            return {
+              id: cr.id,
+              orderId: cr.orderId,
+              helperId: cr.helperId,
+              helperName: helper?.nickname || helper?.name || null,
+              helperPhone: helper?.phoneNumber || null,
+              requesterId: order.requesterId,
+              requesterName: requester?.nickname || requester?.name || null,
+              requesterPhone: requester?.phoneNumber || null,
+              category,
+              categoryBasePrice,
+              categoryEtcPrice,
+              deliveredCount: cr.deliveredCount,
+              returnedCount: cr.returnedCount,
+              etcCount: cr.etcCount || 0,
+              deliveryHistoryImages: cr.deliveryHistoryImagesJson ? JSON.parse(cr.deliveryHistoryImagesJson) : [],
+              etcImages: cr.etcImagesJson ? JSON.parse(cr.etcImagesJson) : [],
+              extraCostsJson: cr.extraCostsJson ? (() => {
+                try {
+                  const parsed = JSON.parse(cr.extraCostsJson);
+                  return Array.isArray(parsed) ? parsed.map((item: any) => ({
+                    name: item.code || item.name || '',
+                    unitPrice: item.amount || item.unitPrice || 0,
+                    quantity: item.quantity || 1,
+                    memo: item.memo || '',
+                  })) : [];
+                } catch { return []; }
+              })() : [],
+              closingMemo: cr.memo,
+              dynamicFields: cr.dynamicFieldsJson ? (() => { try { return JSON.parse(cr.dynamicFieldsJson); } catch { return null; } })() : null,
+              createdAt: cr.createdAt,
+              status: closingStatus,
+              order: {
+                status: order.status,
+                courierCompany: order.courierCompany || order.companyName,
+                averageQuantity: order.averageQuantity,
+                finalPricePerBox: order.finalPricePerBox,
+                pricePerUnit: order.pricePerUnit,
+              },
+              settlement: settlement[0] || null,
+            };
+          } catch (itemErr) {
+            console.error(`[closings] Error enriching report ${cr.id}:`, itemErr);
+            return null;
           }
-
-          return {
-            id: cr.id,
-            orderId: cr.orderId,
-            helperName: helper?.nickname || helper?.name || null,
-            helperPhone: helper?.phoneNumber || null,
-            requesterId: order.requesterId,
-            requesterName: requester?.nickname || requester?.name || requester?.companyName || null,
-            requesterPhone: requester?.phoneNumber || null,
-            category,
-            categoryBasePrice,
-            deliveredCount: cr.deliveredCount,
-            returnedCount: cr.returnedCount,
-            etcCount: cr.etcCount || 0,
-            deliveryHistoryImages: cr.deliveryHistoryImagesJson ? JSON.parse(cr.deliveryHistoryImagesJson) : [],
-            etcImages: cr.etcImagesJson ? JSON.parse(cr.etcImagesJson) : [],
-            extraCostsJson: cr.extraCostsJson,
-            closingMemo: cr.closingMemo,
-            createdAt: cr.createdAt,
-            status: closingStatus,
-            order: {
-              status: order.status,
-              courierCompany: order.courierCompany || order.companyName,
-              averageQuantity: order.averageQuantity,
-              finalPricePerBox: order.finalPricePerBox,
-              pricePerUnit: order.pricePerUnit,
-            },
-            settlement: settlement[0] || null,
-          };
         })
       );
 
       let filtered = enriched.filter(Boolean);
+      console.log(`[closings] After enrichment: ${enriched.length} total, ${filtered.length} non-null`);
 
       // Date filtering
       if (startDate || endDate) {
+        const beforeDateFilter = filtered.length;
         filtered = filtered.filter((item: any) => {
           if (!item.createdAt) return true;
           const createdDate = item.createdAt instanceof Date ? item.createdAt.toISOString().split("T")[0] : String(item.createdAt).split("T")[0];
@@ -10940,12 +12359,293 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
           if (endDate && createdDate > endDate) return false;
           return true;
         });
+        console.log(`[closings] After date filter: ${beforeDateFilter} -> ${filtered.length}`);
       }
 
+      console.log(`[closings] Returning ${filtered.length} items`);
       res.json(filtered);
     } catch (err: any) {
       console.error("Get closings error:", err);
       res.status(500).json({ message: "마감 목록을 불러오지 못했습니다" });
+    }
+  });
+
+  // GET /api/admin/order-details - 오더상세내역 (통합 조회)
+  app.get("/api/admin/order-details", adminAuth, requirePermission("orders.view"), async (req: AuthenticatedRequest, res) => {
+    try {
+      const searchOrderNumber = req.query.orderNumber as string | undefined;
+      const searchOrderId = req.query.orderId as string | undefined;
+      const startDate = req.query.startDate as string | undefined;
+      const endDate = req.query.endDate as string | undefined;
+      const currentUser = req.user;
+      const isSuperAdmin = currentUser?.role === 'superadmin' || currentUser?.role === 'SUPER_ADMIN';
+
+      // 모든 closing_reports 조회
+      const reports = await db.select().from(closingReports).orderBy(desc(closingReports.createdAt));
+
+      // 모든 사고/이의제기 조회
+      const allIncidents = await db.select().from(incidentReports);
+      const incidentsByOrder = new Map<number, any[]>();
+      allIncidents.forEach((inc: any) => {
+        const arr = incidentsByOrder.get(inc.orderId) || [];
+        arr.push(inc);
+        incidentsByOrder.set(inc.orderId, arr);
+      });
+
+      // 모든 차감 조회
+      const allDeductions = await db.select().from(deductions);
+      const deductionsByOrder = new Map<number, any[]>();
+      allDeductions.forEach((ded: any) => {
+        const arr = deductionsByOrder.get(ded.orderId) || [];
+        arr.push(ded);
+        deductionsByOrder.set(ded.orderId, arr);
+      });
+
+      const enriched = await Promise.all(
+        reports.map(async (cr: any) => {
+          try {
+            const order = await storage.getOrder(cr.orderId);
+            if (!order) return null;
+
+            // 오더번호 검색
+            if (searchOrderNumber) {
+              if (order.orderNumber !== searchOrderNumber && String(order.id) !== searchOrderNumber) {
+                return null;
+              }
+            }
+            if (searchOrderId && String(order.id) !== searchOrderId) {
+              return null;
+            }
+
+            const helper = cr.helperId ? await storage.getUser(cr.helperId) : null;
+            const requester = order.requesterId ? await storage.getUser(order.requesterId) : null;
+
+            // 사고/이의제기 정보
+            const orderIncidents = incidentsByOrder.get(cr.orderId) || [];
+            const hasIncident = orderIncidents.some((inc: any) => inc.incidentType === 'cargo_damage' || inc.incidentType === 'accident');
+            const hasDispute = orderIncidents.some((inc: any) => inc.incidentType === 'dispute' || inc.incidentType === 'complaint');
+            const hasAnyEvent = hasIncident || hasDispute || orderIncidents.length > 0;
+
+            // 차감 정보
+            const orderDeductions = deductionsByOrder.get(cr.orderId) || [];
+            const deductionTotal = orderDeductions.reduce((sum: number, d: any) => sum + (d.amount || 0), 0);
+
+            // 정산 정보
+            const settlement = await db
+              .select()
+              .from(settlementRecords)
+              .where(eq(settlementRecords.orderId, cr.orderId))
+              .limit(1);
+
+            // 추가비용 파싱
+            let extraCosts: any[] = [];
+            if (cr.extraCostsJson) {
+              try {
+                const parsed = JSON.parse(cr.extraCostsJson);
+                extraCosts = Array.isArray(parsed) ? parsed.map((item: any) => ({
+                  name: item.code || item.name || '',
+                  unitPrice: item.amount || item.unitPrice || 0,
+                  quantity: item.quantity || 1,
+                  memo: item.memo || '',
+                })) : [];
+              } catch { extraCosts = []; }
+            }
+
+            // 협력업체 정보
+            let enterpriseName = '';
+            if (order.enterpriseId) {
+              try {
+                const ent = await storage.getEnterpriseAccount(order.enterpriseId);
+                enterpriseName = ent?.name || '';
+              } catch { /* ignore */ }
+            }
+
+            // 권한 분리: 일반 관리자는 이벤트 있는 건만
+            if (!isSuperAdmin && !hasAnyEvent) {
+              return null;
+            }
+
+            // SSOT 정산 계산기로 금액 라이브 재계산 (반품·기타·추가비용 정확 반영)
+            const closingData = parseClosingReport(cr, order);
+            const settlementCalc = calculateSettlement(closingData);
+
+            // 수수료율: 매칭 스냅샷 → 헬퍼별 실효 수수료율 → 글로벌 기본값
+            let platformFeeRate = 5; // fallback
+            try {
+              const [appSnapshot] = await db.select().from(orderApplications)
+                .where(and(
+                  eq(orderApplications.orderId, cr.orderId),
+                  eq(orderApplications.helperId, cr.helperId)
+                ))
+                .limit(1);
+              if (appSnapshot?.snapshotCommissionRate != null) {
+                platformFeeRate = appSnapshot.snapshotCommissionRate;
+              } else {
+                const effectiveRate = await storage.getEffectiveCommissionRate(cr.helperId);
+                platformFeeRate = effectiveRate.rate;
+              }
+            } catch { /* fallback to 5% */ }
+
+            const platformFeeCalc = Math.round(settlementCalc.totalAmount * (platformFeeRate / 100));
+            const netAmountCalc = Math.max(0, settlementCalc.totalAmount - platformFeeCalc - deductionTotal);
+
+            return {
+              // 기본 정보
+              closingReportId: cr.id,
+              orderId: cr.orderId,
+              orderNumber: order.orderNumber || null,
+              orderStatus: order.status,
+              // 요청자 정보
+              requesterId: order.requesterId,
+              requesterName: requester?.nickname || requester?.name || '미확인',
+              requesterPhone: requester?.phoneNumber || '',
+              requesterEmail: requester?.email || '',
+              businessName: order.companyName || '',
+              // 헬퍼 정보
+              helperId: cr.helperId,
+              helperName: helper?.nickname || helper?.name || '미확인',
+              helperPhone: helper?.phoneNumber || '',
+              helperEmail: helper?.email || '',
+              helperTeamName: '', // TODO: team lookup if needed
+              // 오더 정보
+              deliveryArea: order.deliveryArea || '',
+              courierCompany: order.courierCompany || order.companyName || '',
+              vehicleType: order.vehicleType || '',
+              scheduledDate: order.scheduledDate || '',
+              scheduledDateEnd: order.scheduledDateEnd || null,
+              pricePerUnit: order.pricePerUnit || 0,
+              etcPricePerUnit: closingData.etcPricePerUnit || 1800,
+              averageQuantity: order.averageQuantity || '',
+              campAddress: order.campAddress || '',
+              contactPhone: order.contactPhone || '',
+              arrivalTime: order.arrivalTime || '',
+              enterpriseId: order.enterpriseId || null,
+              enterpriseName,
+              // 마감 데이터
+              deliveredCount: cr.deliveredCount || 0,
+              returnedCount: cr.returnedCount || 0,
+              etcCount: cr.etcCount || 0,
+              extraCostsJson: extraCosts,
+              deliveryHistoryImages: cr.deliveryHistoryImagesJson ? JSON.parse(cr.deliveryHistoryImagesJson) : [],
+              etcImages: cr.etcImagesJson ? JSON.parse(cr.etcImagesJson) : [],
+              closingMemo: cr.memo || '',
+              closingCreatedAt: cr.createdAt,
+              // 정산 (SSOT 계산기 결과)
+              supplyAmount: settlementCalc.supplyAmount,
+              vatAmount: settlementCalc.vatAmount,
+              totalAmount: settlementCalc.totalAmount,
+              platformFeeRate: platformFeeRate,
+              platformFee: platformFeeCalc,
+              netAmount: netAmountCalc,
+              // 정산 상세 breakdown
+              deliveryReturnAmount: settlementCalc.deliveryReturnAmount,
+              etcAmount: settlementCalc.etcAmount,
+              extraCostsTotal: settlementCalc.extraCostsTotal,
+              // 차감/사고 이벤트
+              hasIncident,
+              hasDispute,
+              hasAnyEvent,
+              incidents: orderIncidents,
+              deductions: orderDeductions,
+              deductionTotal,
+              // 정산 레코드
+              settlementRecord: settlement[0] || null,
+            };
+          } catch (itemErr) {
+            console.error(`[order-details] Error enriching report ${cr.id}:`, itemErr);
+            return null;
+          }
+        })
+      );
+
+      let filtered = enriched.filter(Boolean);
+
+      // 날짜 필터
+      if (startDate || endDate) {
+        filtered = filtered.filter((item: any) => {
+          const schedDate = item.scheduledDate || '';
+          if (startDate && schedDate < startDate) return false;
+          if (endDate && schedDate > endDate) return false;
+          return true;
+        });
+      }
+
+      res.json(filtered);
+    } catch (err: any) {
+      console.error("Get order-details error:", err);
+      res.status(500).json({ message: "오더상세내역을 불러오지 못했습니다" });
+    }
+  });
+
+  // PUT /api/admin/order-details/:orderId - 오더상세내역 수정 (이벤트 있는 건만)
+  app.put("/api/admin/order-details/:orderId", adminAuth, requirePermission("orders.edit"), async (req: AuthenticatedRequest, res) => {
+    try {
+      const orderId = parseInt(req.params.orderId);
+      const { deliveredCount, returnedCount, etcCount, deductionUpdates } = req.body;
+
+      // 해당 오더에 이벤트가 있는지 확인
+      const orderIncidents = await db.select().from(incidentReports)
+        .where(eq(incidentReports.orderId, orderId));
+      if (orderIncidents.length === 0) {
+        return res.status(403).json({ message: "이벤트(사고/이의제기)가 없는 오더는 수정할 수 없습니다" });
+      }
+
+      // closing_report 업데이트
+      const existingReports = await db.select().from(closingReports)
+        .where(eq(closingReports.orderId, orderId));
+      if (existingReports.length > 0) {
+        const cr = existingReports[0];
+        const updates: any = {};
+        if (deliveredCount !== undefined) updates.deliveredCount = deliveredCount;
+        if (returnedCount !== undefined) updates.returnedCount = returnedCount;
+        if (etcCount !== undefined) updates.etcCount = etcCount;
+
+        if (Object.keys(updates).length > 0) {
+          await db.update(closingReports).set(updates).where(eq(closingReports.id, cr.id));
+        }
+      }
+
+      // 차감 업데이트 (배열)
+      if (deductionUpdates && Array.isArray(deductionUpdates)) {
+        for (const du of deductionUpdates) {
+          if (du.id) {
+            // 기존 차감 수정
+            await db.update(deductions).set({
+              amount: du.amount,
+              reason: du.reason,
+              memo: du.memo,
+            }).where(eq(deductions.id, du.id));
+          } else {
+            // 신규 차감 생성 (화물사고 자동차감)
+            await db.insert(deductions).values({
+              orderId,
+              incidentId: du.incidentId || null,
+              helperId: du.helperId || null,
+              targetType: du.targetType || 'helper',
+              targetId: du.targetId || null,
+              amount: du.amount || 0,
+              reason: du.reason || '화물사고 차감',
+              category: du.category || 'incident',
+              status: 'confirmed',
+              memo: du.memo || '',
+            });
+          }
+        }
+      }
+
+      // 관리자 액션 로그
+      await logAdminAction({
+        req,
+        action: "order_detail.update",
+        targetType: "order",
+        targetId: orderId,
+        newValue: req.body,
+      });
+
+      res.json({ success: true, message: "오더상세내역이 수정되었습니다" });
+    } catch (err: any) {
+      console.error("Update order-details error:", err);
+      res.status(500).json({ message: "오더상세내역 수정에 실패했습니다" });
     }
   });
 
@@ -10963,12 +12663,21 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
       await storage.updateOrder(orderId, { status: 'scheduled' });
 
       if (order.matchedHelperId) {
+        const rejectMsg = reason || '마감이 반려되었습니다. 다시 제출해주세요.';
         await storage.createNotification({
           userId: order.matchedHelperId,
           type: 'closing_rejected',
           title: '마감 반려',
-          message: reason || '마감이 반려되었습니다. 다시 제출해주세요.',
+          message: rejectMsg,
           data: { orderId },
+        });
+
+        // 푸시 알림
+        sendPushToUser(order.matchedHelperId, {
+          title: "마감 반려",
+          body: `${order.companyName || "오더"} 마감이 반려되었습니다. 다시 제출해주세요.`,
+          url: "/helper-home",
+          tag: `closing-rejected-${orderId}`,
         });
       }
 
@@ -11074,9 +12783,17 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         .from(incidentReports)
         .orderBy(desc(incidentReports.createdAt));
 
+      // orderNumber 매핑
+      const orderIds = [...new Set(incidents.filter(i => i.orderId).map(i => i.orderId!))];
+      const orderList = orderIds.length > 0
+        ? await db.select({ id: orders.id, orderNumber: orders.orderNumber }).from(orders).where(inArray(orders.id, orderIds))
+        : [];
+      const orderNumMap = new Map(orderList.map(o => [o.id, o.orderNumber]));
+
       const enriched = incidents.map(inc => ({
         id: inc.id,
         orderId: inc.orderId,
+        orderNumber: inc.orderId ? orderNumMap.get(inc.orderId) || null : null,
         incidentType: inc.type || 'damage',
         amount: inc.deductionAmount || 0,
         reason: inc.description || '',
@@ -11116,9 +12833,9 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
       if (images && images.length > 0) {
         for (const img of images) {
           await db.insert(incidentEvidence).values({
-            incidentReportId: incident.id,
+            incidentId: incident.id,
+            evidenceType: 'image',
             fileUrl: img,
-            fileType: 'image',
           });
         }
       }
@@ -11190,12 +12907,14 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
       if (incident.orderId) {
         const [orderData] = await db.select({
           id: orders.id,
+          orderNumber: orders.orderNumber,
           campAddress: orders.campAddress,
           deliveryArea: orders.deliveryArea,
           scheduledDate: orders.scheduledDate,
           courierCompany: orders.courierCompany,
           averageQuantity: orders.averageQuantity,
           matchedHelperId: orders.matchedHelperId,
+          companyName: orders.companyName,
         }).from(orders).where(eq(orders.id, incident.orderId));
         order = orderData;
 
@@ -11213,9 +12932,35 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         const [helperData] = await db.select({
           id: users.id,
           name: users.name,
+          nickname: users.nickname,
           phone: users.phoneNumber,
         }).from(users).where(eq(users.id, incident.helperId));
         helper = helperData;
+      }
+
+      // Get requester info (companyName은 users가 아닌 orders 테이블에 있음)
+      let requester: any = null;
+      if (incident.requesterId) {
+        const [requesterData] = await db.select({
+          id: users.id,
+          name: users.name,
+          phone: users.phoneNumber,
+        }).from(users).where(eq(users.id, incident.requesterId));
+        requester = requesterData ? {
+          ...requesterData,
+          companyName: order?.companyName || null,
+        } : null;
+      }
+
+      // Get reporter info
+      let reporter: any = null;
+      if (incident.reporterId) {
+        const [reporterData] = await db.select({
+          id: users.id,
+          name: users.name,
+          role: users.role,
+        }).from(users).where(eq(users.id, incident.reporterId));
+        reporter = reporterData;
       }
 
       // Get evidence
@@ -11223,14 +12968,25 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
         .from(incidentEvidence)
         .where(eq(incidentEvidence.incidentId, incidentId));
 
+      // Get action history
+      let actions: any[] = [];
+      try {
+        actions = await storage.getIncidentActions(incidentId);
+      } catch { /* ignore if not implemented */ }
+
       res.json({
         ...incident,
         createdAt: incident.createdAt?.toISOString() || null,
         resolvedAt: incident.resolvedAt?.toISOString() || null,
         helperActionAt: incident.helperActionAt?.toISOString() || null,
+        deductionConfirmedAt: incident.deductionConfirmedAt?.toISOString() || null,
+        reviewStartedAt: incident.reviewStartedAt?.toISOString() || null,
         order: order ? { ...order, helperName } : null,
         helper,
+        requester,
+        reporter,
         evidence,
+        actions,
       });
     } catch (err: any) {
       console.error("Get incident detail error:", err);
@@ -11906,39 +13662,37 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
             });
           }
         } else if (type === 'balance') {
+          // 잔금 대상: 마감 보고서가 있는 오더만 (정확한 데이터 연동 - SSOT)
           if (closing) {
+            // === closing report DB에 저장된 SSOT 값 우선 사용 ===
             const deliveredCount = closing.deliveredCount || 0;
             const returnedCount = closing.returnedCount || 0;
             const etcCount = closing.etcCount || 0;
-            const closingEtcPrice = closing.etcPricePerUnit || 0;
-            // 마감자료에 기타단가가 없으면 운임정책에서 기본값 사용
-            const orderCourierSettings = await storage.getAllCourierSettings();
-            const orderCourier = orderCourierSettings.find(c => c.courierName === order.companyName);
-            const etcPricePerUnit = closingEtcPrice > 0 ? closingEtcPrice : (orderCourier?.etcPricePerBox || 0);
+            const etcPricePerUnit = closing.etcPricePerUnit || 0;
 
-            // 기타비용 파싱 (extraCostsJson)
             let extraCostsTotal = 0;
-            let extraCostsItems: Array<{ code: string; amount: number; memo?: string }> = [];
             if (closing.extraCostsJson) {
               try {
-                extraCostsItems = JSON.parse(closing.extraCostsJson);
+                const extraCostsItems = JSON.parse(closing.extraCostsJson);
                 extraCostsTotal = extraCostsItems.reduce((sum: number, item: any) => sum + (Number(item.amount) || 0), 0);
               } catch { /* ignore */ }
             }
 
-            // 배송수 × 단가
-            const deliveryTotal = deliveredCount * unitPrice;
-            // 반품수 × 단가 (반품도 비용에 포함)
-            const returnTotal = returnedCount * unitPrice;
-            // 기타수량 × 기타단가
-            const etcTotal = etcCount * etcPricePerUnit;
-
-            // 공급가액 = 배송수 + 반품수 + 기타수량 + 기타비용
-            const supplyAmount = deliveryTotal + returnTotal + etcTotal + extraCostsTotal;
-            // 부가세 (10%)
-            const vatAmount = calculateVat(supplyAmount);
-            // 총액 (부가세 포함)
-            const grossAmount = supplyAmount + vatAmount;
+            // DB에 저장된 정산 스냅샷 사용 (마감 제출 시 calculateSettlement로 계산된 값)
+            let supplyAmount: number, vatAmount: number, grossAmount: number;
+            if (closing.supplyAmount != null && closing.vatAmount != null && closing.totalAmount != null) {
+              // 마감 제출 시 저장된 SSOT 값 사용
+              supplyAmount = closing.supplyAmount;
+              vatAmount = closing.vatAmount;
+              grossAmount = closing.totalAmount;
+            } else {
+              // 레거시 데이터: parseClosingReport + calculateSettlement로 재계산
+              const closingData = parseClosingReport(closing, order);
+              const settlement = calculateSettlement(closingData);
+              supplyAmount = settlement.supplyAmount;
+              vatAmount = settlement.vatAmount;
+              grossAmount = settlement.totalAmount;
+            }
 
             const depositAmount = contract?.depositAmount || 0;
             const balanceAmount = Math.max(0, grossAmount - depositAmount);
@@ -11952,24 +13706,25 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
               requesterPhone: requester?.phoneNumber || '-',
               helperName: helper?.name || '-',
               helperEmail: helper?.email || '-',
-              deliveredCount: deliveredCount,
-              returnedCount: returnedCount,
-              etcCount: etcCount,
-              etcPricePerUnit: etcPricePerUnit,
-              extraCostsTotal: extraCostsTotal,
-              supplyAmount: supplyAmount,
-              vatAmount: vatAmount,
-              grossAmount: grossAmount,
-              depositAmount: depositAmount,
-              unitPrice: unitPrice,
-              balanceAmount: balanceAmount,
+              deliveredCount,
+              returnedCount,
+              etcCount,
+              etcPricePerUnit,
+              extraCostsTotal,
+              supplyAmount,
+              vatAmount,
+              grossAmount,
+              depositAmount,
+              unitPrice,
+              balanceAmount,
               orderStatus: order.status,
               paymentStatus: ['balance_paid', 'settlement_paid', 'closed'].includes(order.status || '') ? 'paid' : 'unpaid',
               balancePaidAt: (contract as any)?.balancePaidAt || null,
-              balanceDueDate: (contract as any)?.balanceDueDate || null,
+              balanceDueDate: (contract as any)?.balanceDueDate || (order as any).balancePaymentDueDate || null,
               virtualAccountNumber: null,
               virtualAccountBank: null,
-              closingSubmittedAt: closing.createdAt,
+              closingReportId: closing.id,
+              closingSubmittedAt: closing.createdAt || null,
               createdAt: order.createdAt,
             });
           }
@@ -13017,6 +14772,136 @@ export async function registerSystemRoutes(ctx: RouteContext): Promise<void> {
     } catch (err: any) {
       console.error("Document reject error:", err);
       res.status(500).json({ message: "서류 반려에 실패했습니다" });
+    }
+  });
+
+  // ============================================
+  // 협력업체 관리 (Enterprise Accounts)
+  // ============================================
+
+  // GET /api/admin/enterprise-accounts — 전체 목록
+  app.get("/api/admin/enterprise-accounts", adminAuth, requirePermission("settings.edit"), async (_req, res) => {
+    try {
+      const accounts = await storage.getAllEnterpriseAccounts();
+      res.json(accounts);
+    } catch (err: any) {
+      console.error("Enterprise accounts list error:", err);
+      res.status(500).json({ message: "협력업체 목록 조회에 실패했습니다" });
+    }
+  });
+
+  // GET /api/admin/enterprise-accounts/search — 이름 검색 (오더등록 모달용)
+  app.get("/api/admin/enterprise-accounts/search", adminAuth, async (req, res) => {
+    try {
+      const q = (req.query.q as string || "").trim();
+      if (!q) {
+        return res.json([]);
+      }
+      const all = await db
+        .select()
+        .from(enterpriseAccounts)
+        .where(
+          and(
+            eq(enterpriseAccounts.isActive, true),
+            sql`${enterpriseAccounts.name} ILIKE ${'%' + q + '%'}`
+          )
+        )
+        .orderBy(enterpriseAccounts.name)
+        .limit(20);
+      res.json(all);
+    } catch (err: any) {
+      console.error("Enterprise accounts search error:", err);
+      res.status(500).json({ message: "협력업체 검색에 실패했습니다" });
+    }
+  });
+
+  // POST /api/admin/enterprise-accounts — 생성
+  app.post("/api/admin/enterprise-accounts", adminAuth, requirePermission("settings.edit"), async (req, res) => {
+    try {
+      const { name, businessNumber, contactName, contactPhone, contactEmail, commissionRate,
+        representativeName, businessType, businessItem, address, faxNumber, taxEmail,
+        bankName, accountNumber, accountHolder, memo,
+        contractStartDate, contractEndDate, settlementModel, taxType } = req.body;
+      if (!name || !businessNumber) {
+        return res.status(400).json({ message: "업체명과 사업자등록번호는 필수입니다" });
+      }
+      const account = await storage.createEnterpriseAccount({
+        name,
+        businessNumber,
+        contactName: contactName || null,
+        contactPhone: contactPhone || null,
+        contactEmail: contactEmail || null,
+        commissionRate: commissionRate != null ? commissionRate : 10,
+        representativeName: representativeName || null,
+        businessType: businessType || null,
+        businessItem: businessItem || null,
+        address: address || null,
+        faxNumber: faxNumber || null,
+        taxEmail: taxEmail || null,
+        bankName: bankName || null,
+        accountNumber: accountNumber || null,
+        accountHolder: accountHolder || null,
+        memo: memo || null,
+        contractStartDate: contractStartDate || null,
+        contractEndDate: contractEndDate || null,
+        settlementModel: settlementModel || 'per_order',
+        taxType: taxType || 'exclusive',
+      });
+      res.json(account);
+    } catch (err: any) {
+      console.error("Enterprise account create error:", err);
+      res.status(500).json({ message: "협력업체 등록에 실패했습니다" });
+    }
+  });
+
+  // PATCH /api/admin/enterprise-accounts/:id — 수정
+  app.patch("/api/admin/enterprise-accounts/:id", adminAuth, requirePermission("settings.edit"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { name, businessNumber, contactName, contactPhone, contactEmail, commissionRate, isActive,
+        representativeName, businessType, businessItem, address, faxNumber, taxEmail,
+        bankName, accountNumber, accountHolder, memo,
+        contractStartDate, contractEndDate, settlementModel, taxType } = req.body;
+      const updates: any = {};
+      if (name !== undefined) updates.name = name;
+      if (businessNumber !== undefined) updates.businessNumber = businessNumber;
+      if (contactName !== undefined) updates.contactName = contactName;
+      if (contactPhone !== undefined) updates.contactPhone = contactPhone;
+      if (contactEmail !== undefined) updates.contactEmail = contactEmail;
+      if (commissionRate !== undefined) updates.commissionRate = commissionRate;
+      if (isActive !== undefined) updates.isActive = isActive;
+      if (representativeName !== undefined) updates.representativeName = representativeName;
+      if (businessType !== undefined) updates.businessType = businessType;
+      if (businessItem !== undefined) updates.businessItem = businessItem;
+      if (address !== undefined) updates.address = address;
+      if (faxNumber !== undefined) updates.faxNumber = faxNumber;
+      if (taxEmail !== undefined) updates.taxEmail = taxEmail;
+      if (bankName !== undefined) updates.bankName = bankName;
+      if (accountNumber !== undefined) updates.accountNumber = accountNumber;
+      if (accountHolder !== undefined) updates.accountHolder = accountHolder;
+      if (memo !== undefined) updates.memo = memo;
+      if (contractStartDate !== undefined) updates.contractStartDate = contractStartDate;
+      if (contractEndDate !== undefined) updates.contractEndDate = contractEndDate;
+      if (settlementModel !== undefined) updates.settlementModel = settlementModel;
+      if (taxType !== undefined) updates.taxType = taxType;
+
+      const account = await storage.updateEnterpriseAccount(id, updates);
+      res.json(account);
+    } catch (err: any) {
+      console.error("Enterprise account update error:", err);
+      res.status(500).json({ message: "협력업체 수정에 실패했습니다" });
+    }
+  });
+
+  // DELETE /api/admin/enterprise-accounts/:id — 비활성화
+  app.delete("/api/admin/enterprise-accounts/:id", adminAuth, requirePermission("settings.edit"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const account = await storage.updateEnterpriseAccount(id, { isActive: false });
+      res.json({ success: true, account });
+    } catch (err: any) {
+      console.error("Enterprise account deactivate error:", err);
+      res.status(500).json({ message: "협력업체 비활성화에 실패했습니다" });
     }
   });
 }

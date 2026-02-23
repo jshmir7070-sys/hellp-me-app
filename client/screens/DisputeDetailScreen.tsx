@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { View, StyleSheet, ActivityIndicator } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { getToken } from "@/utils/secure-token-storage";
+import { getApiUrl } from "@/lib/query-client";
 
 import { useTheme } from "@/hooks/useTheme";
 import { ThemedText } from "@/components/ThemedText";
@@ -47,8 +48,8 @@ export default function DisputeDetailScreen({ route }: DisputeDetailScreenProps)
   const { data: dispute, isLoading } = useQuery<DisputeDetail>({
     queryKey: ["/api/helper/disputes", disputeId],
     queryFn: async () => {
-      const token = await AsyncStorage.getItem("authToken");
-      const res = await fetch(`/api/helper/disputes/${disputeId}`, {
+      const token = await getToken();
+      const res = await fetch(`${getApiUrl()}/api/helper/disputes/${disputeId}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Failed to fetch dispute");

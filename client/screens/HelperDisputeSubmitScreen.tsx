@@ -9,13 +9,15 @@ import * as ImagePicker from "expo-image-picker";
 import { Icon } from "@/components/Icon";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
 import { apiRequest, getApiUrl, getAuthToken } from "@/lib/query-client";
+import { formatOrderNumber } from "@/lib/format-order-number";
 
 type SettlementStackParamList = {
-  HelperDisputeSubmit: { orderId?: number; workDate?: string; orderTitle?: string } | undefined;
+  HelperDisputeSubmit: { orderId?: number; orderNumber?: string; workDate?: string; orderTitle?: string } | undefined;
   HelperDisputeList: undefined;
 };
 
@@ -24,6 +26,7 @@ type HelperDisputeSubmitScreenProps = NativeStackScreenProps<SettlementStackPara
 const DISPUTE_TYPES = [
   { value: "settlement_error", label: "정산" },
   { value: "invoice_error", label: "세금계산서" },
+  { value: "closing_data_mismatch", label: "마감자료불일치" },
   { value: "service_complaint", label: "요청자 불만" },
   { value: "other", label: "기타(직접작성)" },
 ];
@@ -33,9 +36,11 @@ export default function HelperDisputeSubmitScreen({ navigation, route }: HelperD
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const queryClient = useQueryClient();
 
   const orderId = route.params?.orderId;
+  const orderNumber = route.params?.orderNumber;
   const workDate = route.params?.workDate || new Date().toISOString().split('T')[0];
   const orderTitle = route.params?.orderTitle;
 
@@ -52,7 +57,7 @@ export default function HelperDisputeSubmitScreen({ navigation, route }: HelperD
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       allowsEditing: false,
       aspect: [4, 3],
       quality: 0.8,
@@ -152,7 +157,15 @@ export default function HelperDisputeSubmitScreen({ navigation, route }: HelperD
     <>
       <ScrollView
         style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
-        contentContainerStyle={{ paddingTop: headerHeight + Spacing.lg, paddingBottom: tabBarHeight + Spacing.xl }}
+        contentContainerStyle={{
+          paddingTop: headerHeight + Spacing.lg,
+          paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
+          ...(showDesktopLayout && {
+            maxWidth: containerMaxWidth,
+            alignSelf: 'center' as const,
+            width: '100%' as any,
+          }),
+        }}
       >
         <View style={styles.content}>
           {/* 마감정보 카드 */}
@@ -174,7 +187,7 @@ export default function HelperDisputeSubmitScreen({ navigation, route }: HelperD
             {orderId ? (
               <View style={styles.infoRow}>
                 <ThemedText style={[styles.infoLabel, { color: theme.tabIconDefault }]}>오더 번호</ThemedText>
-                <ThemedText style={[styles.infoValue, { color: theme.text }]}>#{orderId}</ThemedText>
+                <ThemedText style={[styles.infoValue, { color: theme.text }]}>{formatOrderNumber(orderNumber, orderId)}</ThemedText>
               </View>
             ) : null}
           </Card>
@@ -256,7 +269,7 @@ export default function HelperDisputeSubmitScreen({ navigation, route }: HelperD
           </Card>
         </View>
 
-        <View style={[styles.footer, { paddingBottom: tabBarHeight + Spacing.lg }]}>
+        <View style={[styles.footer, { paddingBottom: showDesktopLayout ? Spacing.lg : tabBarHeight + Spacing.lg }]}>
           <Pressable
             style={[
               styles.submitButton,

@@ -8,6 +8,8 @@ import HelperDisputeDetailScreen from "@/screens/HelperDisputeDetailScreen";
 import HelperDisputeSubmitScreen from "@/screens/HelperDisputeSubmitScreen";
 import HelperIncidentListScreen from "@/screens/HelperIncidentListScreen";
 import HelperIncidentDetailScreen from "@/screens/HelperIncidentDetailScreen";
+import MonthlyStatementListScreen from "@/screens/MonthlyStatementListScreen";
+import MonthlyStatementDetailScreen from "@/screens/MonthlyStatementDetailScreen";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
 export type SettlementStackParamList = {
@@ -19,6 +21,8 @@ export type SettlementStackParamList = {
   HelperDisputeSubmit: { orderId?: number; workDate?: string; orderTitle?: string } | undefined;
   HelperIncidentList: { orderId?: number } | undefined;
   HelperIncidentDetail: { incidentId: number };
+  MonthlyStatementList: undefined;
+  MonthlyStatementDetail: { statementId: number };
 };
 
 const Stack = createNativeStackNavigator<SettlementStackParamList>();
@@ -67,6 +71,16 @@ export default function SettlementStackNavigator() {
         name="HelperIncidentDetail"
         component={HelperIncidentDetailScreen}
         options={{ headerTitle: "화물사고 상세" }}
+      />
+      <Stack.Screen
+        name="MonthlyStatementList"
+        component={MonthlyStatementListScreen}
+        options={{ headerTitle: "월 정산서" }}
+      />
+      <Stack.Screen
+        name="MonthlyStatementDetail"
+        component={MonthlyStatementDetailScreen}
+        options={{ headerTitle: "정산서 상세" }}
       />
     </Stack.Navigator>
   );

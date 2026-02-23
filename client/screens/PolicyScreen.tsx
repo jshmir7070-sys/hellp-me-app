@@ -8,6 +8,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { Spacing, Typography } from "@/constants/theme";
 
 type PolicyScreenProps = NativeStackScreenProps<any, 'Policy'>;
@@ -88,8 +89,8 @@ const PRIVACY_POLICY = `헬프미 개인정보 처리방침
 - 정기적인 자체 감사
 
 6. 개인정보 보호책임자
-- 성명: 홍길동
-- 직책: 개인정보보호팀장
+- 성명: 주성허
+- 직책: 대표
 - 연락처: privacy@hellpme.com
 
 7. 정보주체의 권리
@@ -109,6 +110,7 @@ export default function PolicyScreen({ route }: PolicyScreenProps) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
 
   const policyType = route.params?.type as 'terms' | 'privacy';
   const content = policyType === 'terms' ? TERMS_OF_SERVICE : PRIVACY_POLICY;
@@ -119,8 +121,13 @@ export default function PolicyScreen({ route }: PolicyScreenProps) {
         style={styles.scrollView}
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.xl,
-          paddingBottom: tabBarHeight + Spacing.xl,
+          paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
           paddingHorizontal: Spacing.lg,
+          ...(showDesktopLayout && {
+            maxWidth: containerMaxWidth,
+            alignSelf: 'center' as const,
+            width: '100%' as any,
+          }),
         }}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         showsVerticalScrollIndicator={true}

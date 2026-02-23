@@ -11,14 +11,21 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.hellpme.app",
+      "minimumOsVersion": "15.1",
       "infoPlist": {
         "NSCameraUsageDescription": "QR 코드 스캔 및 업무 증빙 사진 촬영을 위해 카메라 접근 권한이 필요합니다.",
         "NSLocationWhenInUseUsageDescription": "배송 경로 추적 및 현장 출퇴근 확인을 위해 위치 정보가 필요합니다.",
         "NSPhotoLibraryUsageDescription": "업무 증빙 사진 및 서류 업로드를 위해 사진 라이브러리 접근 권한이 필요합니다.",
-        "NSPhotoLibraryAddUsageDescription": "촬영한 사진을 저장하기 위해 사진 라이브러리 접근 권한이 필요합니다."
+        "NSPhotoLibraryAddUsageDescription": "촬영한 사진을 저장하기 위해 사진 라이브러리 접근 권한이 필요합니다.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "privacyManifests": {
-        "NSPrivacyAccessedAPITypes": []
+        "NSPrivacyAccessedAPITypes": [
+          {
+            "NSPrivacyAccessedAPIType": "NSPrivacyAccessedAPICategoryUserDefaults",
+            "NSPrivacyAccessedAPITypeReasons": ["CA92.1"]
+          }
+        ]
       }
     },
     "android": {
@@ -31,6 +38,8 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.hellpme.app",
+      "minSdkVersion": 24,
+      "targetSdkVersion": 35,
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",

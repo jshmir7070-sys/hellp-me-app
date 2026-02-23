@@ -11,6 +11,7 @@ import { ProfileStackParamList } from "@/navigation/ProfileStackNavigator";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 
 type RequesterHistoryScreenProps = NativeStackScreenProps<ProfileStackParamList, 'RequesterHistory'>;
@@ -37,6 +38,7 @@ function parseOrderDate(order: any): Date | null {
 
 export default function RequesterHistoryScreen({ navigation }: RequesterHistoryScreenProps) {
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const headerHeight = useHeaderHeight();
 
   const today = new Date();
@@ -201,6 +203,11 @@ export default function RequesterHistoryScreen({ navigation }: RequesterHistoryS
         paddingTop: headerHeight + Spacing.lg,
         paddingBottom: Spacing.xl + 100,
         paddingHorizontal: Spacing.lg,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
     >
       {/* ① 달력 (최상단) */}

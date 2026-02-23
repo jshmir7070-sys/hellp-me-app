@@ -8,6 +8,8 @@ import { useQuery } from "@tanstack/react-query";
 import { RouteProp } from "@react-navigation/native";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
+import { useAuthImage } from "@/hooks/useAuthImage";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
@@ -17,6 +19,13 @@ import { getToken } from "@/utils/secure-token-storage";
 type SettlementDetailScreenProps = {
   route: RouteProp<{ SettlementDetail: { date: string; orderId?: number } }, 'SettlementDetail'>;
 };
+
+interface ExtraCostItem {
+  code?: string;
+  name?: string;
+  amount: number;
+  memo?: string;
+}
 
 interface WorkDetail {
   orderId: number;
@@ -39,6 +48,9 @@ interface WorkDetail {
   etcCount?: number;
   etcPricePerUnit?: number;
   etcAmount?: number;
+  extraCosts?: ExtraCostItem[];
+  extraCostsTotal?: number;
+  deliveryReturnAmount?: number;
   closingText: string;
   dynamicFields: Record<string, string | number>;
   deliveryHistoryImages: string[];
@@ -53,6 +65,7 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
 
   const queryString = orderId 
     ? `/api/helper/work-detail?orderId=${orderId}` 
@@ -62,15 +75,8 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
     queryKey: [queryString],
   });
 
-  const [authToken, setAuthToken] = useState<string | null>(null);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  useEffect(() => { getToken().then(setAuthToken); }, []);
-
-  const getImageUrl = (imagePath: string) => {
-    if (imagePath.startsWith('http')) return imagePath;
-    const base = new URL(imagePath, getApiUrl()).toString();
-    return authToken ? `${base}?token=${authToken}` : base;
-  };
+  const { getImageUrl } = useAuthImage();
 
   const formatCurrency = (amount?: number) => {
     if (amount === undefined || amount === null) return '-';
@@ -111,8 +117,13 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl + 60,
+        paddingBottom: showDesktopLayout ? Spacing.xl + 60 : tabBarHeight + Spacing.xl + 60,
         paddingHorizontal: Spacing.lg,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
     >
       <Card style={styles.headerCard}>
@@ -166,38 +177,50 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
 
       <Card style={styles.amountCard}>
         <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
-          정산 내역
+          금액 산출 내역
         </ThemedText>
-        {workDetail.pricePerUnit > 0 ? (
+
+        {/* 배송+반품 금액 */}
+        <View style={styles.amountRow}>
+          <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
+            배송+반품 ({workDetail.deliveredCount + (workDetail.returnedCount ?? 0)}건 × {formatCurrency(workDetail.pricePerUnit)})
+          </ThemedText>
+          <ThemedText style={[styles.amountValue, { color: theme.text }]}>
+            {formatCurrency(workDetail.deliveryReturnAmount ?? ((workDetail.deliveredCount + (workDetail.returnedCount ?? 0)) * workDetail.pricePerUnit))}
+          </ThemedText>
+        </View>
+
+        {/* 기타 금액 */}
+        {(workDetail.etcCount ?? 0) > 0 ? (
           <View style={styles.amountRow}>
             <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
-              배송 단가 (VAT별도)
+              기타 ({workDetail.etcCount}건 × {formatCurrency(workDetail.etcPricePerUnit)})
             </ThemedText>
             <ThemedText style={[styles.amountValue, { color: theme.text }]}>
-              {formatCurrency(workDetail.pricePerUnit)}/건
+              {formatCurrency(workDetail.etcAmount ?? ((workDetail.etcCount ?? 0) * (workDetail.etcPricePerUnit ?? 0)))}
             </ThemedText>
           </View>
         ) : null}
-        {(workDetail.etcPricePerUnit ?? 0) > 0 ? (
-          <View style={styles.amountRow}>
-            <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
-              기타 단가 (VAT별도)
-            </ThemedText>
-            <ThemedText style={[styles.amountValue, { color: theme.text }]}>
-              {formatCurrency(workDetail.etcPricePerUnit)}/건
-            </ThemedText>
-          </View>
+
+        {/* 추가비용 항목들 (VAT별도 공급가) */}
+        {workDetail.extraCosts && workDetail.extraCosts.length > 0 ? (
+          <>
+            {workDetail.extraCosts.map((cost, idx) => (
+              <View key={idx} style={styles.amountRow}>
+                <ThemedText style={[styles.amountLabel, { color: '#F59E0B' }]}>
+                  추가: {cost.code || cost.name || `항목${idx + 1}`} <ThemedText style={{ fontSize: 10, color: '#92400E' }}>(VAT별도)</ThemedText>
+                </ThemedText>
+                <ThemedText style={[styles.amountValue, { color: '#F59E0B' }]}>
+                  {formatCurrency(cost.amount)}
+                </ThemedText>
+              </View>
+            ))}
+          </>
         ) : null}
-        {(workDetail.etcAmount ?? 0) > 0 ? (
-          <View style={styles.amountRow}>
-            <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
-              기타 금액 ({workDetail.etcCount}건 × {formatCurrency(workDetail.etcPricePerUnit)})
-            </ThemedText>
-            <ThemedText style={[styles.amountValue, { color: theme.text }]}>
-              {formatCurrency(workDetail.etcAmount)}
-            </ThemedText>
-          </View>
-        ) : null}
+
+        <View style={[styles.divider, { backgroundColor: theme.backgroundSecondary }]} />
+
+        {/* 공급가액 / 부가세 / 합계 */}
         <View style={styles.amountRow}>
           <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
             공급가액
@@ -214,16 +237,18 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
             {formatCurrency(workDetail.vatAmount)}
           </ThemedText>
         </View>
-        <View style={[styles.divider, { backgroundColor: theme.backgroundSecondary }]} />
         <View style={styles.amountRow}>
-          <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
+          <ThemedText style={[styles.amountLabel, { color: theme.text, fontWeight: '600' }]}>
             합계
           </ThemedText>
           <ThemedText style={[styles.amountValue, { color: theme.text, fontWeight: '600' }]}>
             {formatCurrency(workDetail.totalAmount)}
           </ThemedText>
         </View>
-        
+
+        <View style={[styles.divider, { backgroundColor: theme.backgroundSecondary }]} />
+
+        {/* 수수료 */}
         {(workDetail.commissionAmount ?? 0) > 0 ? (
           <View style={styles.amountRow}>
             <ThemedText style={[styles.amountLabel, { color: '#F59E0B' }]}>
@@ -234,7 +259,8 @@ export default function SettlementDetailScreen({ route }: SettlementDetailScreen
             </ThemedText>
           </View>
         ) : null}
-        
+
+        {/* 차감액 */}
         {workDetail.deductionAmount > 0 ? (
           <View style={styles.amountRow}>
             <View style={{ flex: 1 }}>

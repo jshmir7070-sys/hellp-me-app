@@ -61,7 +61,7 @@ const navGroups: NavGroup[] = [
     menuKey: 'menu.orders',
     items: [
       { href: '/orders', label: '실시간오더관리', icon: <Package className="h-5 w-5" />, permission: 'orders.view' },
-      { href: '/closings', label: '오더마감자료', icon: <ClipboardCheck className="h-5 w-5" />, permission: 'orders.view' },
+      { href: '/closings', label: '오더상세내역', icon: <ClipboardCheck className="h-5 w-5" />, permission: 'orders.view' },
     ],
   },
   {
@@ -91,7 +91,15 @@ const navGroups: NavGroup[] = [
     items: [
       { href: '/members', label: '회원통합관리', icon: <Users className="h-5 w-5" />, permission: 'helpers.view' },
       { href: '/helper-documents', label: '헬퍼서류검토', icon: <ClipboardCheck className="h-5 w-5" />, permission: 'helpers.edit' },
-      { href: '/helper-bank-accounts', label: '수수료통장관리', icon: <Wallet className="h-5 w-5" />, permission: 'helpers.edit' },
+    ],
+  },
+  {
+    title: '팀 관리',
+    icon: <Building2 className="h-4 w-4" />,
+    collapsible: true,
+    menuKey: 'menu.teams',
+    items: [
+      { href: '/teams', label: '팀 관리', icon: <Users className="h-5 w-5" />, permission: 'helpers.view' },
     ],
   },
   {
@@ -100,8 +108,9 @@ const navGroups: NavGroup[] = [
     collapsible: true,
     menuKey: 'menu.rates',
     items: [
-      { href: '/rates', label: '운임설정', icon: <DollarSign className="h-5 w-5" />, permission: 'settings.manage' },
-      { href: '/refund-policy', label: '환불정책', icon: <AlertTriangle className="h-5 w-5" />, permission: 'settings.manage' },
+      { href: '/rates', label: '운임설정', icon: <DollarSign className="h-5 w-5" />, permission: 'settings.edit' },
+      { href: '/refund-policy', label: '환불정책', icon: <AlertTriangle className="h-5 w-5" />, permission: 'settings.edit' },
+      { href: '/enterprise-accounts', label: '협력업체 등록', icon: <Building2 className="h-5 w-5" />, permission: 'settings.edit' },
     ],
   },
   {

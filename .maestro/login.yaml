@@ -1,0 +1,39 @@
+# ============================================
+# 로그인 테스트
+# ============================================
+
+appId: host.exp.exponent
+
+---
+
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# 이메일 입력
+- tapOn: "이메일을 입력하세요"
+- inputText: ${TEST_EMAIL}
+
+# 비밀번호 입력
+- tapOn: "비밀번호를 입력하세요"
+- inputText: ${TEST_PASSWORD}
+
+# 키보드 닫기
+- hideKeyboard
+
+# 스크롤 내려서 로그인 버튼 보이게
+- scrollUntilVisible:
+    element: "로그인"
+    direction: DOWN
+
+# 로그인 버튼 클릭
+- tapOn: "로그인"
+
+# 홈 화면 대기
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# 홈 탭이 보이면 성공
+- assertVisible: "홈"
+
+- takeScreenshot: "login-success"

@@ -3,6 +3,29 @@ import fs from "fs";
 import path from "path";
 
 export function serveStatic(app: Express) {
+  const partnerDistPath = path.resolve(process.cwd(), "partner", "dist");
+
+  if (fs.existsSync(partnerDistPath)) {
+    console.log(`[Static] Serving partner from: ${partnerDistPath}`);
+
+    app.use("/partner/assets", express.static(path.join(partnerDistPath, "assets"), {
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    }));
+
+    app.use("/partner", (_req, res, next) => {
+      const ext = path.extname(_req.path).toLowerCase();
+      if (ext && ext !== '.html') {
+        return next();
+      }
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+      res.sendFile(path.resolve(partnerDistPath, "index.html"));
+    });
+  } else {
+    console.log(`[Static] Partner dist not found at: ${partnerDistPath}`);
+  }
+
   const adminDistPath = path.resolve(process.cwd(), "admin", "dist");
   
   if (fs.existsSync(adminDistPath)) {
@@ -76,7 +99,7 @@ export function serveStatic(app: Express) {
     });
 
     app.use("*", (_req, res, next) => {
-      if (_req.originalUrl.startsWith('/api') || _req.originalUrl.startsWith('/admin')) {
+      if (_req.originalUrl.startsWith('/api') || _req.originalUrl.startsWith('/admin') || _req.originalUrl.startsWith('/partner')) {
         return next();
       }
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, ViewStyle, Text } from 'react-native';
 import { Image } from 'expo-image';
 import { Icon } from "@/components/Icon";
@@ -11,6 +11,8 @@ const AVATAR_EMOJI_MAP: Record<string, string> = {
   'avatar:star': '⭐',
   'avatar:rocket': '🚀',
   'avatar:smile': '😊',
+  'avatar:thumbsup': '👍',
+  'avatar:shield': '🛡️',
 };
 
 interface AvatarProps {
@@ -29,6 +31,11 @@ export function Avatar({
   iconName = 'user'
 }: AvatarProps) {
   const [hasError, setHasError] = useState(false);
+
+  // uri 변경 시 에러 상태 초기화
+  useEffect(() => {
+    setHasError(false);
+  }, [uri]);
 
   const backgroundColor = isHelper ? BrandColors.helperLight : BrandColors.requesterLight;
   const iconColor = isHelper ? BrandColors.helper : BrandColors.requester;

@@ -28,6 +28,7 @@ import { Button } from "@/components/Button";
 import { Avatar } from "@/components/Avatar";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { useResponsive } from "@/hooks/useResponsive";
 
 interface Review {
   id: number;
@@ -65,6 +66,7 @@ export default function ApplicantListScreen({ route, navigation }: Props) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const queryClient = useQueryClient();
 
   const [selectedApplicant, setSelectedApplicant] = useState<Applicant | null>(null);
@@ -147,10 +149,11 @@ export default function ApplicantListScreen({ route, navigation }: Props) {
       <Card style={styles.applicantRow}>
         <View style={styles.rowContent}>
           <Pressable style={styles.rowLeft} onPress={() => handleDetailPress(item)}>
-            <Avatar 
+            <Avatar
               uri={(() => {
-                const img = (item as any).profileImage || (item as any).helperProfileImage;
+                const img = (item as any).profileImageUrl || (item as any).profileImage || (item as any).helperProfileImage;
                 if (!img) return undefined;
+                if (img.startsWith('avatar:')) return img;
                 return img.startsWith('http') ? img : `${getApiUrl()}${img}`;
               })()}
               size={48}
@@ -236,7 +239,7 @@ export default function ApplicantListScreen({ route, navigation }: Props) {
     const isApplied = selectedApplicant.status === "applied";
     const reviews = selectedApplicant.recentReviews || [];
     const profileImageUri = (() => {
-      const img = (selectedApplicant as any).profileImage || (selectedApplicant as any).helperProfileImage;
+      const img = (selectedApplicant as any).profileImageUrl || (selectedApplicant as any).profileImage || (selectedApplicant as any).helperProfileImage;
       if (!img) return undefined;
       if (img.startsWith('avatar:')) return img;
       return img.startsWith('http') ? img : `${getApiUrl()}${img}`;
@@ -397,7 +400,14 @@ export default function ApplicantListScreen({ route, navigation }: Props) {
         ListEmptyComponent={isLoading ? null : ListEmptyComponent}
         contentContainerStyle={[
           styles.listContent,
-          { paddingBottom: tabBarHeight + Spacing.xl }
+          {
+            paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
+            ...(showDesktopLayout && {
+              maxWidth: containerMaxWidth,
+              alignSelf: 'center' as const,
+              width: '100%' as any,
+            }),
+          }
         ]}
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} />

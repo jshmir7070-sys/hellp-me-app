@@ -13,6 +13,7 @@ import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
 import { JobsStackParamList } from "@/navigation/types";
 import { apiRequest } from "@/lib/query-client";
+import { useResponsive } from "@/hooks/useResponsive";
 
 type DisputeCreateScreenProps = NativeStackScreenProps<JobsStackParamList, 'DisputeCreate'>;
 
@@ -30,6 +31,7 @@ export default function DisputeCreateScreen({ navigation, route }: DisputeCreate
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const queryClient = useQueryClient();
   const orderId = route.params?.orderId;
   const initialType = route.params?.type || "";
@@ -88,7 +90,15 @@ export default function DisputeCreateScreen({ navigation, route }: DisputeCreate
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
-      contentContainerStyle={{ paddingTop: headerHeight + Spacing.lg, paddingBottom: insets.bottom + Spacing.xl }}
+      contentContainerStyle={{
+        paddingTop: headerHeight + Spacing.lg,
+        paddingBottom: insets.bottom + Spacing.xl,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
+      }}
     >
       <View style={styles.content}>
         <Card style={styles.section}>

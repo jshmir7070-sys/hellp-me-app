@@ -14,6 +14,23 @@ import { randomBytes } from "crypto";
 import { normalizeOrderStatus, ORDER_STATUS } from "../constants/order-status";
 import type { RouteContext } from "./types";
 
+/** 오늘 날짜 시작시각을 KST(UTC+9) 기준으로 반환 */
+function getTodayStartKST(): Date {
+  const now = new Date();
+  // KST = UTC + 9시간
+  const kstOffset = 9 * 60 * 60 * 1000;
+  const kstNow = new Date(now.getTime() + kstOffset);
+  // KST 기준 자정
+  const kstMidnight = new Date(Date.UTC(
+    kstNow.getUTCFullYear(),
+    kstNow.getUTCMonth(),
+    kstNow.getUTCDate(),
+    0, 0, 0, 0
+  ));
+  // UTC로 변환 (KST 자정 - 9시간 = 전날 15:00 UTC)
+  return new Date(kstMidnight.getTime() - kstOffset);
+}
+
 export function registerCheckinRoutes(ctx: RouteContext): void {
   const { app, requireAuth, storage, notificationWS, broadcastToAllAdmins, notifyOrderHelpers, sendPushToUser } = ctx;
 
@@ -67,31 +84,32 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
         return res.status(400).json({ message: "QR 코드가 유효하지 않습니다" });
       }
 
-      // 헬퍼-의뢰인 간 활성 배정 확인
+      // 헬퍼-의뢰인 간 활성 배정 확인 (order_applications + matched_helper_id 둘 다 체크)
       const helperApplications = await storage.getHelperApplications(helperId);
       const requesterOrders = await storage.getOrdersByRequesterId(requesterId);
-      const activeOrderIds = new Set(
-        requesterOrders
-          .filter((o: any) => {
-            const s = normalizeOrderStatus(o.status);
-            return s === ORDER_STATUS.SCHEDULED || s === ORDER_STATUS.OPEN;
-          })
-          .map((o: any) => o.id)
+      const activeOrders = requesterOrders.filter((o: any) => {
+        const s = normalizeOrderStatus(o.status);
+        return s === ORDER_STATUS.SCHEDULED || s === ORDER_STATUS.OPEN;
+      });
+      const activeOrderIds = new Set(activeOrders.map((o: any) => o.id));
+
+      // 1) order_applications 기반 확인
+      const hasAppAssignment = helperApplications.some(
+        (app: any) => (app.status === "approved" || app.status === "selected") && activeOrderIds.has(app.orderId)
+      );
+      // 2) matched_helper_id 직접 배정 확인
+      const hasDirectAssignment = activeOrders.some(
+        (o: any) => o.matchedHelperId === helperId
       );
 
-      const hasActiveAssignment = helperApplications.some(
-        (app: any) => app.status === "approved" && activeOrderIds.has(app.orderId)
-      );
-
-      if (!hasActiveAssignment) {
+      if (!hasAppAssignment && !hasDirectAssignment) {
         return res.status(403).json({
           message: "이 의뢰인과의 활성 배정이 없습니다. 오더에 지원 후 승인되어야 출근할 수 있습니다.",
         });
       }
 
-      // 이미 오늘 이 의뢰인에게 출근한 기록이 있는지 확인 (중복 출근 방지)
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // 이미 오늘 이 의뢰인에게 출근한 기록이 있는지 확인 (중복 출근 방지, KST 기준)
+      const today = getTodayStartKST();
       const existingRecords = await storage.getCheckInRecordsByHelper(helperId, today);
       const alreadyCheckedIn = existingRecords.some((r: any) => r.requesterId === requesterId);
 
@@ -106,6 +124,13 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
       const approvedApp = helperApplications.find(
         (app: any) => (app.status === "approved" || app.status === "selected") && activeOrderIds.has(app.orderId)
       );
+      // matched_helper_id 직접 배정 오더 (application 없는 경우)
+      const directOrder = !approvedApp
+        ? activeOrders.find((o: any) => o.matchedHelperId === helperId)
+        : null;
+
+      // 배정된 오더 ID 결정 (application 우선, 없으면 직접 배정)
+      const assignedOrderId = approvedApp?.orderId || directOrder?.id || null;
 
       let updatedOrder: any = null;
       if (approvedApp) {
@@ -120,6 +145,14 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
             checkedInAt: new Date(),
           });
         }
+      } else if (directOrder) {
+        // matched_helper_id 직접 배정: application 없이 오더 상태 변경
+        const orderStatus = normalizeOrderStatus(directOrder.status);
+        if (orderStatus === ORDER_STATUS.SCHEDULED || orderStatus === ORDER_STATUS.OPEN) {
+          updatedOrder = await storage.updateOrder(directOrder.id, {
+            status: "in_progress",
+          });
+        }
       }
 
       // 출근 기록 생성
@@ -132,7 +165,7 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
         longitude: longitude || null,
         address: address || null,
         status: "checked_in",
-        orderId: approvedApp?.orderId || null,
+        orderId: assignedOrderId,
       });
 
       // 헬퍼 상태를 "근무중"으로 변경
@@ -148,9 +181,9 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
       });
 
       // WebSocket 실시간 알림
-      if (updatedOrder) {
+      if (updatedOrder && assignedOrderId) {
         notificationWS.sendOrderStatusUpdate(requesterId, {
-          orderId: approvedApp.orderId,
+          orderId: assignedOrderId,
           status: "in_progress",
         });
       }
@@ -158,7 +191,7 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
         type: "helper_checked_in",
         title: "헬퍼 출근 완료",
         message: `${helperUser?.name || "헬퍼"}님이 출근 체크를 완료했습니다.`,
-        relatedId: approvedApp?.orderId || null,
+        relatedId: assignedOrderId,
       });
 
       // 푸시 알림
@@ -166,12 +199,12 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
         title: "헬퍼 출근 완료",
         body: `${helperUser?.name || "헬퍼"}님이 출근 체크를 완료했습니다.`,
         url: "/requester-home",
-        tag: `checkin-qr-${approvedApp?.orderId}`,
+        tag: `checkin-qr-${assignedOrderId}`,
       });
 
       // 관리자에게 브로드캐스트
       broadcastToAllAdmins("checkin", "created", checkInRecord.id, {
-        orderId: approvedApp?.orderId,
+        orderId: assignedOrderId,
         helperId,
         helperName: helperUser?.name,
         status: "checked_in",
@@ -207,9 +240,16 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
         return res.status(404).json({ message: "오더를 찾을 수 없습니다" });
       }
 
-      // 이미 오늘 이 오더에 출근한 기록이 있는지 확인
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // 헬퍼 배정 검증 (application 또는 matched_helper_id)
+      const application = await storage.getOrderApplication(orderId, helperId);
+      const isAssigned = (application && (application.status === "approved" || application.status === "selected"))
+        || (order as any).matchedHelperId === helperId;
+      if (!isAssigned) {
+        return res.status(403).json({ message: "이 오더에 배정되지 않았습니다" });
+      }
+
+      // 이미 오늘 이 오더에 출근한 기록이 있는지 확인 (KST 기준)
+      const today = getTodayStartKST();
       const existingRecords = await storage.getCheckInRecordsByHelper(helperId, today);
       const alreadyCheckedIn = existingRecords.some((r: any) => r.orderId === orderId);
 
@@ -221,6 +261,7 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
 
       // 출근 기록 생성
       const checkInRecord = await storage.createCheckInRecord({
+        helperId,
         orderId: orderId,
         requesterId: order.requesterId || "",
         requesterName: null,
@@ -232,8 +273,7 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
       });
 
       // 헬퍼 신청 상태를 in_progress로 변경
-      const application = await storage.getOrderApplication(orderId, helperId);
-      if (application && application.status === "scheduled") {
+      if (application && (application.status === "approved" || application.status === "selected" || application.status === "scheduled")) {
         await storage.updateOrderApplication(application.id, {
           status: "in_progress",
           checkedInAt: checkInTime,
@@ -241,7 +281,8 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
       }
 
       // 오더 상태를 in_progress로 변경
-      if (order.status === "scheduled") {
+      const orderStatus = normalizeOrderStatus(order.status);
+      if (orderStatus === ORDER_STATUS.SCHEDULED || orderStatus === ORDER_STATUS.OPEN) {
         await storage.updateOrder(orderId, {
           status: "in_progress",
           checkedInAt: checkInTime,
@@ -317,8 +358,15 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
         return res.status(404).json({ message: "오더를 찾을 수 없습니다" });
       }
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // 헬퍼 배정 검증
+      const legacyApp = await storage.getOrderApplication(orderId, helperId);
+      const isLegacyAssigned = (legacyApp && (legacyApp.status === "approved" || legacyApp.status === "selected"))
+        || (order as any).matchedHelperId === helperId;
+      if (!isLegacyAssigned) {
+        return res.status(403).json({ message: "이 오더에 배정되지 않았습니다" });
+      }
+
+      const today = getTodayStartKST();
       const existingRecords = await storage.getCheckInRecordsByHelper(helperId, today);
       const alreadyCheckedIn = existingRecords.some((r: any) => r.orderId === orderId);
 
@@ -327,6 +375,7 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
       }
 
       const checkInRecord = await storage.createCheckInRecord({
+        helperId,
         orderId: orderId,
         requesterId: order.requesterId || "",
         requesterName: null,
@@ -387,8 +436,7 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
   app.get("/api/checkin/today", requireAuth, requireHelper, async (req: any, res) => {
     try {
       const userId = req.user?.id;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const today = getTodayStartKST();
 
       const records = await storage.getCheckInRecordsByHelper(userId, today);
       res.json(records);
@@ -454,31 +502,35 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
 
       const requesterId = requester.id;
 
-      // 헬퍼-요청자 간 활성 배정 확인
+      // 헬퍼-요청자 간 활성 배정 확인 (order_applications + matched_helper_id 둘 다 체크)
       const helperApplications = await storage.getHelperApplications(helperId);
       const requesterOrders = await storage.getOrdersByRequesterId(requesterId);
-      const activeOrderIds = new Set(
-        requesterOrders
-          .filter((o: any) => {
-            const s = normalizeOrderStatus(o.status);
-            return s === ORDER_STATUS.SCHEDULED || s === ORDER_STATUS.OPEN;
-          })
-          .map((o: any) => o.id)
-      );
+      const activeOrders = requesterOrders.filter((o: any) => {
+        const s = normalizeOrderStatus(o.status);
+        return s === ORDER_STATUS.SCHEDULED || s === ORDER_STATUS.OPEN;
+      });
+      const activeOrderIds = new Set(activeOrders.map((o: any) => o.id));
 
+      // 1) order_applications 기반 확인
       const approvedApp = helperApplications.find(
         (app: any) => (app.status === "approved" || app.status === "selected") && activeOrderIds.has(app.orderId)
       );
+      // 2) matched_helper_id 직접 배정 확인
+      const directOrder = !approvedApp
+        ? activeOrders.find((o: any) => o.matchedHelperId === helperId)
+        : null;
 
-      if (!approvedApp) {
+      if (!approvedApp && !directOrder) {
         return res.status(403).json({
           message: "이 요청자와의 활성 배정이 없습니다. 오더에 지원 후 승인되어야 출근할 수 있습니다.",
         });
       }
 
-      // 이미 오늘 이 요청자에게 출근한 기록이 있는지 확인
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // 배정된 오더 ID 결정
+      const assignedOrderId = approvedApp?.orderId || directOrder?.id || null;
+
+      // 이미 오늘 이 요청자에게 출근한 기록이 있는지 확인 (KST 기준)
+      const today = getTodayStartKST();
       const existingRecords = await storage.getCheckInRecordsByHelper(helperId, today);
       const alreadyCheckedIn = existingRecords.some((r: any) => r.requesterId === requesterId);
 
@@ -491,16 +543,26 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
 
       // 오더 상태를 "in_progress" (업무중)으로 변경
       let updatedOrder: any = null;
-      const order = await storage.getOrder(approvedApp.orderId);
-      const checkOrderStatus = normalizeOrderStatus(order.status);
-      if (order && (checkOrderStatus === ORDER_STATUS.SCHEDULED || checkOrderStatus === ORDER_STATUS.OPEN)) {
-        updatedOrder = await storage.updateOrder(approvedApp.orderId, {
-          status: "in_progress",
-        });
+      if (approvedApp) {
+        const order = await storage.getOrder(approvedApp.orderId);
+        const checkOrderStatus = normalizeOrderStatus(order.status);
+        if (order && (checkOrderStatus === ORDER_STATUS.SCHEDULED || checkOrderStatus === ORDER_STATUS.OPEN)) {
+          updatedOrder = await storage.updateOrder(approvedApp.orderId, {
+            status: "in_progress",
+          });
 
-        await storage.updateOrderApplication(approvedApp.id, {
-          checkedInAt: new Date(),
-        });
+          await storage.updateOrderApplication(approvedApp.id, {
+            checkedInAt: new Date(),
+          });
+        }
+      } else if (directOrder) {
+        // matched_helper_id 직접 배정: application 없이 오더 상태 변경
+        const orderStatus = normalizeOrderStatus(directOrder.status);
+        if (orderStatus === ORDER_STATUS.SCHEDULED || orderStatus === ORDER_STATUS.OPEN) {
+          updatedOrder = await storage.updateOrder(directOrder.id, {
+            status: "in_progress",
+          });
+        }
       }
 
       // 출근 기록 생성
@@ -513,7 +575,7 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
         longitude: longitude || null,
         address: address || null,
         status: "checked_in",
-        orderId: approvedApp.orderId,
+        orderId: assignedOrderId,
       });
 
       // 헬퍼 상태를 "근무중"으로 변경
@@ -529,9 +591,9 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
       });
 
       // WebSocket 실시간 알림
-      if (updatedOrder) {
+      if (updatedOrder && assignedOrderId) {
         notificationWS.sendOrderStatusUpdate(requesterId, {
-          orderId: approvedApp.orderId,
+          orderId: assignedOrderId,
           status: "in_progress",
         });
       }
@@ -539,7 +601,7 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
         type: "helper_checked_in",
         title: "헬퍼 출근 완료",
         message: `${helperUser?.name || "헬퍼"}님이 출근 체크를 완료했습니다.`,
-        relatedId: approvedApp.orderId,
+        relatedId: assignedOrderId,
       });
 
       // 푸시 알림
@@ -547,12 +609,12 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
         title: "헬퍼 출근 완료",
         body: `${helperUser?.name || "헬퍼"}님이 출근 체크를 완료했습니다.`,
         url: "/requester-home",
-        tag: `checkin-code-${approvedApp.orderId}`,
+        tag: `checkin-code-${assignedOrderId}`,
       });
 
       // 관리자에게 브로드캐스트
       broadcastToAllAdmins("checkin", "created", checkInRecord.id, {
-        orderId: approvedApp.orderId,
+        orderId: assignedOrderId,
         helperId,
         helperName: helperUser?.name,
         status: "checked_in",
@@ -564,7 +626,7 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
         checkIn: checkInRecord,
         requesterName: requester.name,
         orderStatus: updatedOrder?.status || "in_progress",
-        orderId: approvedApp.orderId,
+        orderId: assignedOrderId,
       });
     } catch (err: any) {
       console.error("check-in by-code error:", err);
@@ -599,25 +661,107 @@ export function registerCheckinRoutes(ctx: RouteContext): void {
         return res.status(400).json({ message: "해당 코드는 헬퍼 계정이 아닙니다" });
       }
 
+      // 중복 출근 방지 (KST 기준)
+      const todayStart = getTodayStartKST();
+      const existingRecords = await storage.getCheckInRecordsByHelper(helper.id, todayStart);
+      const alreadyCheckedIn = existingRecords.some((r: any) => r.requesterId === requesterId);
+
+      if (alreadyCheckedIn) {
+        return res.status(400).json({
+          message: "이미 오늘 이 헬퍼의 출근이 확인되었습니다",
+          alreadyCheckedIn: true,
+        });
+      }
+
+      // 헬퍼-요청자 간 활성 배정 확인 및 오더 상태 변경 (order_applications + matched_helper_id 둘 다 체크)
+      const helperApplications = await storage.getHelperApplications(helper.id);
+      const requesterOrders = await storage.getOrdersByRequesterId(requesterId);
+      const activeOrders = requesterOrders.filter((o: any) => {
+        const s = normalizeOrderStatus(o.status);
+        // cancelled/closed 오더는 제외 (취소된 오더에 체크인 방지)
+        return s === ORDER_STATUS.SCHEDULED || s === ORDER_STATUS.OPEN;
+      });
+      const activeOrderIds = new Set(activeOrders.map((o: any) => o.id));
+
+      // 1) order_applications 기반 확인
+      const approvedApp = helperApplications.find(
+        (a: any) => (a.status === "approved" || a.status === "selected") && activeOrderIds.has(a.orderId)
+      );
+      // 2) matched_helper_id 직접 배정 확인
+      const directOrder = !approvedApp
+        ? activeOrders.find((o: any) => o.matchedHelperId === helper.id)
+        : null;
+
+      // 배정이 없으면 에러
+      if (!approvedApp && !directOrder) {
+        return res.status(403).json({
+          message: "이 헬퍼와의 활성 배정이 없습니다.",
+        });
+      }
+
+      // 배정된 오더 ID 결정
+      const assignedOrderId = approvedApp?.orderId || directOrder?.id || null;
+
+      let updatedOrder: any = null;
+      if (approvedApp) {
+        const order = await storage.getOrder(approvedApp.orderId);
+        const orderStatus = normalizeOrderStatus(order.status);
+        if (order && (orderStatus === ORDER_STATUS.SCHEDULED || orderStatus === ORDER_STATUS.OPEN)) {
+          updatedOrder = await storage.updateOrder(approvedApp.orderId, {
+            status: "in_progress",
+          });
+          await storage.updateOrderApplication(approvedApp.id, {
+            checkedInAt: new Date(),
+          });
+        }
+      } else if (directOrder) {
+        // matched_helper_id 직접 배정: application 없이 오더 상태 변경
+        const orderStatus = normalizeOrderStatus(directOrder.status);
+        if (orderStatus === ORDER_STATUS.SCHEDULED || orderStatus === ORDER_STATUS.OPEN) {
+          updatedOrder = await storage.updateOrder(directOrder.id, {
+            status: "in_progress",
+          });
+        }
+      }
+
       // 출근 기록 생성
       const now = new Date();
       const checkInRecord = await storage.createCheckInRecord({
         helperId: helper.id,
         requesterId: requesterId,
+        requesterName: requester.name,
         checkInTime: now,
-        checkInType: "personal_code",
-        location: null,
-        verifiedBy: requesterId,
+        latitude: null,
+        longitude: null,
+        address: null,
+        status: "checked_in",
+        orderId: assignedOrderId,
       });
+
+      // 헬퍼 상태를 "근무중"으로 변경
+      await storage.updateUser(helper.id, { dailyStatus: "working" });
 
       // 알림 전송
       await storage.createNotification({
         userId: helper.id,
         title: "출근 확인",
         message: `${requester.name || "요청자"}님이 출근을 확인했습니다.`,
-        type: "checkin",
-        referenceId: checkInRecord.id.toString(),
-        referenceType: "checkin",
+        type: "helper_checked_in",
+        relatedId: checkInRecord.id,
+      });
+
+      // WebSocket 실시간 알림
+      if (updatedOrder && assignedOrderId) {
+        notificationWS.sendOrderStatusUpdate(requesterId, {
+          orderId: assignedOrderId,
+          status: "in_progress",
+        });
+      }
+      notificationWS.sendToUser(helper.id, {
+        type: "helper_checked_in",
+        title: "출근 확인",
+        message: `${requester.name || "요청자"}님이 출근을 확인했습니다.`,
+        relatedId: assignedOrderId,
       });
 
       res.json({

@@ -42,6 +42,8 @@ interface Announcement {
   imageUrl?: string | null;
   linkUrl?: string | null;
   isPopup?: boolean;
+  isBanner?: boolean;
+  type?: string; // 'notice' | 'ad'
 }
 
 export default function NotificationsPage() {
@@ -71,7 +73,9 @@ export default function NotificationsPage() {
     expiresAt: '',
     imageUrl: '',
     linkUrl: '',
+    type: 'notice' as 'notice' | 'ad',
     isPopup: false,
+    isBanner: false,
   });
   const [uploadingImage, setUploadingImage] = useState(false);
 
@@ -124,7 +128,9 @@ export default function NotificationsPage() {
           createdBy: adminUser?.id || 'admin',
           imageUrl: data.imageUrl || null,
           linkUrl: data.linkUrl || null,
+          type: data.type,
           isPopup: data.isPopup,
+          isBanner: data.isBanner,
           priority: data.priority,
           expiresAt: data.expiresAt || null,
         }),
@@ -133,7 +139,7 @@ export default function NotificationsPage() {
     onSuccess: () => {
       toast({ title: '공지사항 등록 완료' });
       setShowAnnouncementDialog(false);
-      setAnnouncementForm({ title: '', content: '', targetRole: 'all', priority: 'normal', expiresAt: '', imageUrl: '', linkUrl: '', isPopup: false });
+      setAnnouncementForm({ title: '', content: '', targetRole: 'all', priority: 'normal', expiresAt: '', imageUrl: '', linkUrl: '', type: 'notice', isPopup: false, isBanner: false });
       queryClient.invalidateQueries({ queryKey: ['/announcements'] });
     },
     onError: (error: Error) => {
@@ -231,7 +237,7 @@ export default function NotificationsPage() {
         row.title || '',
         row.type?.toUpperCase() || '',
         row.userName || row.userEmail || `사용자#${row.userId}`,
-        row.createdAt ? new Date(row.createdAt).toLocaleString('ko-KR') : '',
+        row.createdAt ? new Date(row.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
         row.isRead ? '읽음' : '안읽음',
       ]);
       const csvContent = [headers, ...rows].map(r => r.join(',')).join('\n');
@@ -250,8 +256,8 @@ export default function NotificationsPage() {
         getTargetLabel(row.targetRole),
         row.priority,
         row.isActive ? '활성' : '비활성',
-        row.createdAt ? new Date(row.createdAt).toLocaleString('ko-KR') : '',
-        row.expiresAt ? new Date(row.expiresAt).toLocaleString('ko-KR') : '',
+        row.createdAt ? new Date(row.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
+        row.expiresAt ? new Date(row.expiresAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
       ]);
       const csvContent = [headers, ...rows].map(r => r.join(',')).join('\n');
       const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -313,7 +319,7 @@ export default function NotificationsPage() {
       width: 160,
       render: (value) => (
         <span className="text-sm text-muted-foreground">
-          {value ? new Date(value).toLocaleString('ko-KR') : '-'}
+          {value ? new Date(value).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'}
         </span>
       ),
     },
@@ -375,14 +381,33 @@ export default function NotificationsPage() {
       ),
     },
     {
-      key: 'isPopup',
-      header: '팝업',
+      key: 'type',
+      header: '유형',
       width: 70,
       align: 'center',
       render: (value) => (
-        <span className={cn("text-xs font-medium", value ? "text-blue-600" : "text-muted-foreground")}>
-          {value ? '팝업' : '-'}
+        <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded", value === 'ad' ? "bg-amber-100 text-amber-700" : "bg-blue-100 text-blue-700")}>
+          {value === 'ad' ? '광고' : '공지'}
         </span>
+      ),
+    },
+    {
+      key: 'isPopup',
+      header: '표시',
+      width: 100,
+      align: 'center',
+      render: (_value: unknown, row: Announcement) => (
+        <div className="flex items-center justify-center gap-1">
+          {row.isPopup && (
+            <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">팝업</span>
+          )}
+          {row.isBanner && (
+            <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700">띠배너</span>
+          )}
+          {!row.isPopup && !row.isBanner && (
+            <span className="text-xs text-muted-foreground">-</span>
+          )}
+        </div>
       ),
     },
     {
@@ -400,7 +425,7 @@ export default function NotificationsPage() {
       width: 140,
       render: (value) => (
         <span className="text-sm text-muted-foreground">
-          {value ? new Date(value).toLocaleDateString('ko-KR') : '-'}
+          {value ? new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'}
         </span>
       ),
     },
@@ -410,7 +435,7 @@ export default function NotificationsPage() {
       width: 140,
       render: (value) => (
         <span className="text-sm text-muted-foreground">
-          {value ? new Date(value).toLocaleDateString('ko-KR') : '-'}
+          {value ? new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'}
         </span>
       ),
     },
@@ -747,16 +772,63 @@ export default function NotificationsPage() {
               />
             </div>
 
-            {/* 팝업/광고 설정 */}
+            {/* 유형 선택 */}
+            <div className="space-y-2">
+              <Label>유형</Label>
+              <Select
+                value={announcementForm.type}
+                onValueChange={(v) => setAnnouncementForm(prev => ({ ...prev, type: v as 'notice' | 'ad' }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="notice">공지사항</SelectItem>
+                  <SelectItem value="ad">광고</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                광고: 이미지가 필수이며, 띠배너/팝업으로 표시됩니다.
+              </p>
+            </div>
+
+            {/* 표시 방식 설정 */}
             <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
               <h4 className="text-sm font-semibold flex items-center gap-2">
                 <ImageIcon className="h-4 w-4" />
-                팝업/광고 설정
+                표시 방식
               </h4>
+
+              {/* 띠배너 / 팝업 체크박스 */}
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="isPopup"
+                    checked={announcementForm.isPopup}
+                    onCheckedChange={(checked) => setAnnouncementForm(prev => ({ ...prev, isPopup: !!checked }))}
+                  />
+                  <Label htmlFor="isPopup" className="text-sm cursor-pointer">
+                    팝업 표시
+                  </Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="isBanner"
+                    checked={announcementForm.isBanner}
+                    onCheckedChange={(checked) => setAnnouncementForm(prev => ({ ...prev, isBanner: !!checked }))}
+                  />
+                  <Label htmlFor="isBanner" className="text-sm cursor-pointer">
+                    띠배너 표시
+                  </Label>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                팝업: 앱 홈 화면 진입 시 전체 화면 팝업 / 띠배너: 홈 화면 상단 슬라이드 배너
+              </p>
 
               {/* 이미지 업로드 */}
               <div className="space-y-2">
-                <Label>팝업 이미지 (선택)</Label>
+                <Label>이미지 {announcementForm.type === 'ad' ? '(필수)' : '(선택)'}</Label>
                 <div className="flex items-center gap-2">
                   <Input
                     type="file"
@@ -800,17 +872,6 @@ export default function NotificationsPage() {
                 <p className="text-xs text-muted-foreground">이미지 탭 시 이동할 링크입니다</p>
               </div>
 
-              {/* 팝업 표시 여부 */}
-              <div className="flex items-center gap-3">
-                <Checkbox
-                  id="isPopup"
-                  checked={announcementForm.isPopup}
-                  onCheckedChange={(checked) => setAnnouncementForm(prev => ({ ...prev, isPopup: !!checked }))}
-                />
-                <Label htmlFor="isPopup" className="text-sm cursor-pointer">
-                  로그인 시 팝업으로 표시
-                </Label>
-              </div>
             </div>
 
             <div className="flex justify-end gap-2">
@@ -841,15 +902,15 @@ export default function NotificationsPage() {
                 <Label className="text-muted-foreground">내용</Label>
                 <p className="whitespace-pre-wrap">{selectedItem.content}</p>
               </div>
-              {'type' in selectedItem && (
+              {'isRead' in selectedItem && (
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="text-muted-foreground">유형</Label>
-                    <p>{selectedItem.type?.toUpperCase()}</p>
+                    <p>{(selectedItem as Notification).type?.toUpperCase()}</p>
                   </div>
                   <div>
                     <Label className="text-muted-foreground">읽음 여부</Label>
-                    <p>{selectedItem.isRead ? '읽음' : '안읽음'}</p>
+                    <p>{(selectedItem as Notification).isRead ? '읽음' : '안읽음'}</p>
                   </div>
                 </div>
               )}
@@ -865,12 +926,28 @@ export default function NotificationsPage() {
                       <p>{selectedItem.priority}</p>
                     </div>
                   </div>
-                  {(selectedItem as Announcement).isPopup && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {(selectedItem as Announcement).type && (
+                      <div>
+                        <Label className="text-muted-foreground">유형</Label>
+                        <p className="font-medium">{(selectedItem as Announcement).type === 'ad' ? '광고' : '공지사항'}</p>
+                      </div>
+                    )}
                     <div>
-                      <Label className="text-muted-foreground">팝업 표시</Label>
-                      <p className="text-blue-600 font-medium">팝업 활성화됨</p>
+                      <Label className="text-muted-foreground">표시 방식</Label>
+                      <div className="flex items-center gap-2 mt-1">
+                        {(selectedItem as Announcement).isPopup && (
+                          <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">팝업</span>
+                        )}
+                        {(selectedItem as Announcement).isBanner && (
+                          <span className="text-xs font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700">띠배너</span>
+                        )}
+                        {!(selectedItem as Announcement).isPopup && !(selectedItem as Announcement).isBanner && (
+                          <span className="text-muted-foreground">없음</span>
+                        )}
+                      </div>
                     </div>
-                  )}
+                  </div>
                   {(selectedItem as Announcement).imageUrl && (
                     <div>
                       <Label className="text-muted-foreground">팝업 이미지</Label>
@@ -891,7 +968,7 @@ export default function NotificationsPage() {
               )}
               <div>
                 <Label className="text-muted-foreground">생성일</Label>
-                <p>{new Date(selectedItem.createdAt).toLocaleString('ko-KR')}</p>
+                <p>{new Date(selectedItem.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</p>
               </div>
             </div>
           )}

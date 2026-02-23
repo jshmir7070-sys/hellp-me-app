@@ -297,7 +297,7 @@ export function registerPGPaymentRoutes(ctx: RouteContext): void {
 
           if (!payment) {
             console.warn(`[PG Webhook] 결제 건 없음: ${pgPaymentId}`);
-            if (webhookLogId) await db.update(webhookLogs).set({ status: "failed", errorMessage: "Payment not found" }).where(eq(webhookLogs.id, webhookLogId));
+            if (webhookLogId) await tx.update(webhookLogs).set({ status: "failed", errorMessage: "Payment not found" }).where(eq(webhookLogs.id, webhookLogId));
             return;
           }
 
@@ -305,7 +305,7 @@ export function registerPGPaymentRoutes(ctx: RouteContext): void {
           if (!pgService.isConfigured()) return;
           const pgResult = await pgService.getPaymentStatus(pgPaymentId);
           if (!pgResult.success) {
-            if (webhookLogId) await db.update(webhookLogs).set({ status: "failed", errorMessage: "PG Status Check Failed" }).where(eq(webhookLogs.id, webhookLogId));
+            if (webhookLogId) await tx.update(webhookLogs).set({ status: "failed", errorMessage: "PG Status Check Failed" }).where(eq(webhookLogs.id, webhookLogId));
             return;
           }
 
@@ -331,7 +331,7 @@ export function registerPGPaymentRoutes(ctx: RouteContext): void {
                 .set({ status: PAYMENT_STATUS.FRAUD_SUSPECTED })
                 .where(eq(payments.id, payment.id));
 
-              if (webhookLogId) await db.update(webhookLogs).set({ status: "failed", errorMessage: "Fraud Suspected: Amount Mismatch" }).where(eq(webhookLogs.id, webhookLogId));
+              if (webhookLogId) await tx.update(webhookLogs).set({ status: "failed", errorMessage: "Fraud Suspected: Amount Mismatch" }).where(eq(webhookLogs.id, webhookLogId));
               return;
             }
           }
@@ -343,7 +343,7 @@ export function registerPGPaymentRoutes(ctx: RouteContext): void {
           if (!canTransitionPaymentStatus(prevStatus, newStatus)) {
             const msg = `유효하지 않은 상태 전이 시도: ${prevStatus} -> ${newStatus}`;
             console.warn(`[PG Webhook] ${msg}`);
-            if (webhookLogId) await db.update(webhookLogs).set({ status: "failed", errorMessage: msg }).where(eq(webhookLogs.id, webhookLogId));
+            if (webhookLogId) await tx.update(webhookLogs).set({ status: "failed", errorMessage: msg }).where(eq(webhookLogs.id, webhookLogId));
             return;
           }
 

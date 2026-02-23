@@ -8,10 +8,12 @@ import { useQuery } from "@tanstack/react-query";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 import { ReviewStackParamList } from "@/navigation/ReviewStackNavigator";
+import { formatOrderNumber } from "@/lib/format-order-number";
 
 interface Review {
   id: number;
@@ -30,6 +32,7 @@ export default function ReviewListScreen({ navigation }: ReviewListScreenProps) 
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
 
   const { data: reviews = [], isLoading, refetch, isRefetching } = useQuery<Review[]>({
     queryKey: ['/api/requester/reviews'],
@@ -55,7 +58,7 @@ export default function ReviewListScreen({ navigation }: ReviewListScreenProps) 
     <Card style={styles.reviewCard}>
       <View style={styles.reviewHeader}>
         <ThemedText style={[styles.orderTitle, { color: theme.text }]}>
-          {item.orderTitle || `오더 #${item.orderId}`}
+          {item.orderTitle || formatOrderNumber(item.orderNumber, item.orderId)}
         </ThemedText>
         {renderStars(item.rating)}
       </View>
@@ -172,9 +175,14 @@ export default function ReviewListScreen({ navigation }: ReviewListScreenProps) 
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
         flexGrow: 1,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
       data={reviews}
       keyExtractor={(item) => String(item.id)}

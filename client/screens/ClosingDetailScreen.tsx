@@ -18,6 +18,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Icon } from "@/components/Icon";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useAuthImage } from "@/hooks/useAuthImage";
 import { ThemedText } from "@/components/ThemedText";
 import { ThemedView } from "@/components/ThemedView";
 import { Card } from "@/components/Card";
@@ -26,8 +27,16 @@ import { Spacing, Typography, BorderRadius, BrandColors } from "@/constants/them
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { getToken } from "@/utils/secure-token-storage";
 import { ClosingStackParamList } from "@/navigation/ClosingStackNavigator";
+import { useResponsive } from "@/hooks/useResponsive";
 
 type ClosingDetailScreenProps = NativeStackScreenProps<ClosingStackParamList, 'ClosingDetail'>;
+
+interface ExtraCostItem {
+  code?: string;
+  name?: string;
+  amount: number;
+  memo?: string;
+}
 
 interface ClosingSummary {
   etcCount?: number;
@@ -48,6 +57,10 @@ interface ClosingSummary {
   balanceAmount: number;
   balanceStatus: string;
   finalAmount: number;
+  // 금액 산출 breakdown
+  deliveryReturnAmount?: number;
+  extraCosts?: ExtraCostItem[];
+  extraCostsTotal?: number;
 }
 
 const { width: screenWidth } = Dimensions.get('window');
@@ -55,16 +68,13 @@ const { width: screenWidth } = Dimensions.get('window');
 export default function ClosingDetailScreen({ route, navigation }: ClosingDetailScreenProps) {
   const { orderId } = route.params;
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const [selectedImage, setSelectedImage] = React.useState<string | null>(null);
-  const [authToken, setAuthToken] = useState<string | null>(null);
-
-  useEffect(() => {
-    getToken().then(setAuthToken);
-  }, []);
+  const { getImageUrl } = useAuthImage();
 
   const { data: summary, isLoading } = useQuery<ClosingSummary>({
     queryKey: ['/api/orders', orderId, 'closing-summary'],
@@ -117,11 +127,7 @@ export default function ClosingDetailScreen({ route, navigation }: ClosingDetail
   };
 
 
-  const getImageUrl = (imagePath: string) => {
-    if (imagePath.startsWith('http')) return imagePath;
-    const base = new URL(imagePath, getApiUrl()).toString();
-    return authToken ? `${base}?token=${authToken}` : base;
-  };
+  // getImageUrl은 useAuthImage 훅에서 제공
 
   const renderImageGrid = (images: string[], title: string, required: boolean = false) => {
     if (images.length === 0 && !required) return null;
@@ -190,7 +196,12 @@ export default function ClosingDetailScreen({ route, navigation }: ClosingDetail
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.lg,
           paddingHorizontal: Spacing.lg,
-          paddingBottom: tabBarHeight + Spacing.xl + 80,
+          paddingBottom: showDesktopLayout ? Spacing.xl + 80 : tabBarHeight + Spacing.xl + 80,
+          ...(showDesktopLayout && {
+            maxWidth: containerMaxWidth,
+            alignSelf: 'center' as const,
+            width: '100%' as any,
+          }),
         }}
         showsVerticalScrollIndicator={true}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
@@ -229,17 +240,54 @@ export default function ClosingDetailScreen({ route, navigation }: ClosingDetail
 
         <Card style={styles.summaryCard}>
           <ThemedText style={[styles.cardTitle, { color: theme.text }]}>
-            금액 정보
+            금액 산출 내역
           </ThemedText>
           <View style={styles.amountSection}>
+            {/* 배송+반품 금액 */}
             <View style={styles.amountRow}>
               <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
-                공급가액
+                배송+반품 ({summary?.deliveredCount || 0}+{summary?.returnedCount || 0}) × {(summary?.pricePerUnit || 0).toLocaleString()}원
               </ThemedText>
               <ThemedText style={[styles.amountValue, { color: theme.text }]}>
+                {formatCurrency(summary?.deliveryReturnAmount || ((summary?.deliveredCount || 0) + (summary?.returnedCount || 0)) * (summary?.pricePerUnit || 0))}
+              </ThemedText>
+            </View>
+            {/* 기타 금액 */}
+            {(summary?.etcCount || 0) > 0 && (
+              <View style={styles.amountRow}>
+                <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
+                  기타 ({summary?.etcCount || 0}) × {(summary?.etcPricePerUnit || 1800).toLocaleString()}원
+                </ThemedText>
+                <ThemedText style={[styles.amountValue, { color: theme.text }]}>
+                  {formatCurrency(summary?.etcAmount || 0)}
+                </ThemedText>
+              </View>
+            )}
+            {/* 추가비용 (VAT별도 공급가) */}
+            {summary?.extraCosts && summary.extraCosts.length > 0 && (
+              <>
+                {summary.extraCosts.map((cost, idx) => (
+                  <View key={idx} style={styles.amountRow}>
+                    <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
+                      추가: {cost.code || cost.name || '기타'} <ThemedText style={{ fontSize: 10, color: '#92400E' }}>(VAT별도)</ThemedText>
+                    </ThemedText>
+                    <ThemedText style={[styles.amountValue, { color: theme.text }]}>
+                      {formatCurrency(cost.amount || 0)}
+                    </ThemedText>
+                  </View>
+                ))}
+              </>
+            )}
+            {/* 공급가액 */}
+            <View style={[styles.amountRow, { borderTopWidth: 1, borderTopColor: theme.backgroundSecondary, paddingTop: 8, marginTop: 4 }]}>
+              <ThemedText style={[styles.totalLabel, { color: theme.text }]}>
+                공급가액
+              </ThemedText>
+              <ThemedText style={[styles.amountValue, { color: theme.text, fontWeight: '700' }]}>
                 {formatCurrency(summary?.supplyAmount || 0)}
               </ThemedText>
             </View>
+            {/* 부가세 */}
             <View style={styles.amountRow}>
               <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
                 부가세 (10%)
@@ -248,16 +296,7 @@ export default function ClosingDetailScreen({ route, navigation }: ClosingDetail
                 {formatCurrency(summary?.vatAmount || 0)}
               </ThemedText>
             </View>
-            {(summary?.etcCount || 0) > 0 && (summary?.etcAmount || 0) > 0 ? (
-              <View style={styles.amountRow}>
-                <ThemedText style={[styles.amountLabel, { color: theme.tabIconDefault }]}>
-                  기타 비용
-                </ThemedText>
-                <ThemedText style={[styles.amountValue, { color: theme.text }]}>
-                  {formatCurrency(summary?.etcAmount || 0)}
-                </ThemedText>
-              </View>
-            ) : null}
+            {/* 총 금액 */}
             <View style={[styles.amountRow, styles.totalRow, { borderTopColor: theme.backgroundSecondary }]}>
               <ThemedText style={[styles.totalLabel, { color: theme.text }]}>
                 총 금액

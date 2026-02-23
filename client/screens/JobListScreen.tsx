@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { View, FlatList, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Modal } from "react-native";
+import { View, FlatList, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Modal, Alert, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -8,6 +8,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useInfiniteQuery, useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useOrderWebSocket } from "@/hooks/useOrderWebSocket";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
@@ -36,6 +37,7 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const queryClient = useQueryClient();
 
   useOrderWebSocket();
@@ -158,7 +160,20 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
   const handleAction = (action: string, data: OrderCardDTO) => {
     switch (action) {
       case 'APPLY':
-        applyMutation.mutate(data.orderId);
+        if (Platform.OS === 'web') {
+          if (confirm('이 오더에 지원하시겠습니까?')) {
+            applyMutation.mutate(data.orderId);
+          }
+        } else {
+          Alert.alert(
+            '오더 지원 확인',
+            '이 오더에 지원하시겠습니까?',
+            [
+              { text: '취소', style: 'cancel' },
+              { text: '지원하기', onPress: () => applyMutation.mutate(data.orderId) },
+            ]
+          );
+        }
         break;
       case 'CANCEL_APPLICATION':
         cancelApplicationMutation.mutate(data.orderId);
@@ -381,9 +396,14 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
           style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
           contentContainerStyle={{
             paddingTop: headerHeight + Spacing.lg,
-            paddingBottom: tabBarHeight + Spacing.xl,
+            paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
             paddingHorizontal: Spacing.lg,
             flexGrow: 1,
+            ...(showDesktopLayout && {
+              maxWidth: containerMaxWidth,
+              alignSelf: 'center' as const,
+              width: '100%' as any,
+            }),
           }}
           scrollIndicatorInsets={{ bottom: insets.bottom }}
           data={applicationOrders}
@@ -425,9 +445,14 @@ export default function JobListScreen({ navigation }: JobListScreenProps) {
         style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.lg,
-          paddingBottom: tabBarHeight + Spacing.xl,
+          paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
           paddingHorizontal: Spacing.lg,
           flexGrow: 1,
+          ...(showDesktopLayout && {
+            maxWidth: containerMaxWidth,
+            alignSelf: 'center' as const,
+            width: '100%' as any,
+          }),
         }}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         data={filteredOrders}

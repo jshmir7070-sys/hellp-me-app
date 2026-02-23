@@ -11,7 +11,7 @@ import {
   BackHandler,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useSafeTabBarHeight } from "@/hooks/useSafeTabBarHeight";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation, useIsFocused } from "@react-navigation/native";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
@@ -23,6 +23,8 @@ import { ThemedText } from "@/components/ThemedText";
 import { Icon } from "@/components/Icon";
 import { Colors, Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
+import { getToken } from "@/utils/secure-token-storage";
+import { uploadImageWithRetry } from "@/lib/image-upload";
 import { 
   regionData, 
   courierCompanies, 
@@ -47,7 +49,7 @@ const DRAFT_STORAGE_KEY = "order_draft_v2";
 
 export default function CreateJobContainer({ navigation }: CreateJobContainerProps) {
   const insets = useSafeAreaInsets();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeTabBarHeight();
   const { theme, isDark } = useTheme();
   const queryClient = useQueryClient();
   const rootNavigation = useNavigation<any>();
@@ -593,11 +595,34 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
 
   const createJobMutation = useMutation({
     mutationFn: async (orderData: any) => {
+      // 배송지 이미지가 로컬 URI면 먼저 서버에 업로드
+      if (orderData.imageUri && (orderData.imageUri.startsWith('file://') || orderData.imageUri.startsWith('content://') || orderData.imageUri.startsWith('ph://'))) {
+        try {
+          const token = await getToken();
+          const result = await uploadImageWithRetry(
+            orderData.imageUri,
+            '/api/upload/order-image',
+            'file',
+            {},
+            3,
+            token
+          );
+          if (result.success && result.url) {
+            orderData.imageUri = result.url; // 서버 URL로 교체
+          } else {
+            console.error('배송지 이미지 업로드 실패:', result.error);
+          }
+        } catch (uploadErr) {
+          console.error('배송지 이미지 업로드 실패:', uploadErr);
+          // 업로드 실패해도 오더 등록은 계속 진행
+        }
+      }
       const res = await apiRequest('POST', '/api/orders', orderData);
       return res.json();
     },
     onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ['/api/orders'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/requester/orders'] });
       await clearDraft();
       resetAllForms(); // 폼 초기화 → hasUnsavedChanges = false → 나가기 경고 방지
       if (data && data.id) {
@@ -687,7 +712,21 @@ export default function CreateJobContainer({ navigation }: CreateJobContainerPro
       };
     }
 
-    createJobMutation.mutate(orderData);
+    // 오더 등록 전 재확인
+    if (Platform.OS === 'web') {
+      if (confirm('오더를 등록하시겠습니까?')) {
+        createJobMutation.mutate(orderData);
+      }
+    } else {
+      Alert.alert(
+        '오더 등록 확인',
+        '입력하신 내용으로 오더를 등록하시겠습니까?',
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '등록하기', onPress: () => createJobMutation.mutate(orderData) },
+        ]
+      );
+    }
   };
 
   const openSelectModal = (type: string, options: string[], callback: (value: string) => void) => {

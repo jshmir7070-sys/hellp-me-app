@@ -6,10 +6,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Clipboard from "expo-clipboard";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useAuth } from "@/contexts/AuthContext";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
-import { apiRequest } from "@/lib/query-client";
+import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { Spacing, BorderRadius, BrandColors, Typography } from "@/constants/theme";
 import type { OrderCardDTO, CourierCategory } from "@/adapters/orderCardAdapter";
 
@@ -43,6 +44,7 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
+  const { showDesktopLayout } = useResponsive();
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
@@ -85,6 +87,13 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
   if (!order) return null;
 
   const data = fullOrderData || order;
+
+  // 이미지 URL 해석: 상대 경로를 절대 URL로 변환
+  const resolveImageUrl = (url?: string | null) => {
+    if (!url) return '';
+    if (url.startsWith('http')) return url;
+    return url.startsWith('/') ? `${getApiUrl()}${url}` : `${getApiUrl()}/${url}`;
+  };
 
   const formatCurrency = (amount?: number) => {
     if (!amount) return "-";
@@ -176,12 +185,18 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
     >
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onClose} />
-        <View 
+        <View
           style={[
-            styles.modalContainer, 
-            { 
+            styles.modalContainer,
+            {
               backgroundColor: theme.backgroundRoot,
               paddingBottom: insets.bottom + Spacing.lg,
+            },
+            showDesktopLayout && {
+              maxWidth: 640,
+              width: '90%',
+              alignSelf: 'center',
+              borderRadius: 16,
             }
           ]}
         >
@@ -320,8 +335,8 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
                   </ThemedText>
                 </View>
                 <Pressable onPress={() => setMapExpanded(true)}>
-                  <Image 
-                    source={{ uri: data.regionMapUrl }} 
+                  <Image
+                    source={{ uri: resolveImageUrl(data.regionMapUrl) }}
                     style={styles.mapImage}
                     resizeMode="cover"
                   />
@@ -346,7 +361,7 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
                 onPress={() => setMapExpanded(false)}
               >
                 <Image 
-                  source={{ uri: data.regionMapUrl || '' }} 
+                  source={{ uri: resolveImageUrl(data.regionMapUrl) }}
                   style={styles.expandedImage}
                   resizeMode="contain"
                 />
@@ -469,13 +484,13 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
                         </ThemedText>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.closingImagesScroll}>
                           {closingSummary.deliveryHistoryAttachments.map((img, idx) => (
-                            <Pressable 
-                              key={idx} 
-                              onPress={() => setSelectedImage(img.url)}
+                            <Pressable
+                              key={idx}
+                              onPress={() => setSelectedImage(resolveImageUrl(img.url))}
                               style={styles.closingImageContainer}
                             >
-                              <Image 
-                                source={{ uri: img.url }} 
+                              <Image
+                                source={{ uri: resolveImageUrl(img.url) }}
                                 style={styles.closingImageThumbnail}
                                 resizeMode="cover"
                               />
@@ -492,13 +507,13 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
                         </ThemedText>
                         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.closingImagesScroll}>
                           {closingSummary.etcAttachments.map((img, idx) => (
-                            <Pressable 
-                              key={idx} 
-                              onPress={() => setSelectedImage(img.url)}
+                            <Pressable
+                              key={idx}
+                              onPress={() => setSelectedImage(resolveImageUrl(img.url))}
                               style={styles.closingImageContainer}
                             >
-                              <Image 
-                                source={{ uri: img.url }} 
+                              <Image
+                                source={{ uri: resolveImageUrl(img.url) }}
                                 style={styles.closingImageThumbnail}
                                 resizeMode="cover"
                               />
@@ -554,7 +569,22 @@ export function JobDetailModal({ visible, onClose, order, fullOrderData, hideBut
             <View style={styles.footer}>
               <Pressable
                 style={[styles.applyButton, { backgroundColor: BrandColors.helper }]}
-                onPress={() => applyMutation.mutate()}
+                onPress={() => {
+                  if (Platform.OS === 'web') {
+                    if (confirm('이 오더에 지원하시겠습니까?')) {
+                      applyMutation.mutate();
+                    }
+                  } else {
+                    Alert.alert(
+                      '오더 지원 확인',
+                      '이 오더에 지원하시겠습니까?',
+                      [
+                        { text: '취소', style: 'cancel' },
+                        { text: '지원하기', onPress: () => applyMutation.mutate() },
+                      ]
+                    );
+                  }
+                }}
                 disabled={applyMutation.isPending}
               >
                 <ThemedText style={styles.applyButtonText}>

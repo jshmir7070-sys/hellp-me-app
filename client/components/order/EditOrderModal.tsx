@@ -15,6 +15,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
 
@@ -34,6 +35,7 @@ export function EditOrderModal({
   currentDate,
 }: EditOrderModalProps) {
   const { theme } = useTheme();
+  const { showDesktopLayout } = useResponsive();
   const queryClient = useQueryClient();
   const [unitPrice, setUnitPrice] = useState("");
   const [scheduledDate, setScheduledDate] = useState(new Date());
@@ -110,7 +112,15 @@ export function EditOrderModal({
       onRequestClose={onClose}
     >
       <Pressable style={styles.overlay} onPress={onClose}>
-        <Pressable onPress={() => {}} style={styles.contentWrapper}>
+        <Pressable onPress={() => {}} style={[
+          styles.contentWrapper,
+          showDesktopLayout && {
+            maxWidth: 640,
+            width: '90%',
+            alignSelf: 'center',
+            borderRadius: 16,
+          }
+        ]}>
           <Card style={styles.modalContent}>
             <View style={styles.header}>
               <ThemedText style={[styles.title, { color: theme.text }]}>

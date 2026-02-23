@@ -15,16 +15,19 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
+import { formatOrderNumber } from "@/lib/format-order-number";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Icon } from "@/components/Icon";
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
 
 interface Incident {
   id: number;
   orderId: number;
+  orderNumber?: string | null;
   incidentType: string;
   status: string;
   description: string;
@@ -91,6 +94,7 @@ const getHelperStatusLabel = (status: string | null) => {
 
 export default function AdminIncidentListScreen({ navigation }: AdminIncidentListScreenProps) {
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
@@ -112,7 +116,7 @@ export default function AdminIncidentListScreen({ navigation }: AdminIncidentLis
         <View style={styles.cardHeader}>
           <View style={styles.orderInfo}>
             <ThemedText style={[styles.orderId, { color: theme.text }]}>
-              오더 #{item.orderId}
+              {formatOrderNumber(item.orderNumber, item.orderId)}
             </ThemedText>
             <View
               style={[
@@ -238,7 +242,12 @@ export default function AdminIncidentListScreen({ navigation }: AdminIncidentLis
           contentContainerStyle={{
             paddingHorizontal: Spacing.lg,
             paddingTop: Spacing.md,
-            paddingBottom: tabBarHeight + Spacing.xl,
+            paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
+            ...(showDesktopLayout && {
+              maxWidth: containerMaxWidth,
+              alignSelf: 'center' as const,
+              width: '100%' as any,
+            }),
           }}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} />

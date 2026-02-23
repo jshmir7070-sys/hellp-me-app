@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import { useConfirm } from '@/components/common/ConfirmDialog';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,6 +45,7 @@ interface ExtraItem {
 interface DailySettlement {
   id: number;
   orderId: number;
+  orderNumber?: string | null;
   helperId: number;
   helperName?: string;
   helperPhone?: string;
@@ -66,6 +68,7 @@ interface HelperSettlement {
   helperId: number;
   helperName: string;
   helperPhone: string;
+  helperEmail: string;
   orderCount: number;
   supplyPrice: number;
   vat: number;
@@ -81,6 +84,7 @@ interface RequesterSettlement {
   requesterId: string;
   requesterName: string;
   requesterPhone: string;
+  requesterEmail: string;
   businessName: string;
   orderCount: number;
   billedAmount: number;
@@ -131,12 +135,23 @@ function getMonthRange(year: number, month: number) {
   };
 }
 
+function formatOrderNumber(orderNumber: string | null | undefined, orderId: number): string {
+  if (orderNumber) {
+    if (orderNumber.length === 12) {
+      return `${orderNumber.slice(0, 1)}-${orderNumber.slice(1, 4)}-${orderNumber.slice(4, 8)}-${orderNumber.slice(8, 12)}`;
+    }
+    return orderNumber;
+  }
+  return `#${orderId}`;
+}
+
 // ============ 메인 컴포넌트 ============
 
 export default function SettlementsPageV2() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const confirm = useConfirm();
+  const [searchParams, setSearchParams] = useSearchParams();
   
   const [activeTab, setActiveTab] = useState<'daily' | 'helper' | 'requester' | 'tax-invoices'>('daily');
   const [searchTerm, setSearchTerm] = useState('');
@@ -169,6 +184,116 @@ export default function SettlementsPageV2() {
     paidAmount: '',
     notes: '',
   });
+
+  // 헬퍼 정산 상세 모달 - 일정산 내역 상태
+  const [orderDetails, setOrderDetails] = useState<any[]>([]);
+  const [orderSummary, setOrderSummary] = useState<any>(null);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [editingDeductions, setEditingDeductions] = useState<Record<number, number>>({});
+  const [editingMemos, setEditingMemos] = useState<Record<number, string>>({});
+  const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
+  const [savingDeduction, setSavingDeduction] = useState<number | null>(null);
+
+  // 헬퍼 정산 상세 - 오더별 데이터 로드
+  const fetchOrderDetails = async (helperId: number) => {
+    setLoadingOrders(true);
+    try {
+      const res = await adminFetch(
+        `/api/admin/settlements/helper/${helperId}/orders?startDate=${monthRange.from}&endDate=${monthRange.to}`
+      );
+      if (!res.ok) throw new Error('조회 실패');
+      const data = await res.json();
+      setOrderDetails(data.orders || []);
+      setOrderSummary(data.summary || null);
+    } catch {
+      setOrderDetails([]);
+      setOrderSummary(null);
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedHelper) {
+      fetchOrderDetails(selectedHelper.helperId);
+    } else {
+      setOrderDetails([]);
+      setOrderSummary(null);
+      setEditingDeductions({});
+      setEditingMemos({});
+      setExpandedOrderId(null);
+    }
+  }, [selectedHelper]);
+
+  // 요청자 정산 상세 모달 - 오더별 내역 상태
+  const [requesterOrderDetails, setRequesterOrderDetails] = useState<any[]>([]);
+  const [requesterOrderSummary, setRequesterOrderSummary] = useState<any>(null);
+  const [loadingRequesterOrders, setLoadingRequesterOrders] = useState(false);
+
+  const fetchRequesterOrderDetails = async (requesterId: string) => {
+    setLoadingRequesterOrders(true);
+    try {
+      const res = await adminFetch(
+        `/api/admin/settlements/requester/${requesterId}/orders?startDate=${monthRange.from}&endDate=${monthRange.to}`
+      );
+      if (!res.ok) throw new Error('조회 실패');
+      const data = await res.json();
+      setRequesterOrderDetails(data.orders || []);
+      setRequesterOrderSummary(data.summary || null);
+    } catch {
+      setRequesterOrderDetails([]);
+      setRequesterOrderSummary(null);
+    } finally {
+      setLoadingRequesterOrders(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedRequester) {
+      fetchRequesterOrderDetails(selectedRequester.requesterId);
+    } else {
+      setRequesterOrderDetails([]);
+      setRequesterOrderSummary(null);
+    }
+  }, [selectedRequester]);
+
+  const handleDeductionChange = (orderId: number, value: number) => {
+    setEditingDeductions(prev => ({ ...prev, [orderId]: value }));
+  };
+
+  const handleMemoChange = (orderId: number, value: string) => {
+    setEditingMemos(prev => ({ ...prev, [orderId]: value }));
+  };
+
+  const handleSaveDeduction = async (orderId: number, helperId: number) => {
+    setSavingDeduction(orderId);
+    try {
+      const amount = editingDeductions[orderId];
+      const memo = editingMemos[orderId];
+      const res = await adminFetch(`/api/admin/settlements/helper/${helperId}/orders/${orderId}/deduction`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deductionAmount: amount, adminMemo: memo }),
+      });
+      if (!res.ok) throw new Error('저장 실패');
+      toast({ title: '차감액 저장 완료', variant: 'default' });
+      fetchOrderDetails(helperId);
+      setEditingDeductions(prev => {
+        const next = { ...prev };
+        delete next[orderId];
+        return next;
+      });
+      setEditingMemos(prev => {
+        const next = { ...prev };
+        delete next[orderId];
+        return next;
+      });
+    } catch {
+      toast({ title: '차감액 저장 실패', variant: 'destructive' });
+    } finally {
+      setSavingDeduction(null);
+    }
+  };
 
   // ============ 데이터 조회 ============
 
@@ -228,6 +353,40 @@ export default function SettlementsPageV2() {
   });
 
   const isLoading = loadingDaily || loadingHelper || loadingRequester || loadingTaxInvoices;
+
+  // URL ?id= 파라미터로 정산 상세 자동 오픈
+  const autoOpenHandled = useRef(false);
+  useEffect(() => {
+    if (autoOpenHandled.current) return;
+    const targetId = searchParams.get('id');
+    if (!targetId || !dailySettlements.length) return;
+
+    const settlementId = Number(targetId);
+    const found = (dailySettlements as DailySettlement[]).find((s) => s.id === settlementId);
+    if (found) {
+      setActiveTab('daily');
+      setSelectedDailySettlement(found);
+      autoOpenHandled.current = true;
+      searchParams.delete('id');
+      setSearchParams(searchParams, { replace: true });
+    } else if (settlementId > 0) {
+      // 현재 날짜 범위에 없으면 API로 직접 조회
+      adminFetch(`/api/admin/settlements/daily?id=${settlementId}`).then(async (res) => {
+        if (res.ok) {
+          const json = await res.json();
+          const items = Array.isArray(json) ? json : (json.data || []);
+          const item = items.find((s: any) => s.id === settlementId);
+          if (item) {
+            setActiveTab('daily');
+            setSelectedDailySettlement(item);
+          }
+        }
+      }).catch(() => { /* 조회 실패 시 무시 */ });
+      autoOpenHandled.current = true;
+      searchParams.delete('id');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [dailySettlements, searchParams, setSearchParams]);
 
   // ============ 필터링 ============
 
@@ -322,7 +481,7 @@ export default function SettlementsPageV2() {
 
     if (activeTab === 'daily') {
       data = filteredDailySettlements.map((item: DailySettlement) => ({
-        '오더번호': item.orderId,
+        '오더번호': formatOrderNumber(item.orderNumber, item.orderId),
         '요청자': item.requesterName || '',
         '헬퍼': item.helperName || '',
         '헬퍼연락처': item.helperPhone || '',
@@ -335,7 +494,7 @@ export default function SettlementsPageV2() {
         '최종금액': item.finalTotal || 0,
         '플랫폼수수료': item.platformFee || 0,
         '헬퍼지급액': item.driverPayout || 0,
-        '마감일시': item.createdAt ? new Date(item.createdAt).toLocaleDateString('ko-KR') : '',
+        '마감일시': item.createdAt ? new Date(item.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
       }));
       filename = `일정산_${new Date().toISOString().slice(0, 10)}.csv`;
     } else if (activeTab === 'helper') {
@@ -428,7 +587,7 @@ export default function SettlementsPageV2() {
       const csvRows = orders.map((o: any, i: number) => ({
         '순번': i + 1,
         '오더번호': o.orderId || '',
-        '작업일': o.createdAt ? new Date(o.createdAt).toLocaleDateString('ko-KR') : '',
+        '작업일': o.createdAt ? new Date(o.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
         '요청자': o.requesterName || '',
         '카테고리': CATEGORY_LABELS[o.category || ''] || o.category || '',
         '운송사': o.courierCompany || '',
@@ -678,8 +837,8 @@ export default function SettlementsPageV2() {
     {
       key: 'orderId',
       header: '오더번호',
-      width: 90,
-      render: (value) => <span className="font-mono text-sm font-medium">#{value}</span>,
+      width: 150,
+      render: (value, row) => <span className="font-mono text-sm font-medium">{formatOrderNumber(row.orderNumber, value)}</span>,
     },
     {
       key: 'requesterName',
@@ -880,7 +1039,7 @@ export default function SettlementsPageV2() {
       header: '입금일',
       width: 100,
       render: (value) => value ? (
-        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR')}</span>
+        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
       ) : (
         <span className="text-sm text-muted-foreground">-</span>
       ),
@@ -966,7 +1125,7 @@ export default function SettlementsPageV2() {
       header: '발행일',
       width: 100,
       render: (value) => value ? (
-        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR')}</span>
+        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
       ) : (
         <span className="text-sm text-muted-foreground">-</span>
       ),
@@ -1432,7 +1591,7 @@ export default function SettlementsPageV2() {
                 {selectedTaxInvoice.issueDate && (
                   <div className="flex justify-between p-3">
                     <span className="text-muted-foreground">발행일</span>
-                    <span className="font-medium">{new Date(selectedTaxInvoice.issueDate).toLocaleDateString('ko-KR')}</span>
+                    <span className="font-medium">{new Date(selectedTaxInvoice.issueDate).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
                   </div>
                 )}
                 {selectedTaxInvoice.popbillNtsConfirmNum && (
@@ -1485,108 +1644,320 @@ export default function SettlementsPageV2() {
         </DialogContent>
       </Dialog>
 
-      {/* 헬퍼 정산 상세 모달 */}
+      {/* 헬퍼 정산 상세 모달 — 거래명세표 형식 */}
       <Dialog open={!!selectedHelper} onOpenChange={() => setSelectedHelper(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              헬퍼 정산 상세 - {selectedHelper?.helperName} ({selectedYear}년 {monthNames[selectedMonth]})
-            </DialogTitle>
-          </DialogHeader>
-          
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto p-0">
           {selectedHelper && (
-            <div className="space-y-6">
-              {/* 기본 정보 */}
-              <div className="grid grid-cols-4 gap-4 p-4 bg-muted rounded-lg">
-                <div>
-                  <div className="text-sm text-muted-foreground">헬퍼명</div>
-                  <div className="font-medium">{selectedHelper.helperName}</div>
+            <div className="divide-y">
+
+              {/* ── 거래명세표 헤더 ── */}
+              <div className="bg-slate-50 px-6 py-5">
+                <div className="text-center mb-4">
+                  <h2 className="text-xl font-bold tracking-tight">거래명세표</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {selectedYear}년 {monthNames[selectedMonth]} ({monthRange.from} ~ {monthRange.to})
+                  </p>
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">연락처</div>
-                  <div className="font-medium">{selectedHelper.helperPhone}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">헬퍼 ID</div>
-                  <div className="font-mono text-sm">{selectedHelper.helperId}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">오더 수</div>
-                  <div className="font-medium text-lg">{selectedHelper.orderCount}건</div>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* 좌측: 공급자(본사) */}
+                  <div className="border rounded-lg p-3 bg-white">
+                    <div className="text-[11px] font-semibold text-muted-foreground mb-2 tracking-wide">공급자</div>
+                    <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                      <span className="text-muted-foreground text-xs">상호</span>
+                      <span className="font-medium">주식회사 본사</span>
+                    </div>
+                  </div>
+                  {/* 우측: 공급받는자(헬퍼) */}
+                  <div className="border rounded-lg p-3 bg-white">
+                    <div className="text-[11px] font-semibold text-muted-foreground mb-2 tracking-wide">공급받는자</div>
+                    <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                      <span className="text-muted-foreground text-xs">이름</span>
+                      <span className="font-medium">
+                        {selectedHelper.helperName}
+                        {selectedHelper.helperEmail && (
+                          <span className="text-muted-foreground font-normal text-xs ml-1">({selectedHelper.helperEmail})</span>
+                        )}
+                      </span>
+                      <span className="text-muted-foreground text-xs">연락처</span>
+                      <span>{selectedHelper.helperPhone}</span>
+                      <span className="text-muted-foreground text-xs">오더</span>
+                      <span className="font-medium">{selectedHelper.orderCount}건</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* 정산 상세 */}
-              <div className="space-y-3">
-                <h3 className="font-semibold text-lg">정산 내역</h3>
-                <div className="border rounded-lg divide-y">
-                  <div className="flex justify-between p-3 hover:bg-muted/50">
-                    <span className="text-muted-foreground">공급가액</span>
-                    <span className="font-medium">{formatAmount(selectedHelper.supplyPrice)}</span>
+              {/* ── 일정산 상세 테이블 ── */}
+              <div className="px-6 py-4">
+                {loadingOrders ? (
+                  <div className="flex justify-center p-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
-                  <div className="flex justify-between p-3 hover:bg-muted/50">
-                    <span className="text-muted-foreground">부가세 (10%)</span>
-                    <span className="font-medium">{formatAmount(selectedHelper.vat)}</span>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 border-y border-slate-300 text-slate-600">
+                          <th className="px-2 py-2 text-left font-semibold">근무일</th>
+                          <th className="px-2 py-2 text-left font-semibold">오더번호</th>
+                          <th className="px-2 py-2 text-left font-semibold">요청자</th>
+                          <th className="px-2 py-2 text-right font-semibold">공급가액</th>
+                          <th className="px-2 py-2 text-right font-semibold">부가세</th>
+                          <th className="px-2 py-2 text-right font-semibold">합계금</th>
+                          <th className="px-2 py-2 text-right font-semibold">산재</th>
+                          <th className="px-2 py-2 text-right font-semibold">차감</th>
+                          <th className="px-2 py-2 text-right font-semibold">지급액</th>
+                          <th className="px-1 py-2 text-center font-semibold w-14"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          // 월 전체 날짜 배열 생성 (1일 ~ 말일)
+                          const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+                          const allDates: string[] = [];
+                          for (let d = 1; d <= daysInMonth; d++) {
+                            allDates.push(
+                              `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+                            );
+                          }
+
+                          // 오더를 날짜별 그룹핑
+                          const ordersByDate = new Map<string, any[]>();
+                          for (const order of orderDetails) {
+                            const dateKey = order.date
+                              ? new Date(order.date).toISOString().split('T')[0]
+                              : '';
+                            if (!ordersByDate.has(dateKey)) ordersByDate.set(dateKey, []);
+                            ordersByDate.get(dateKey)!.push(order);
+                          }
+
+                          let globalRowIdx = 0;
+
+                          return allDates.map((dateStr) => {
+                            const dayOrders = ordersByDate.get(dateStr) || [];
+                            const dayNum = parseInt(dateStr.split('-')[2], 10);
+                            const dayOfWeek = new Date(dateStr + 'T00:00:00').getDay(); // 0=일, 6=토
+                            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                            const dayLabel = `${String(selectedMonth + 1).padStart(2, '0')}/${String(dayNum).padStart(2, '0')}`;
+
+                            if (dayOrders.length === 0) {
+                              // 비근무일: 빈 행 표시
+                              globalRowIdx++;
+                              return (
+                                <tr
+                                  key={`empty-${dateStr}`}
+                                  className={cn(
+                                    "border-b border-slate-50",
+                                    isWeekend ? "bg-red-50/30" : "bg-slate-50/30"
+                                  )}
+                                >
+                                  <td className={cn(
+                                    "px-2 py-1 whitespace-nowrap",
+                                    isWeekend ? "text-red-300" : "text-muted-foreground/40"
+                                  )}>
+                                    {dayLabel}
+                                  </td>
+                                  <td className="px-2 py-1 text-muted-foreground/30 text-center" colSpan={8}>-</td>
+                                  <td></td>
+                                </tr>
+                              );
+                            }
+
+                            // 해당 날짜에 오더가 있는 경우
+                            return dayOrders.map((order: any, orderIdx: number) => {
+                              const currentRowIdx = globalRowIdx++;
+                              const isEditing = editingDeductions[order.orderId] !== undefined;
+                              const isMemoEditing = editingMemos[order.orderId] !== undefined;
+                              const deductionVal = isEditing ? editingDeductions[order.orderId] : (order.damageDeduction || 0);
+                              const memoVal = isMemoEditing ? editingMemos[order.orderId] : (order.adminMemo || '');
+                              const payoutVal = (order.totalAmount || 0) - (order.insurance || 0) - deductionVal;
+                              const isExpanded = expandedOrderId === order.orderId;
+                              const hasBreakdown = order.deductionBreakdown && order.deductionBreakdown.length > 0;
+                              const rowBg = currentRowIdx % 2 === 0 ? '' : 'bg-slate-50/60';
+                              return (
+                                <React.Fragment key={order.orderId}>
+                                  <tr
+                                    className={cn("border-b border-slate-100 hover:bg-blue-50/40 cursor-pointer", rowBg, isExpanded && "bg-blue-50/50")}
+                                    onClick={() => setExpandedOrderId(isExpanded ? null : order.orderId)}
+                                  >
+                                    <td className={cn("px-2 py-1.5 whitespace-nowrap", isWeekend && "text-red-500")}>
+                                      {orderIdx === 0 ? dayLabel : ''}
+                                    </td>
+                                    <td className="px-2 py-1.5 font-mono">{order.orderId}</td>
+                                    <td className="px-2 py-1.5 whitespace-nowrap">{order.requesterName || '-'}</td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums">{(order.supplyAmount || 0).toLocaleString()}</td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums">{(order.vatAmount || 0).toLocaleString()}</td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums font-medium">{(order.totalAmount || 0).toLocaleString()}</td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums text-orange-600">{(order.insurance || 0).toLocaleString()}</td>
+                                    <td className="px-2 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
+                                      <Input
+                                        type="number"
+                                        value={deductionVal}
+                                        onChange={(e) => handleDeductionChange(order.orderId, Number(e.target.value))}
+                                        className="w-20 text-right h-6 text-xs px-1"
+                                        min={0}
+                                      />
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right tabular-nums font-semibold text-emerald-600">
+                                      {Math.max(0, payoutVal).toLocaleString()}
+                                    </td>
+                                    <td className="px-1 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
+                                      {(isEditing || isMemoEditing) && (
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-6 text-[10px] px-2 text-blue-600 hover:text-blue-800"
+                                          onClick={() => handleSaveDeduction(order.orderId, selectedHelper.helperId)}
+                                          disabled={savingDeduction === order.orderId}
+                                        >
+                                          {savingDeduction === order.orderId ? <Loader2 className="h-3 w-3 animate-spin" /> : '저장'}
+                                        </Button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                  {/* ── 확장: 차감 상세 + 관리자 메모 ── */}
+                                  {isExpanded && (
+                                    <tr>
+                                      <td colSpan={10} className="p-0">
+                                        <div className="bg-slate-50 border-y border-slate-200 px-4 py-3 grid grid-cols-2 gap-4">
+                                          {/* 좌: 차감 상세내역 */}
+                                          <div>
+                                            <div className="text-[11px] font-semibold text-slate-500 mb-1.5">차감 상세내역</div>
+                                            {hasBreakdown ? (
+                                              <div className="space-y-1">
+                                                {order.deductionBreakdown.map((item: any, idx: number) => (
+                                                  <div key={idx} className="flex items-center gap-2 text-xs">
+                                                    <Badge variant={item.type === 'incident' ? 'destructive' : 'secondary'} className="text-[10px] px-1.5 py-0 h-4">
+                                                      {item.label}
+                                                    </Badge>
+                                                    <span className="text-red-600 font-medium tabular-nums">{(item.amount || 0).toLocaleString()}원</span>
+                                                    {item.reason && <span className="text-muted-foreground truncate">- {item.reason}</span>}
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            ) : (
+                                              <p className="text-xs text-muted-foreground italic">차감 내역 없음</p>
+                                            )}
+                                            {order.memo && (
+                                              <div className="mt-2">
+                                                <div className="text-[11px] font-semibold text-slate-500 mb-1">마감 메모</div>
+                                                <p className="text-xs text-muted-foreground bg-white rounded p-1.5 border">{order.memo}</p>
+                                              </div>
+                                            )}
+                                          </div>
+                                          {/* 우: 관리자 메모 */}
+                                          <div onClick={(e) => e.stopPropagation()}>
+                                            <div className="text-[11px] font-semibold text-slate-500 mb-1.5">관리자 메모</div>
+                                            <Textarea
+                                              value={memoVal}
+                                              onChange={(e) => handleMemoChange(order.orderId, e.target.value)}
+                                              placeholder="차감 사유, 조정 내용 등..."
+                                              className="text-xs h-20 resize-none"
+                                            />
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
+                              );
+                            });
+                          });
+                        })()}
+                        {/* ── 합계 행 ── */}
+                        <tr className="bg-slate-100 border-t-2 border-slate-400 font-bold text-xs">
+                          <td className="px-2 py-2" colSpan={3}>합계 ({orderDetails.length}건)</td>
+                          <td className="px-2 py-2 text-right tabular-nums">{(orderSummary?.totalSupply || 0).toLocaleString()}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">{(orderSummary?.totalVat || 0).toLocaleString()}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-blue-700">{(orderSummary?.totalAmount || 0).toLocaleString()}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-orange-600">{(orderSummary?.totalInsurance || 0).toLocaleString()}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-red-600">{(orderSummary?.totalDamageDeduction || 0).toLocaleString()}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-emerald-700">
+                            {((orderSummary?.totalAmount || 0) - (orderSummary?.totalInsurance || 0) - (orderSummary?.totalDamageDeduction || 0)).toLocaleString()}
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="flex justify-between p-3 hover:bg-muted/50 bg-blue-50">
-                    <span className="font-semibold">총 거래액</span>
-                    <span className="font-bold text-blue-600">{formatAmount(selectedHelper.totalAmount)}</span>
+                )}
+              </div>
+
+              {/* ── 정산 내역 (앱 정산서와 동일 형식) ── */}
+              <div className="px-6 py-4 space-y-1">
+                <div className="text-sm font-semibold mb-2">정산 내역</div>
+                <div className="border rounded-lg divide-y text-sm">
+                  <div className="flex justify-between px-4 py-2.5">
+                    <span className="text-muted-foreground">총 금액 (공급가 + VAT)</span>
+                    <span className="font-medium tabular-nums">{formatAmount(selectedHelper.totalAmount)}</span>
                   </div>
-                  <div className="flex justify-between p-3 hover:bg-muted/50">
+                  <div className="flex justify-between px-4 py-2.5">
                     <span className="text-muted-foreground">플랫폼 수수료</span>
-                    <span className="font-medium text-red-600">-{formatAmount(selectedHelper.platformFee)}</span>
+                    <span className="font-medium tabular-nums text-amber-500">-{formatAmount(selectedHelper.platformFee)}</span>
                   </div>
-                  <div className="flex justify-between p-3 hover:bg-muted/50">
-                    <span className="text-muted-foreground">차감액 (분쟁/사고)</span>
-                    <span className="font-medium text-red-600">-{formatAmount(selectedHelper.deductedAmount)}</span>
+                  {orderSummary?.totalInsurance > 0 && (
+                    <div className="flex justify-between px-4 py-2.5">
+                      <span className="text-muted-foreground">산재보험료 ({orderSummary.insuranceRate}% x 50%)</span>
+                      <span className="font-medium tabular-nums text-orange-500">-{formatAmount(orderSummary.totalInsurance)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between px-4 py-2.5">
+                    <span className="text-muted-foreground">기타 차감 (사고 등)</span>
+                    <span className="font-medium tabular-nums text-red-500">-{formatAmount(selectedHelper.deductedAmount)}</span>
                   </div>
                   {selectedHelper.deductions > 0 && (
-                    <div className="flex justify-between p-3 hover:bg-muted/50">
-                      <span className="text-muted-foreground text-sm pl-4">└ 분쟁 차감</span>
-                      <span className="font-medium text-sm text-red-600">-{formatAmount(selectedHelper.deductions)}</span>
+                    <div className="flex justify-between px-4 py-2 bg-muted/30">
+                      <span className="text-muted-foreground text-xs pl-4">└ 분쟁 차감</span>
+                      <span className="text-xs text-red-500 tabular-nums">-{formatAmount(selectedHelper.deductions)}</span>
                     </div>
                   )}
                   {selectedHelper.cargoIncident > 0 && (
-                    <div className="flex justify-between p-3 hover:bg-muted/50">
-                      <span className="text-muted-foreground text-sm pl-4">└ 화물사고 배상</span>
-                      <span className="font-medium text-sm text-red-600">-{formatAmount(selectedHelper.cargoIncident)}</span>
+                    <div className="flex justify-between px-4 py-2 bg-muted/30">
+                      <span className="text-muted-foreground text-xs pl-4">└ 화물사고 배상</span>
+                      <span className="text-xs text-red-500 tabular-nums">-{formatAmount(selectedHelper.cargoIncident)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between p-3 bg-green-50">
+                  <div className="flex justify-between px-4 py-3 bg-emerald-50">
                     <span className="font-bold">최종 지급액</span>
-                    <span className="font-bold text-xl text-green-600">{formatAmount(selectedHelper.driverPayout)}</span>
+                    <span className="font-bold text-lg text-emerald-600 tabular-nums">{formatAmount(selectedHelper.driverPayout)}</span>
                   </div>
+                </div>
+                {orderSummary?.insuranceRate && (
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    * 산재보험료: 특고직 기준 {orderSummary.insuranceRate}%, 본사 50%와 헬퍼 50% 분담
+                  </p>
+                )}
+              </div>
+
+              {/* ── 하단 버튼 ── */}
+              <div className="px-6 py-4 flex justify-between items-center bg-slate-50">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedHelper(null)}>
+                  닫기
+                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => handleDownloadStatement(selectedHelper)}>
+                    <FileText className="h-4 w-4 mr-1.5" />
+                    거래명세서
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      if (await confirm({ title: '정산 확정', description: `${selectedHelper.helperName} 헬퍼의 ${selectedYear}년 ${monthNames[selectedMonth]} 정산을 확정하시겠습니까?` })) {
+                        confirmSettlementMutation.mutate(selectedHelper.helperId);
+                      }
+                    }}
+                    disabled={confirmSettlementMutation.isPending}
+                  >
+                    {confirmSettlementMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <Check className="h-4 w-4 mr-1.5" />
+                    )}
+                    정산 확정
+                  </Button>
                 </div>
               </div>
 
-              {/* 액션 버튼 */}
-              <DialogFooter className="gap-2">
-                <Button variant="outline" onClick={() => setSelectedHelper(null)}>
-                  닫기
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => handleDownloadStatement(selectedHelper)}
-                >
-                  <FileText className="h-4 w-4 mr-2" />
-                  거래명세서
-                </Button>
-                <Button
-                  onClick={async () => {
-                    if (await confirm({ title: '정산 확정', description: `${selectedHelper.helperName} 헬퍼의 ${selectedYear}년 ${monthNames[selectedMonth]} 정산을 확정하시겠습니까?` })) {
-                      confirmSettlementMutation.mutate(selectedHelper.helperId);
-                    }
-                  }}
-                  disabled={confirmSettlementMutation.isPending}
-                >
-                  {confirmSettlementMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Check className="h-4 w-4 mr-2" />
-                  )}
-                  정산 확정
-                </Button>
-              </DialogFooter>
             </div>
           )}
         </DialogContent>
@@ -1674,110 +2045,245 @@ export default function SettlementsPageV2() {
         </DialogContent>
       </Dialog>
 
-      {/* 요청자 정산 상세 모달 */}
+      {/* 요청자 정산 상세 모달 — 거래명세표 형식 */}
       <Dialog open={!!selectedRequester} onOpenChange={() => setSelectedRequester(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              요청자 정산 상세 - {selectedRequester?.requesterName} ({selectedYear}년 {monthNames[selectedMonth]})
-            </DialogTitle>
-          </DialogHeader>
-          
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto p-0">
           {selectedRequester && (
-            <div className="space-y-6">
-              {/* 기본 정보 */}
-              <div className="grid grid-cols-4 gap-4 p-4 bg-muted rounded-lg">
-                <div>
-                  <div className="text-sm text-muted-foreground">요청자명</div>
-                  <div className="font-medium">{selectedRequester.requesterName}</div>
+            <div className="divide-y">
+
+              {/* ── 거래명세표 헤더 ── */}
+              <div className="bg-slate-50 px-6 py-5">
+                <div className="text-center mb-4">
+                  <h2 className="text-xl font-bold tracking-tight">거래명세표</h2>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {selectedYear}년 {monthNames[selectedMonth]} ({monthRange.from} ~ {monthRange.to})
+                  </p>
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">사업자명</div>
-                  <div className="font-medium">{selectedRequester.businessName || '-'}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">연락처</div>
-                  <div className="font-medium">{selectedRequester.requesterPhone}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">오더 수</div>
-                  <div className="font-medium text-lg">{selectedRequester.orderCount}건</div>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* 좌측: 공급자(본사) */}
+                  <div className="border rounded-lg p-3 bg-white">
+                    <div className="text-[11px] font-semibold text-muted-foreground mb-2 tracking-wide">공급자</div>
+                    <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                      <span className="text-muted-foreground text-xs">상호</span>
+                      <span className="font-medium">주식회사 본사</span>
+                    </div>
+                  </div>
+                  {/* 우측: 공급받는자(요청자) */}
+                  <div className="border rounded-lg p-3 bg-white">
+                    <div className="text-[11px] font-semibold text-muted-foreground mb-2 tracking-wide">공급받는자</div>
+                    <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+                      <span className="text-muted-foreground text-xs">이름</span>
+                      <span className="font-medium">
+                        {selectedRequester.requesterName}
+                        {selectedRequester.requesterEmail && (
+                          <span className="text-muted-foreground font-normal text-xs ml-1">({selectedRequester.requesterEmail})</span>
+                        )}
+                      </span>
+                      <span className="text-muted-foreground text-xs">사업자</span>
+                      <span>{selectedRequester.businessName || '-'}</span>
+                      <span className="text-muted-foreground text-xs">연락처</span>
+                      <span>{selectedRequester.requesterPhone}</span>
+                      <span className="text-muted-foreground text-xs">오더</span>
+                      <span className="font-medium">{selectedRequester.orderCount}건</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* 정산 상세 */}
-              <div className="space-y-3">
-                <h3 className="font-semibold text-lg">청구 내역</h3>
-                <div className="border rounded-lg divide-y">
-                  <div className="flex justify-between p-3 hover:bg-muted/50 bg-blue-50">
-                    <span className="font-semibold">총 청구금액</span>
-                    <span className="font-bold text-blue-600">{formatAmount(selectedRequester.billedAmount)}</span>
+              {/* ── 일정산 상세 테이블 ── */}
+              <div className="px-6 py-4">
+                {loadingRequesterOrders ? (
+                  <div className="flex justify-center p-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                   </div>
-                  <div className="flex justify-between p-3 hover:bg-muted/50">
-                    <span className="text-muted-foreground">미수금액</span>
-                    <span className="font-medium text-orange-600">{formatAmount(selectedRequester.unpaidAmount)}</span>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 border-y border-slate-300 text-slate-600">
+                          <th className="px-2 py-2 text-left font-semibold">근무일</th>
+                          <th className="px-2 py-2 text-left font-semibold">오더번호</th>
+                          <th className="px-2 py-2 text-left font-semibold">헬퍼</th>
+                          <th className="px-2 py-2 text-right font-semibold">공급가액</th>
+                          <th className="px-2 py-2 text-right font-semibold">부가세</th>
+                          <th className="px-2 py-2 text-right font-semibold">합계금</th>
+                          <th className="px-2 py-2 text-right font-semibold">계약금</th>
+                          <th className="px-2 py-2 text-right font-semibold">잔금</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          // 월 전체 날짜 배열 생성 (1일 ~ 말일)
+                          const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+                          const allDates: string[] = [];
+                          for (let d = 1; d <= daysInMonth; d++) {
+                            allDates.push(
+                              `${selectedYear}-${String(selectedMonth + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+                            );
+                          }
+
+                          // 오더를 날짜별 그룹핑
+                          const ordersByDate = new Map<string, any[]>();
+                          for (const order of requesterOrderDetails) {
+                            const dateKey = order.orderDate
+                              ? new Date(order.orderDate).toISOString().split('T')[0]
+                              : '';
+                            if (!ordersByDate.has(dateKey)) ordersByDate.set(dateKey, []);
+                            ordersByDate.get(dateKey)!.push(order);
+                          }
+
+                          let globalRowIdx = 0;
+
+                          return allDates.map((dateStr) => {
+                            const dayOrders = ordersByDate.get(dateStr) || [];
+                            const dayNum = parseInt(dateStr.split('-')[2], 10);
+                            const dayOfWeek = new Date(dateStr + 'T00:00:00').getDay();
+                            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                            const dayLabel = `${String(selectedMonth + 1).padStart(2, '0')}/${String(dayNum).padStart(2, '0')}`;
+
+                            if (dayOrders.length === 0) {
+                              globalRowIdx++;
+                              return (
+                                <tr
+                                  key={`empty-${dateStr}`}
+                                  className={cn(
+                                    "border-b border-slate-50",
+                                    isWeekend ? "bg-red-50/30" : "bg-slate-50/30"
+                                  )}
+                                >
+                                  <td className={cn(
+                                    "px-2 py-1 whitespace-nowrap",
+                                    isWeekend ? "text-red-300" : "text-muted-foreground/40"
+                                  )}>
+                                    {dayLabel}
+                                  </td>
+                                  <td className="px-2 py-1 text-muted-foreground/30 text-center" colSpan={7}>-</td>
+                                </tr>
+                              );
+                            }
+
+                            return dayOrders.map((order: any, orderIdx: number) => {
+                              const currentRowIdx = globalRowIdx++;
+                              const rowBg = currentRowIdx % 2 === 0 ? '' : 'bg-slate-50/60';
+                              return (
+                                <tr
+                                  key={order.orderId}
+                                  className={cn("border-b border-slate-100 hover:bg-blue-50/40", rowBg)}
+                                >
+                                  <td className={cn("px-2 py-1.5 whitespace-nowrap", isWeekend && "text-red-500")}>
+                                    {orderIdx === 0 ? dayLabel : ''}
+                                  </td>
+                                  <td className="px-2 py-1.5 font-mono">{order.orderId}</td>
+                                  <td className="px-2 py-1.5 whitespace-nowrap">{order.helperName || '-'}</td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums">{(order.supplyAmount || 0).toLocaleString()}</td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums">{(order.vatAmount || 0).toLocaleString()}</td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums font-medium">{(order.totalAmount || 0).toLocaleString()}</td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums text-emerald-600">{(order.depositAmount || 0).toLocaleString()}</td>
+                                  <td className="px-2 py-1.5 text-right tabular-nums text-orange-600">{(order.balanceAmount || 0).toLocaleString()}</td>
+                                </tr>
+                              );
+                            });
+                          });
+                        })()}
+                        {/* ── 합계 행 ── */}
+                        <tr className="bg-slate-100 border-t-2 border-slate-400 font-bold text-xs">
+                          <td className="px-2 py-2" colSpan={3}>합계 ({requesterOrderDetails.length}건)</td>
+                          <td className="px-2 py-2 text-right tabular-nums">{(requesterOrderSummary?.totalSupply || 0).toLocaleString()}</td>
+                          <td className="px-2 py-2 text-right tabular-nums">{(requesterOrderSummary?.totalVat || 0).toLocaleString()}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-blue-700">{(requesterOrderSummary?.totalAmount || 0).toLocaleString()}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-emerald-600">{(requesterOrderSummary?.totalDeposit || 0).toLocaleString()}</td>
+                          <td className="px-2 py-2 text-right tabular-nums text-orange-600">{(requesterOrderSummary?.totalBalance || 0).toLocaleString()}</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
-                  <div className="flex justify-between p-3 hover:bg-muted/50">
+                )}
+              </div>
+
+              {/* ── 청구 내역 ── */}
+              <div className="px-6 py-4 space-y-1">
+                <div className="text-sm font-semibold mb-2">청구 내역</div>
+                <div className="border rounded-lg divide-y text-sm">
+                  <div className="flex justify-between px-4 py-2.5">
+                    <span className="text-muted-foreground">총 청구금액 (공급가 + VAT)</span>
+                    <span className="font-medium tabular-nums">{formatAmount(selectedRequester.billedAmount)}</span>
+                  </div>
+                  <div className="flex justify-between px-4 py-2.5">
+                    <span className="text-muted-foreground">계약금 합계</span>
+                    <span className="font-medium tabular-nums text-emerald-600">{formatAmount(requesterOrderSummary?.totalDeposit)}</span>
+                  </div>
+                  <div className="flex justify-between px-4 py-3 bg-orange-50">
+                    <span className="font-bold">미수금액 (잔금 합계)</span>
+                    <span className="font-bold text-lg text-orange-600 tabular-nums">{formatAmount(selectedRequester.unpaidAmount)}</span>
+                  </div>
+                  <div className="flex justify-between px-4 py-2.5">
                     <span className="text-muted-foreground">입금 예정일</span>
                     <span className="font-medium">
-                      {selectedRequester.paymentDate ? new Date(selectedRequester.paymentDate).toLocaleDateString('ko-KR') : '미정'}
+                      {selectedRequester.paymentDate ? new Date(selectedRequester.paymentDate).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '미정'}
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* 미수금 안내 */}
+              {/* ── 미수금 안내 ── */}
               {selectedRequester.unpaidAmount > 0 && (
-                <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5" />
-                    <div>
-                      <div className="font-medium text-orange-900">미수금 확인 필요</div>
-                      <div className="text-sm text-orange-700 mt-1">
-                        {formatAmount(selectedRequester.unpaidAmount)}의 미수금이 있습니다.
-                        입금 확인 후 정산을 완료해주세요.
+                <div className="px-6 pb-2">
+                  <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="h-5 w-5 text-orange-600 mt-0.5" />
+                      <div>
+                        <div className="font-medium text-orange-900">미수금 확인 필요</div>
+                        <div className="text-sm text-orange-700 mt-1">
+                          {formatAmount(selectedRequester.unpaidAmount)}의 미수금이 있습니다.
+                          입금 확인 후 정산을 완료해주세요.
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* 액션 버튼 */}
-              <DialogFooter className="gap-2">
-                <Button variant="outline" onClick={() => setSelectedRequester(null)}>
+              {/* ── 하단 버튼 ── */}
+              <div className="px-6 py-4 flex justify-between items-center bg-slate-50">
+                <Button variant="ghost" size="sm" onClick={() => setSelectedRequester(null)}>
                   닫기
                 </Button>
-                <Button
-                  variant="outline"
-                  onClick={async () => {
-                    if (await confirm({ title: '세금계산서 발행', description: `${selectedRequester.requesterName}님의 세금계산서를 발행하시겠습니까?` })) {
-                      createTaxInvoiceMutation.mutate(selectedRequester.requesterId);
-                    }
-                  }}
-                  disabled={createTaxInvoiceMutation.isPending}
-                >
-                  {createTaxInvoiceMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Receipt className="h-4 w-4 mr-2" />
-                  )}
-                  세금계산서 발행
-                </Button>
-                {selectedRequester.unpaidAmount > 0 && (
+                <div className="flex gap-2">
                   <Button
-                    onClick={() => {
-                      setPaymentForm({
-                        ...paymentForm,
-                        paidAmount: String(selectedRequester.unpaidAmount),
-                      });
-                      setShowPaymentConfirm(true);
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      if (await confirm({ title: '세금계산서 발행', description: `${selectedRequester.requesterName}님의 세금계산서를 발행하시겠습니까?` })) {
+                        createTaxInvoiceMutation.mutate(selectedRequester.requesterId);
+                      }
                     }}
+                    disabled={createTaxInvoiceMutation.isPending}
                   >
-                    <CreditCard className="h-4 w-4 mr-2" />
-                    입금 확인
+                    {createTaxInvoiceMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                    ) : (
+                      <Receipt className="h-4 w-4 mr-1.5" />
+                    )}
+                    세금계산서 발행
                   </Button>
-                )}
-              </DialogFooter>
+                  {selectedRequester.unpaidAmount > 0 && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setPaymentForm({
+                          ...paymentForm,
+                          paidAmount: String(selectedRequester.unpaidAmount),
+                        });
+                        setShowPaymentConfirm(true);
+                      }}
+                    >
+                      <CreditCard className="h-4 w-4 mr-1.5" />
+                      입금 확인
+                    </Button>
+                  )}
+                </div>
+              </div>
+
             </div>
           )}
         </DialogContent>
@@ -1826,7 +2332,7 @@ export default function SettlementsPageV2() {
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">정산일</div>
-                  <div className="font-medium">{new Date(selectedDailySettlement.createdAt).toLocaleDateString('ko-KR')}</div>
+                  <div className="font-medium">{new Date(selectedDailySettlement.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</div>
                 </div>
               </div>
 

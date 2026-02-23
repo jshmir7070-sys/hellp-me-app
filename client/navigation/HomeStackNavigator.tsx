@@ -15,6 +15,8 @@ import DriverLicenseSubmitScreen from "@/screens/DriverLicenseSubmitScreen";
 import CargoLicenseSubmitScreen from "@/screens/CargoLicenseSubmitScreen";
 import VehicleCertSubmitScreen from "@/screens/VehicleCertSubmitScreen";
 import ContractSigningScreen from "@/screens/ContractSigningScreen";
+import JobDetailScreen from "@/screens/JobDetailScreen";
+import QRCheckinScreen from "@/screens/QRCheckinScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 import { useTheme } from "@/hooks/useTheme";
@@ -33,6 +35,8 @@ export type HomeStackParamList = {
   CargoLicenseSubmit: undefined;
   VehicleCertSubmit: undefined;
   ContractSigning: undefined;
+  JobDetail: { jobId: string };
+  QRCheckin: undefined;
 };
 
 const Stack = createNativeStackNavigator<HomeStackParamList>();
@@ -167,6 +171,16 @@ export default function HomeStackNavigator() {
         name="ContractSigning"
         component={ContractSigningScreen}
         options={{ headerTitle: "화물위탁운송계약서" }}
+      />
+      <Stack.Screen
+        name="JobDetail"
+        component={JobDetailScreen}
+        options={{ headerTitle: "오더 상세" }}
+      />
+      <Stack.Screen
+        name="QRCheckin"
+        component={QRCheckinScreen}
+        options={{ headerTitle: "출근 체크" }}
       />
     </Stack.Navigator>
   );

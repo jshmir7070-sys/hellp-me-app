@@ -8,9 +8,11 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useQuery } from "@tanstack/react-query";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
+import { formatOrderNumber } from "@/lib/format-order-number";
 
 type ProfileStackParamList = {
   IncidentList: undefined;
@@ -52,6 +54,7 @@ export default function IncidentListScreen({ navigation }: IncidentListScreenPro
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
 
   const { data: incidents = [], isLoading, refetch, isRefetching } = useQuery<Incident[]>({
     queryKey: ["/api/incidents"],
@@ -91,7 +94,7 @@ export default function IncidentListScreen({ navigation }: IncidentListScreenPro
               <View style={styles.infoRow}>
                 <Icon name="document-outline" size={14} color={theme.tabIconDefault} />
                 <ThemedText style={[styles.infoText, { color: theme.tabIconDefault }]}>
-                  주문번호: #{item.orderId}
+                  주문번호: {formatOrderNumber(item.orderNumber, item.orderId)}
                 </ThemedText>
               </View>
             ) : null}
@@ -163,7 +166,15 @@ export default function IncidentListScreen({ navigation }: IncidentListScreenPro
         keyExtractor={(item) => item.id.toString()}
         contentContainerStyle={[
           styles.listContent,
-          { paddingTop: headerHeight + Spacing.md, paddingBottom: tabBarHeight + Spacing.xl },
+          {
+            paddingTop: headerHeight + Spacing.md,
+            paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
+            ...(showDesktopLayout && {
+              maxWidth: containerMaxWidth,
+              alignSelf: 'center' as const,
+              width: '100%' as any,
+            }),
+          },
         ]}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         ListEmptyComponent={renderEmpty}

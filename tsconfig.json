@@ -10,5 +10,5 @@
     "types": ["node"]
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules", "build", "dist", "**/*.test.ts", "admin", "server"]
+  "exclude": ["node_modules", "build", "dist", "**/*.test.ts", "admin", "server", "partner", "client/constants/contracts_usage_guide.tsx"]
 }

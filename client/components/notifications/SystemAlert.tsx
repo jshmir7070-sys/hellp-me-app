@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View, Modal, Pressable, Dimensions } from 'react-native';
+import { StyleSheet, View, Modal, Pressable } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -61,10 +61,6 @@ const ALERT_TYPE_CONFIG: Record<SystemAlertType, {
     iconColor: '#FFFFFF',
   },
 };
-
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const ALERT_MAX_WIDTH = 400;
-const ALERT_WIDTH = Math.min(SCREEN_WIDTH - 48, ALERT_MAX_WIDTH);
 
 const springConfig: WithSpringConfig = {
   damping: 15,
@@ -253,7 +249,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   alertContainer: {
-    width: ALERT_WIDTH,
+    width: '88%',
+    maxWidth: 400,
+    alignSelf: 'center',
     borderRadius: 20,
     overflow: 'hidden',
     shadowColor: '#000',

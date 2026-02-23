@@ -168,10 +168,22 @@ export async function registerUserRoutes(ctx: RouteContext): Promise<void> {
     }
   });
 
-  // Update user (admin)
+  // Update user (admin) - whitelist allowed fields to prevent mass-assignment
   app.patch("/api/admin/users/:userId", adminAuth, requirePermission("staff.edit"), async (req, res) => {
     try {
-      const updated = await storage.updateUser(req.params.userId, req.body);
+      const allowedFields = [
+        "name", "email", "phoneNumber", "address", "birthDate",
+        "vehicleType", "vehicleNumber", "vehicleTonnage",
+        "preferredRegion", "preferredCargoType", "isAvailable",
+        "adminMemo", "internalNote", "memo",
+      ];
+      const sanitized: Record<string, any> = {};
+      for (const key of allowedFields) {
+        if (key in req.body) {
+          sanitized[key] = req.body[key];
+        }
+      }
+      const updated = await storage.updateUser(req.params.userId, sanitized);
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ message: "Internal server error" });

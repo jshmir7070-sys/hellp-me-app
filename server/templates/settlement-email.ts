@@ -24,6 +24,9 @@ interface SettlementEmailData {
     totalVatAmount: number;
     grandTotalAmount: number;
     totalCommission: number;
+    totalInsuranceDeduction: number; // 산재보험료 (헬퍼 50%)
+    insuranceRate: number; // 산재보험료율 (%)
+    totalOtherDeductions: number; // 기타 차감 (화물사고 등)
     totalNetAmount: number;
     commissionRate: number;
   };
@@ -116,6 +119,17 @@ export function generateSettlementEmailHtml(data: SettlementEmailData): string {
                     <p style="margin: 0; color: #dc2626; font-size: 24px; font-weight: 700;">${formatCurrency(summary.totalCommission)}</p>
                   </td>
                 </tr>
+                <tr>
+                  <td style="width: 33.33%; padding: 20px; background-color: #fff7ed; border-radius: 8px; text-align: center;">
+                    <p style="margin: 0 0 8px; color: #9a3412; font-size: 14px; font-weight: 500;">산재보험료 (${summary.insuranceRate}% × 50%)</p>
+                    <p style="margin: 0; color: #ea580c; font-size: 24px; font-weight: 700;">${formatCurrency(summary.totalInsuranceDeduction)}</p>
+                  </td>
+                  <td style="width: 33.33%; padding: 20px; background-color: #fef2f2; border-radius: 8px; text-align: center;">
+                    <p style="margin: 0 0 8px; color: #991b1b; font-size: 14px; font-weight: 500;">기타 차감 (사고 등)</p>
+                    <p style="margin: 0; color: #dc2626; font-size: 24px; font-weight: 700;">${formatCurrency(summary.totalOtherDeductions)}</p>
+                  </td>
+                  <td style="width: 33.33%; padding: 20px; border-radius: 8px;"></td>
+                </tr>
               </table>
             </td>
           </tr>
@@ -199,7 +213,8 @@ export function generateSettlementEmailHtml(data: SettlementEmailData): string {
                   <li>부가세 = 공급가액 × 10%</li>
                   <li>합계금 = 공급가액 + 부가세</li>
                   <li>수수료 = 합계금 × ${summary.commissionRate}%</li>
-                  <li>수령액 = 합계금 - 수수료</li>
+                  <li>산재보험료 = 합계금 × ${summary.insuranceRate}% × 50% (본사 50% + 헬퍼 50%)</li>
+                  <li>수령액 = 합계금 - 수수료 - 산재보험료 - 기타차감</li>
                 </ul>
               </div>
             </td>

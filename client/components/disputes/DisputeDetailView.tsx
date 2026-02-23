@@ -4,6 +4,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { Icon } from "@/components/Icon";
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
+import { useAuthImage } from "@/hooks/useAuthImage";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
@@ -51,6 +53,8 @@ export function DisputeDetailView({
     const insets = useSafeAreaInsets();
     const headerHeight = useHeaderHeight();
     const { theme } = useTheme();
+    const { showDesktopLayout, containerMaxWidth } = useResponsive();
+    const { getImageUrl } = useAuthImage();
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
     const statusConfig = statusLabels[dispute.status] || statusLabels.pending;
@@ -69,6 +73,11 @@ export function DisputeDetailView({
                     paddingTop: headerHeight + Spacing.md,
                     paddingBottom: insets.bottom + Spacing.xl,
                     paddingHorizontal: Spacing.md,
+                    ...(showDesktopLayout && {
+                        maxWidth: containerMaxWidth,
+                        alignSelf: 'center' as const,
+                        width: '100%' as any,
+                    }),
                 }}
             >
                 <Card style={styles.card}>
@@ -136,8 +145,8 @@ export function DisputeDetailView({
                             <ThemedText style={[styles.photoLabel, { color: theme.tabIconDefault }]}>증빙 사진</ThemedText>
                             <View style={styles.photoGrid}>
                                 {dispute.evidencePhotoUrls.map((url, index) => (
-                                    <Pressable key={index} onPress={() => setSelectedImage(url)}>
-                                        <Image source={{ uri: url }} style={styles.photoThumbnail} />
+                                    <Pressable key={index} onPress={() => setSelectedImage(getImageUrl(url))}>
+                                        <Image source={{ uri: getImageUrl(url) }} style={styles.photoThumbnail} />
                                     </Pressable>
                                 ))}
                             </View>

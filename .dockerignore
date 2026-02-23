@@ -1,0 +1,14 @@
+node_modules
+.git
+.github
+*.md
+tests
+**/*.test.ts
+coverage
+.env
+.env.*
+server.log
+migrations
+*.log
+.DS_Store
+.vscode

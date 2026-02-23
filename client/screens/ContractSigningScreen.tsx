@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Alert, Platform, Linking } from 'react-native';
+import { View, StyleSheet, Pressable, ActivityIndicator, ScrollView, Alert, Platform, Linking, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
-import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useSafeTabBarHeight } from "@/hooks/useSafeTabBarHeight";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getToken } from '@/utils/secure-token-storage';
@@ -12,101 +12,65 @@ import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
 import { SignaturePad } from '@/components/SignaturePad';
 import { useTheme } from '@/hooks/useTheme';
+import { useResponsive } from '@/hooks/useResponsive';
 import { useAuth } from '@/contexts/AuthContext';
 import { Spacing, BorderRadius, BrandColors, Colors } from '@/constants/theme';
 import { getApiUrl } from '@/lib/query-client';
+import {
+  HELPER_CONTRACT_TERMS,
+  HELPER_CONTRACT_CHECKBOX_KEYS,
+  createHelperContractState,
+  createHelperContractReadState,
+  isAllRequiredAgreed,
+  getHelperContractTerms,
+  type ContractCheckboxState,
+  type ContractReadState,
+  type ContractSettings,
+} from '@/constants/contracts';
 
 type ContractSigningScreenProps = {
   navigation: NativeStackNavigationProp<any>;
 };
 
-const CONTRACT_CONTENT = `운송주선 플랫폼 근무(업무수행) 기본계약 및 동의서
-
-본 계약은 헬프미(이하 "회사/플랫폼")가 운영하는 운송주선 서비스에 기사(헬퍼)가 가입하여 업무를 수행함에 있어 기본 조건(업무, 마감자료, 정산, 사고/차감, 직거래 금지 등)에 동의하기 위한 "1회 체결" 전자계약서입니다.
-본 계약은 체결일 이후 기사에게 배정/수행되는 모든 오더에 공통 적용됩니다.
-
-
-제1조 (당사자)
-
-[플랫폼(회사)]
-상호: 헬프미
-사업자등록번호: (자동 기입)
-
-[기사(헬퍼)]
-성명: (자동 기입)
-휴대폰: (자동 기입)
-차량정보: (자동 기입)
-
-
-제2조 (계약의 성격)
-
-플랫폼은 요청자(화주)의 운송 의뢰를 접수하여 기사를 배정하는 "운송주선 사업자"입니다.
-기사는 플랫폼이 주선한 오더를 수행하는 업무수행자이며, 플랫폼과 고용관계가 아닙니다.
-
-
-제3조 (업무 수행)
-
-기사는 매칭된 오더에 대해 배송 수행, 반품 처리(해당 시), 업무 요청사항 준수, 안전 운행을 성실히 이행합니다.
-
-
-제4조 (지원/매칭 및 연락처 제공)
-
-기사 지원 및 매칭 규칙은 플랫폼 정책에 따릅니다.
-매칭 완료 시 업무 수행 목적의 요청자 연락처가 제공될 수 있습니다.
-
-
-제5조 (마감자료 제출)
-
-기사 마감자료 제출은 필수이며, 허위 제출 시 제재 대상입니다.
-마감자료는 다음을 포함합니다.
-- 최종 수량(배송/반품/기타)
-- 기타 비용 및 사유(해당 시)
-- 증빙 이미지(배송사 이력 캡처 등)
-
-
-제6조 (정산)
-
-기사 정산은 플랫폼의 정책에 따라 산정·지급됩니다.
-(예시) 기사 정산금 = 최종확정금액 – 플랫폼 수수료 – 차감액(사고/패널티 등)
-정산 주기/지급 방식은 플랫폼 정산정책에 따릅니다.
-
-
-제7조 (사고/차감)
-
-분실/파손/오배송 등 사고 발생 시 플랫폼은 증빙 기준으로 차감·정산 보류·제재를 진행할 수 있습니다.
-
-
-제8조 (직거래 금지 및 개인정보)
-
-기사는 플랫폼 외 직거래를 유도/수행할 수 없습니다.
-기사는 개인정보(연락처 포함)를 업무 목적 외 사용하거나 제3자에게 제공할 수 없습니다.
-
-
-제9조 (계약기간/해지)
-
-본 계약은 가입/동의 시점부터 효력이 발생하며, 기사가 탈퇴하더라도 미정산/분쟁 건이 있을 경우 처리 완료 후 종료될 수 있습니다.
-
-
-제10조 (준거법/관할)
-
-본 계약은 대한민국 법령을 따르며, 분쟁 시 플랫폼 소재지 관할 법원을 전속 관할로 합니다.
-`;
-
 export default function ContractSigningScreen({ navigation }: ContractSigningScreenProps) {
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
-  const tabBarHeight = useBottomTabBarHeight();
+  const tabBarHeight = useSafeTabBarHeight();
   const { theme, isDark } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const { refreshUser } = useAuth();
 
+  // 동적 설정값 기반 계약서 생성
+  const [contractSettings, setContractSettings] = useState<Partial<ContractSettings>>({});
+  const helperTerms = getHelperContractTerms(contractSettings);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`${getApiUrl()}/api/settings/contract-values`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setContractSettings(data);
+        }
+      } catch {}
+    };
+    fetchSettings();
+  }, []);
+
+  // 계약 개요 읽음 여부
   const [hasReadContract, setHasReadContract] = useState(false);
-  const [agreeContract, setAgreeContract] = useState(false);
-  const [agreeClosing, setAgreeClosing] = useState(false);
-  const [agreeAccident, setAgreeAccident] = useState(false);
-  const [agreeNoDirect, setAgreeNoDirect] = useState(false);
-  const [agreePrivacy, setAgreePrivacy] = useState(false);
-  const [agreeMarketing, setAgreeMarketing] = useState(false);
-  const [agreePush, setAgreePush] = useState(false);
+
+  // contracts.ts 기반 동의 상태
+  const [agreements, setAgreements] = useState<ContractCheckboxState>(() => createHelperContractState());
+  const [readState, setReadState] = useState<ContractReadState>(() => createHelperContractReadState());
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  const [termModalVisible, setTermModalVisible] = useState(false);
+  const [termModalContent, setTermModalContent] = useState<{ title: string; content: string } | null>(null);
+
+  // 본인인증 / 서명
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [signatureComplete, setSignatureComplete] = useState(false);
   const [signatureData, setSignatureData] = useState<string | null>(null);
@@ -114,7 +78,26 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
   const [isVerifying, setIsVerifying] = useState(false);
 
   const scrollViewRef = useRef<ScrollView>(null);
+  const termItemRefs = useRef<Record<string, number>>({});
   const [verificationId, setVerificationId] = useState<string | null>(null);
+
+  // 필수 전체 동의 여부
+  const allRequiredAgreed = isAllRequiredAgreed(agreements, HELPER_CONTRACT_CHECKBOX_KEYS.required);
+
+  // 전체 동의 토글
+  const toggleAll = () => {
+    const newVal = !allRequiredAgreed;
+    const updated = { ...agreements };
+    if (newVal) {
+      const readUpdated = { ...readState };
+      [...HELPER_CONTRACT_CHECKBOX_KEYS.required, ...HELPER_CONTRACT_CHECKBOX_KEYS.optional]
+        .forEach(k => { readUpdated[k] = true; });
+      setReadState(readUpdated);
+    }
+    [...HELPER_CONTRACT_CHECKBOX_KEYS.required, ...HELPER_CONTRACT_CHECKBOX_KEYS.optional]
+      .forEach(k => { updated[k] = newVal; });
+    setAgreements(updated);
+  };
 
   // 본인인증 딥링크 콜백 처리
   useEffect(() => {
@@ -126,12 +109,10 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
         const parsed = ExpoLinking.parse(url);
         const { queryParams, path } = parsed;
 
-        // hellpme://verify/return?identityVerificationId=xxx&status=success
         if (path?.includes('verify') && queryParams?.status === 'success' && queryParams?.identityVerificationId) {
           setIsVerifying(true);
           const vid = queryParams.identityVerificationId as string;
 
-          // 서버에서 본인인증 검증
           const response = await fetch(
             new URL('/api/auth/verify-identity', getApiUrl()).toString(),
             {
@@ -187,7 +168,6 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
   const handlePhoneVerification = async () => {
     setIsVerifying(true);
     try {
-      // 1. 서버에서 본인인증 ID 생성
       const response = await fetch(
         new URL('/api/auth/create-identity-verification', getApiUrl()).toString(),
         {
@@ -203,9 +183,8 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
 
       const data = await response.json();
 
-      // 테스트 모드: API 시크릿 미설정 시 바로 성공 처리
+      // 테스트 모드
       if (data.testMode) {
-        // 테스트 모드에서 서버 검증 호출
         const verifyResponse = await fetch(
           new URL('/api/auth/verify-identity', getApiUrl()).toString(),
           {
@@ -230,7 +209,7 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
         return;
       }
 
-      // 2. 본인인증 웹 페이지 열기 (PortOne SDK 연동)
+      // PortOne SDK 연동
       const returnUrl = ExpoLinking.createURL('verify/return');
       const baseUrl = getApiUrl();
       const verificationUrl = `${baseUrl}/identity-verification?identityVerificationId=${encodeURIComponent(data.identityVerificationId)}&returnUrl=${encodeURIComponent(returnUrl)}`;
@@ -252,18 +231,11 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
     }
   };
 
-  // handleSignature removed as it is replaced by SignaturePad state management
-
-
-  const allRequiredAgreed = agreeContract && agreeClosing && agreeAccident && agreeNoDirect && agreePrivacy;
-
   const canSubmit = () => {
     return hasReadContract && allRequiredAgreed && phoneVerified && signatureComplete;
   };
 
-  const handleSubmit = async () => {
-    if (!canSubmit()) return;
-
+  const executeSubmit = async () => {
     setIsSubmitting(true);
     try {
       const token = await getToken();
@@ -281,16 +253,8 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
             phoneVerified: true,
             identityVerificationId: verificationId,
             signedAt: new Date().toISOString(),
-            signatureData: signatureData, // Add signature data
-            agreedTerms: {
-              contract: agreeContract,
-              closing: agreeClosing,
-              accident: agreeAccident,
-              noDirect: agreeNoDirect,
-              privacy: agreePrivacy,
-              marketing: agreeMarketing,
-              push: agreePush,
-            },
+            signatureData: signatureData,
+            agreedTerms: agreements,
           }),
         }
       );
@@ -334,75 +298,186 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
     }
   };
 
-  const allAgreed = allRequiredAgreed;
+  const handleSubmit = () => {
+    if (!canSubmit()) return;
+
+    if (Platform.OS === 'web') {
+      if (confirm('계약서를 제출하시겠습니까? 제출 후에는 수정이 불가합니다.')) {
+        executeSubmit();
+      }
+    } else {
+      Alert.alert(
+        '계약 체결 확인',
+        '계약서를 제출하시겠습니까?\n제출 후에는 수정이 불가합니다.',
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '제출하기', onPress: () => executeSubmit() },
+        ]
+      );
+    }
+  };
+
+  // 개별 항목 렌더링
+  const renderTermItem = (key: string, term: { title: string; content: string; required?: boolean }, brandColor: string) => {
+    const isRead = readState[key];
+    const isAgreed = agreements[key];
+    const isExpanded = expandedItem === key;
+
+    return (
+      <View
+        key={key}
+        onLayout={(e) => {
+          termItemRefs.current[key] = e.nativeEvent.layout.y;
+        }}
+        style={[
+          styles.termItemContainer,
+          {
+            borderColor: isAgreed ? brandColor : (isDark ? '#4A5568' : '#E0E0E0'),
+            backgroundColor: isAgreed ? (isDark ? '#1a2e1a' : '#F0FFF4') : 'transparent',
+          }
+        ]}
+      >
+        {/* 제목 행 — 탭하면 전체화면 모달로 내용 표시 */}
+        <Pressable
+          style={styles.termHeader}
+          onPress={() => {
+            setTermModalContent({ title: term.title, content: term.content });
+            setTermModalVisible(true);
+            if (!isRead) {
+              setReadState(prev => ({ ...prev, [key]: true }));
+            }
+          }}
+        >
+          <Icon
+            name="document-text-outline"
+            size={18}
+            color={brandColor}
+          />
+          <ThemedText style={[styles.termTitle, { color: theme.text, flex: 1 }]}>
+            {term.title}
+          </ThemedText>
+          {isRead && !isAgreed && (
+            <View style={[styles.readBadgeSmall, { backgroundColor: isDark ? '#2d3748' : '#FEF3C7' }]}>
+              <ThemedText style={{ fontSize: 10, color: '#D97706' }}>열람완료</ThemedText>
+            </View>
+          )}
+          {isAgreed && (
+            <Icon name="checkmark-circle" size={20} color={BrandColors.success} />
+          )}
+          <Icon name="chevron-forward" size={16} color={isDark ? '#888' : '#999'} />
+        </Pressable>
+
+        {/* 동의 체크박스 */}
+        <Pressable
+          style={[
+            styles.termAgreeRow,
+            { borderTopColor: isDark ? '#4A5568' : '#E0E0E0' },
+            !isRead && styles.disabledRow,
+          ]}
+          disabled={!isRead}
+          onPress={() => setAgreements(prev => ({ ...prev, [key]: !prev[key] }))}
+        >
+          <View style={[
+            styles.checkbox,
+            {
+              backgroundColor: isAgreed ? brandColor : 'transparent',
+              borderColor: isAgreed ? brandColor : (isRead ? (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0') : '#ccc'),
+            },
+            !isRead && { opacity: 0.4 },
+          ]}>
+            {isAgreed ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+          </View>
+          <ThemedText style={[
+            styles.termAgreeText,
+            { color: isRead ? theme.text : (isDark ? '#666' : '#aaa') },
+          ]}>
+            {isRead ? '동의합니다' : '내용을 열람해주세요'}
+          </ThemedText>
+        </Pressable>
+      </View>
+    );
+  };
 
   return (
+    <>
     <ScrollView
       ref={scrollViewRef}
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.md,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
       showsVerticalScrollIndicator={true}
     >
       <View style={styles.headerSection}>
-        <ThemedText style={[styles.mainTitle, { color: theme.text }]}>운송주선 플랫폼 기본계약</ThemedText>
+        <ThemedText style={[styles.mainTitle, { color: theme.text }]}>
+          {helperTerms.contractOverview.title}
+        </ThemedText>
         <ThemedText style={[styles.mainSubtitle, { color: theme.tabIconDefault }]}>
           본 계약은 가입 시 1회 체결되며, 모든 오더에 공통 적용됩니다
         </ThemedText>
       </View>
 
+      {/* 1. 계약서 개요 */}
       <View style={styles.section}>
-        <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>1. 계약서 내용</ThemedText>
-        <Card style={styles.contractCard}>
-          <ScrollView
-            style={styles.contractScroll}
-            onScroll={handleScrollEnd}
-            scrollEventThrottle={400}
-            nestedScrollEnabled={true}
-          >
-            <ThemedText style={[styles.contractText, { color: theme.text }]}>
-              {CONTRACT_CONTENT}
+        <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>1. 계약서 개요</ThemedText>
+        <Pressable
+          style={styles.contractCard}
+          onPress={() => {
+            setTermModalContent({
+              title: helperTerms.contractOverview.title,
+              content: helperTerms.contractOverview.content,
+            });
+            setTermModalVisible(true);
+            setHasReadContract(true);
+          }}
+        >
+          <View style={styles.contractPreview}>
+            <ThemedText style={[styles.contractText, { color: theme.text }]} numberOfLines={4}>
+              {helperTerms.contractOverview.content}
             </ThemedText>
-          </ScrollView>
-          {hasReadContract ? (
-            <View style={[styles.readBadge, { backgroundColor: BrandColors.successLight }]}>
-              <Icon name="checkmark-outline" size={14} color={BrandColors.success} />
-              <ThemedText style={{ color: BrandColors.success, fontSize: 12, marginLeft: 4 }}>읽음 완료</ThemedText>
-            </View>
-          ) : (
-            <View style={[styles.readBadge, { backgroundColor: BrandColors.warningLight }]}>
-              <Icon name="alert-circle-outline" size={14} color={BrandColors.warning} />
-              <ThemedText style={{ color: BrandColors.warning, fontSize: 12, marginLeft: 4 }}>끝까지 스크롤해주세요</ThemedText>
-            </View>
-          )}
-        </Card>
+            <View style={styles.contractFade} />
+          </View>
+          <View style={styles.contractOpenRow}>
+            {hasReadContract ? (
+              <View style={[styles.readBadge, { backgroundColor: BrandColors.successLight }]}>
+                <Icon name="checkmark-outline" size={14} color={BrandColors.success} />
+                <ThemedText style={{ color: BrandColors.success, fontSize: 12, marginLeft: 4 }}>읽음 완료</ThemedText>
+              </View>
+            ) : (
+              <View style={[styles.readBadge, { backgroundColor: BrandColors.warningLight }]}>
+                <Icon name="alert-circle-outline" size={14} color={BrandColors.warning} />
+                <ThemedText style={{ color: BrandColors.warning, fontSize: 12, marginLeft: 4 }}>터치하여 전체 내용 보기</ThemedText>
+              </View>
+            )}
+            <Icon name="open-outline" size={18} color={BrandColors.helper} />
+          </View>
+        </Pressable>
       </View>
 
+      {/* 2. 약관 동의 (필수) */}
       <View style={styles.section}>
         <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>2. 약관 동의</ThemedText>
 
+        {/* 전체 동의 */}
         <Pressable
           style={styles.checkboxRow}
-          onPress={() => {
-            const newValue = !allAgreed;
-            setAgreeContract(newValue);
-            setAgreeClosing(newValue);
-            setAgreeAccident(newValue);
-            setAgreeNoDirect(newValue);
-            setAgreePrivacy(newValue);
-          }}
+          onPress={toggleAll}
         >
           <View style={[
             styles.checkbox,
             {
-              backgroundColor: allAgreed ? BrandColors.helper : 'transparent',
-              borderColor: allAgreed ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
+              backgroundColor: allRequiredAgreed ? BrandColors.helper : 'transparent',
+              borderColor: allRequiredAgreed ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
             }
           ]}>
-            {allAgreed ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
+            {allRequiredAgreed ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
           </View>
           <ThemedText style={[styles.checkboxLabel, { color: theme.text, fontWeight: '600' }]}>
             필수 항목 전체 동의
@@ -411,143 +486,26 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
 
         <View style={[styles.divider, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0' }]} />
 
-        <Pressable style={styles.checkboxRow} onPress={() => setAgreeContract(!agreeContract)}>
-          <View style={[
-            styles.checkbox,
-            {
-              backgroundColor: agreeContract ? BrandColors.helper : 'transparent',
-              borderColor: agreeContract ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-            }
-          ]}>
-            {agreeContract ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-          </View>
-          <View style={styles.checkboxContent}>
-            <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-              (필수) 본인은 본 계약서 전문을 확인하였고, 핵심사항에 동의합니다
-            </ThemedText>
-            <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
-              플랫폼은 운송주선 사업자이며, 기사는 독립 업무수행자입니다
-            </ThemedText>
-          </View>
-        </Pressable>
+        {/* 필수 항목 (15개) */}
+        {HELPER_CONTRACT_CHECKBOX_KEYS.required.map((key) => {
+          const term = helperTerms[key];
+          return renderTermItem(key, term, BrandColors.helper);
+        })}
 
-        <Pressable style={styles.checkboxRow} onPress={() => setAgreeClosing(!agreeClosing)}>
-          <View style={[
-            styles.checkbox,
-            {
-              backgroundColor: agreeClosing ? BrandColors.helper : 'transparent',
-              borderColor: agreeClosing ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-            }
-          ]}>
-            {agreeClosing ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-          </View>
-          <View style={styles.checkboxContent}>
-            <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-              (필수) 마감자료 제출이 잔금 산정 및 정산의 기준임에 동의합니다
-            </ThemedText>
-            <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
-              배송/반품/기타 수량 입력, 증빙 이미지 업로드 필수
-            </ThemedText>
-          </View>
-        </Pressable>
-
-        <Pressable style={styles.checkboxRow} onPress={() => setAgreeAccident(!agreeAccident)}>
-          <View style={[
-            styles.checkbox,
-            {
-              backgroundColor: agreeAccident ? BrandColors.helper : 'transparent',
-              borderColor: agreeAccident ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-            }
-          ]}>
-            {agreeAccident ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-          </View>
-          <View style={styles.checkboxContent}>
-            <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-              (필수) 사고 발생 시 정산 차감/보류가 발생할 수 있음에 동의합니다
-            </ThemedText>
-            <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
-              분실/파손/오배송 등 사고 시 플랫폼 정책에 따름
-            </ThemedText>
-          </View>
-        </Pressable>
-
-        <Pressable style={styles.checkboxRow} onPress={() => setAgreeNoDirect(!agreeNoDirect)}>
-          <View style={[
-            styles.checkbox,
-            {
-              backgroundColor: agreeNoDirect ? BrandColors.helper : 'transparent',
-              borderColor: agreeNoDirect ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-            }
-          ]}>
-            {agreeNoDirect ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-          </View>
-          <View style={styles.checkboxContent}>
-            <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-              (필수) 직거래 금지 및 위반 시 제재에 동의합니다
-            </ThemedText>
-            <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
-              플랫폼 외 직거래 유도/수행 시 계정정지, 정산보류, 손해배상 등
-            </ThemedText>
-          </View>
-        </Pressable>
-
-        <Pressable style={styles.checkboxRow} onPress={() => setAgreePrivacy(!agreePrivacy)}>
-          <View style={[
-            styles.checkbox,
-            {
-              backgroundColor: agreePrivacy ? BrandColors.helper : 'transparent',
-              borderColor: agreePrivacy ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-            }
-          ]}>
-            {agreePrivacy ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-          </View>
-          <View style={styles.checkboxContent}>
-            <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-              (필수) 개인정보를 업무 목적 외 사용하지 않음에 동의합니다
-            </ThemedText>
-            <ThemedText style={[styles.checkboxHint, { color: theme.tabIconDefault }]}>
-              요청자 연락처/개인정보 보호 의무, 위반 시 법적 책임
-            </ThemedText>
-          </View>
-        </Pressable>
-
+        {/* 선택 항목 */}
         <View style={[styles.divider, { backgroundColor: isDark ? Colors.dark.backgroundSecondary : '#E0E0E0', marginTop: Spacing.md }]} />
 
         <ThemedText style={[styles.optionalTitle, { color: theme.tabIconDefault }]}>
           선택 항목
         </ThemedText>
 
-        <Pressable style={styles.checkboxRow} onPress={() => setAgreeMarketing(!agreeMarketing)}>
-          <View style={[
-            styles.checkbox,
-            {
-              backgroundColor: agreeMarketing ? BrandColors.helper : 'transparent',
-              borderColor: agreeMarketing ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-            }
-          ]}>
-            {agreeMarketing ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-          </View>
-          <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-            (선택) 마케팅/혜택 안내 수신 동의
-          </ThemedText>
-        </Pressable>
-
-        <Pressable style={styles.checkboxRow} onPress={() => setAgreePush(!agreePush)}>
-          <View style={[
-            styles.checkbox,
-            {
-              backgroundColor: agreePush ? BrandColors.helper : 'transparent',
-              borderColor: agreePush ? BrandColors.helper : (isDark ? Colors.dark.backgroundSecondary : '#E0E0E0'),
-            }
-          ]}>
-            {agreePush ? <Icon name="checkmark-outline" size={14} color="#FFFFFF" /> : null}
-          </View>
-          <ThemedText style={[styles.checkboxLabel, { color: theme.text }]}>
-            (선택) 푸시 알림 수신 동의
-          </ThemedText>
-        </Pressable>
+        {HELPER_CONTRACT_CHECKBOX_KEYS.optional.map((key) => {
+          const term = helperTerms[key];
+          return renderTermItem(key, term, BrandColors.helper);
+        })}
       </View>
 
+      {/* 3. 본인인증 */}
       <View style={styles.section}>
         <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>3. 본인인증</ThemedText>
 
@@ -584,6 +542,7 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
         </Card>
       </View>
 
+      {/* 4. 전자서명 */}
       <View style={styles.section}>
         <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>4. 전자서명</ThemedText>
 
@@ -603,7 +562,7 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
               </ThemedText>
             </View>
           )}
-          {!allAgreed || !phoneVerified ? (
+          {!allRequiredAgreed || !phoneVerified ? (
             <ThemedText style={[styles.disabledNote, { color: theme.tabIconDefault }]}>
               약관 동의 및 본인인증 완료 후 서명 가능합니다
             </ThemedText>
@@ -633,6 +592,45 @@ export default function ContractSigningScreen({ navigation }: ContractSigningScr
         )}
       </Pressable>
     </ScrollView>
+
+    {/* 약관 본문 전체화면 모달 */}
+    <Modal
+      visible={termModalVisible}
+      animationType="slide"
+      onRequestClose={() => setTermModalVisible(false)}
+    >
+      <View style={[styles.termModalContainer, { backgroundColor: theme.backgroundRoot }]}>
+        <View style={[styles.termModalHeader, { backgroundColor: theme.backgroundSecondary, borderBottomColor: isDark ? '#4A5568' : '#E0E0E0' }]}>
+          <ThemedText style={[styles.termModalTitle, { color: theme.text }]} numberOfLines={2}>
+            {termModalContent?.title}
+          </ThemedText>
+          <Pressable
+            style={styles.termModalClose}
+            onPress={() => setTermModalVisible(false)}
+          >
+            <Icon name="close" size={24} color={theme.text} />
+          </Pressable>
+        </View>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.termModalBody}
+          showsVerticalScrollIndicator={true}
+        >
+          <ThemedText style={[styles.termModalText, { color: theme.text }]}>
+            {termModalContent?.content}
+          </ThemedText>
+        </ScrollView>
+        <View style={[styles.termModalFooter, { backgroundColor: theme.backgroundSecondary, borderTopColor: isDark ? '#4A5568' : '#E0E0E0' }]}>
+          <Pressable
+            style={[styles.termModalConfirmBtn, { backgroundColor: BrandColors.helper }]}
+            onPress={() => setTermModalVisible(false)}
+          >
+            <ThemedText style={styles.termModalConfirmText}>확인</ThemedText>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -641,7 +639,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xl,
   },
   mainTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     marginBottom: Spacing.xs,
   },
@@ -661,8 +659,24 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     position: 'relative',
   },
-  contractScroll: {
-    maxHeight: 300,
+  contractPreview: {
+    maxHeight: 100,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  contractFade: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+  },
+  contractOpenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: Spacing.sm,
   },
   contractText: {
     fontSize: 13,
@@ -676,6 +690,11 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.full,
     marginTop: Spacing.sm,
     alignSelf: 'flex-start',
+  },
+  readBadgeSmall: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.full,
   },
   checkboxRow: {
     flexDirection: 'row',
@@ -696,13 +715,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
   },
-  checkboxContent: {
-    flex: 1,
-  },
-  checkboxHint: {
-    fontSize: 12,
-    marginTop: 2,
-  },
   optionalTitle: {
     fontSize: 13,
     fontWeight: '600',
@@ -713,6 +725,52 @@ const styles = StyleSheet.create({
     height: 1,
     marginVertical: Spacing.sm,
   },
+  // 계약 항목 카드
+  termItemContainer: {
+    marginBottom: Spacing.sm,
+    borderWidth: 1,
+    borderRadius: BorderRadius.sm,
+    overflow: 'hidden',
+  },
+  termHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    gap: Spacing.sm,
+  },
+  termTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  termContentContainer: {
+    borderTopWidth: 1,
+  },
+  termContent: {
+    maxHeight: 400,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+  },
+  termContentText: {
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  termAgreeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    gap: Spacing.sm,
+    borderTopWidth: 1,
+  },
+  termAgreeText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  disabledRow: {
+    opacity: 0.5,
+  },
+  // 본인인증 / 서명
   verificationCard: {
     padding: Spacing.md,
   },
@@ -749,6 +807,50 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   submitButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  termModalContainer: {
+    flex: 1,
+  },
+  termModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 50,
+    paddingBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    borderBottomWidth: 1,
+  },
+  termModalTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    marginRight: Spacing.md,
+  },
+  termModalClose: {
+    padding: Spacing.xs,
+  },
+  termModalBody: {
+    padding: Spacing.lg,
+    paddingBottom: Spacing.xl * 2,
+  },
+  termModalText: {
+    fontSize: 14,
+    lineHeight: 22,
+  },
+  termModalFooter: {
+    padding: Spacing.lg,
+    borderTopWidth: 1,
+  },
+  termModalConfirmBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  termModalConfirmText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',

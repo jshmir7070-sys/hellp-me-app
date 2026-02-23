@@ -5,11 +5,13 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import Constants from "expo-constants";
 
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useAuth } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
@@ -23,6 +25,7 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme, isDark, themeMode, setThemeMode } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const { user } = useAuth();
 
   const isHelper = user?.role === 'helper';
@@ -81,8 +84,13 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
       scrollIndicatorInsets={{ bottom: insets.bottom }}
     >
@@ -232,7 +240,7 @@ export default function SettingsScreen({ navigation }: SettingsScreenProps) {
       ) : null}
 
       <ThemedText style={[styles.versionText, { color: theme.tabIconDefault }]}>
-        버전 1.0.0
+        버전 {Constants.expoConfig?.version || '1.0.0'}
       </ThemedText>
     </KeyboardAwareScrollViewCompat>
   );

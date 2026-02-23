@@ -43,6 +43,7 @@ import AdminIncidentListScreen from "@/screens/AdminIncidentListScreen";
 import AdminDeductionListScreen from "@/screens/AdminDeductionListScreen";
 import AdminRefundListScreen from "@/screens/AdminRefundListScreen";
 import PartnerRegistrationScreen from "@/screens/PartnerRegistrationScreen";
+import RequesterPaymentScreen from "@/screens/RequesterPaymentScreen";
 import { HeaderTitle } from "@/components/HeaderTitle";
 import { useScreenOptions } from "@/hooks/useScreenOptions";
 
@@ -90,6 +91,7 @@ export type ProfileStackParamList = {
   VehicleCertSubmit: undefined;
   ContractSigning: undefined;
   PartnerRegistration: undefined;
+  RequesterPayment: undefined;
 };
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
@@ -385,6 +387,11 @@ export default function ProfileStackNavigator() {
         name="PartnerRegistration"
         component={PartnerRegistrationScreen}
         options={{ headerTitle: '협력업체 등록' }}
+      />
+      <Stack.Screen
+        name="RequesterPayment"
+        component={RequesterPaymentScreen}
+        options={{ headerTitle: '결제 관리' }}
       />
     </Stack.Navigator>
   );

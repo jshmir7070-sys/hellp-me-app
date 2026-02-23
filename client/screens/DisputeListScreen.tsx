@@ -11,6 +11,7 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
 import { JobsStackParamList } from "@/navigation/types";
+import { useResponsive } from "@/hooks/useResponsive";
 
 type DisputeListScreenProps = NativeStackScreenProps<JobsStackParamList, 'DisputeList'>;
 
@@ -47,6 +48,7 @@ export default function DisputeListScreen({ navigation }: DisputeListScreenProps
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
 
   const { data: disputes = [], isLoading, refetch, isRefetching } = useQuery<Dispute[]>({
     queryKey: ["/api/helper/disputes"],
@@ -149,6 +151,11 @@ export default function DisputeListScreen({ navigation }: DisputeListScreenProps
             paddingBottom: insets.bottom + 80,
             paddingHorizontal: Spacing.md,
             flexGrow: 1,
+            ...(showDesktopLayout && {
+              maxWidth: containerMaxWidth,
+              alignSelf: 'center' as const,
+              width: '100%' as any,
+            }),
           }}
           ItemSeparatorComponent={() => <View style={{ height: Spacing.md }} />}
           refreshControl={

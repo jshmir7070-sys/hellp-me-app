@@ -7,11 +7,13 @@ import { Icon } from "@/components/Icon";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as ImagePicker from 'expo-image-picker';
+import Constants from "expo-constants";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Avatar } from "@/components/Avatar";
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { useAuth } from "@/contexts/AuthContext";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
@@ -24,6 +26,8 @@ const AVATAR_OPTIONS = [
   { id: 'avatar:star', emoji: '⭐', label: '스타' },
   { id: 'avatar:rocket', emoji: '🚀', label: '로켓' },
   { id: 'avatar:smile', emoji: '😊', label: '스마일' },
+  { id: 'avatar:thumbsup', emoji: '👍', label: '최고' },
+  { id: 'avatar:shield', emoji: '🛡️', label: '안전' },
 ];
 
 type ProfileScreenProps = {
@@ -59,6 +63,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const { user, logout, refreshUser } = useAuth();
   const queryClient = useQueryClient();
 
@@ -87,7 +92,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
   });
 
   const profile = isHelper
-    ? helperProfile
+    ? { ...helperProfile, profileImageUrl: helperProfile?.profileImageUrl || (user as any)?.profileImageUrl, profileImage: helperProfile?.profileImage || (user as any)?.profileImageUrl }
     : authMe?.user
       ? { ...authMe.user, ...(requesterProfile || {}) }
       : requesterProfile;
@@ -185,6 +190,10 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
 
       if (uploadResponse.ok) {
         await refreshUser();
+        // 모든 프로필 관련 쿼리 강제 리프레시
+        queryClient.invalidateQueries({ queryKey: ['/api/helpers/profile'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/requesters/business'] });
         if (isHelper) {
           refetchHelper();
         } else {
@@ -213,6 +222,9 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
       });
       if (res.ok) {
         await refreshUser();
+        queryClient.invalidateQueries({ queryKey: ['/api/helpers/profile'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/auth/me'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/requesters/business'] });
         if (isHelper) {
           refetchHelper();
         } else {
@@ -252,8 +264,13 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
       style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.xl,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
       scrollIndicatorInsets={{ bottom: insets.bottom }}
     >
@@ -400,6 +417,18 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
           </View>
 
           <View style={styles.menuSection}>
+            <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>결제 관리</ThemedText>
+
+            <MenuItem
+              icon="card-outline"
+              label="결제 관리"
+              description="결제금, 미결제금, 환불 내역 조회"
+              theme={theme}
+              onPress={() => navigation.navigate('RequesterPayment')}
+            />
+          </View>
+
+          <View style={styles.menuSection}>
             <ThemedText style={[styles.sectionTitle, { color: theme.tabIconDefault }]}>QR 체크인</ThemedText>
 
             <MenuItem
@@ -469,7 +498,7 @@ export default function ProfileScreen({ navigation }: ProfileScreenProps) {
       </Pressable>
 
       <ThemedText style={[styles.versionText, { color: theme.tabIconDefault }]}>
-        버전 1.0.0
+        버전 {Constants.expoConfig?.version || '1.0.0'}
       </ThemedText>
 
       <Modal

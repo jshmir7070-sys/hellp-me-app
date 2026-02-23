@@ -50,6 +50,7 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
     getOrderDepositInfo,
     getDepositRate,
     getOrCreatePersonalCode,
+    getIndustrialAccidentInsuranceRate,
     logAdminAction,
     logAuthEvent,
     encrypt,
@@ -97,7 +98,7 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
     orderRegistrationFields, orderClosureReports, payments,
     taxInvoices, courierSettings, signupConsents, termsVersions, termsReConsents,
     auditLogs, teamIncentives, incentiveDetails, userLocationLatest, userLocationLogs,
-    destinationRegions, timeSlots,
+    destinationRegions, timeSlots, enterpriseAccounts, monthlySettlementStatements,
     insertAdminBankAccountSchema, insertCarrierRateItemSchema, insertColdChainSettingSchema,
     insertCustomerServiceInquirySchema, insertDestinationPricingSchema, insertRefundPolicySchema,
     insertRequesterRefundAccountSchema, updateCustomerServiceInquirySchema,
@@ -378,18 +379,22 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
 
       const users = await storage.getAllUsers();
       const orders = await storage.getOrders();
+      const enterpriseList = await db.select().from(enterpriseAccounts);
       const userMap = new Map<string, any>(users.map(u => [u.id, u]));
       const orderMap = new Map<number, any>(orders.map(o => [o.id, o]));
+      const enterpriseMap = new Map<number, any>(enterpriseList.map(e => [e.id, e]));
 
       let allResults = closingReportsList.map(cr => {
         const order = orderMap.get(cr.orderId);
         const helper = order?.matchedHelperId ? userMap.get(order.matchedHelperId) : null;
+        const enterprise = order?.enterpriseId ? enterpriseMap.get(order.enterpriseId) : null;
         const requester = order?.requesterId ? userMap.get(order.requesterId) : null;
 
         const deliveredCount = cr.deliveredCount || 0;
         const returnedCount = cr.returnedCount || 0;
         const etcCount = cr.etcCount || 0;
         const pricePerBox = order?.pricePerUnit || 0;
+        const etcPricePerUnit = cr.etcPricePerUnit || 0;
 
         const extraCostsJson = cr.extraCostsJson ? (typeof cr.extraCostsJson === "string" ? JSON.parse(cr.extraCostsJson) : cr.extraCostsJson) : null;
         const extraTotal = extraCostsJson?.reduce((sum: number, item: any) => sum + (item.amount || item.unitPrice * item.quantity || 0), 0) || 0;
@@ -403,7 +408,7 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
           platformFee = Number(cr.platformFee) || 0;
           driverPayout = Number(cr.netAmount) || 0;
         } else {
-          const baseAmount = (deliveredCount + returnedCount) * pricePerBox;
+          const baseAmount = (deliveredCount + returnedCount) * pricePerBox + etcCount * etcPricePerUnit;
           supplyPrice = baseAmount + extraTotal;
           vat = calculateVat(supplyPrice);
           finalTotal = supplyPrice + vat;
@@ -416,10 +421,12 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         return {
           id: cr.id,
           orderId: cr.orderId,
+          orderNumber: order?.orderNumber || null,
           helperId: order?.matchedHelperId || 0,
           helperName: helper?.name || "Unknown",
           helperPhone: helper?.phoneNumber || null,
           requesterName: requester?.name || null,
+          enterpriseName: enterprise?.name || null,
           category: "parcel",
           courierCompany: order?.courierCompany || order?.companyName || null,
           deliveredCount,
@@ -441,9 +448,11 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         const search = searchTerm.toLowerCase();
         allResults = allResults.filter(item =>
           String(item.orderId).includes(search) ||
+          item.orderNumber?.toLowerCase().includes(search) ||
           item.helperName?.toLowerCase().includes(search) ||
           item.requesterName?.toLowerCase().includes(search) ||
-          item.courierCompany?.toLowerCase().includes(search)
+          item.courierCompany?.toLowerCase().includes(search) ||
+          item.enterpriseName?.toLowerCase().includes(search)
         );
       }
 
@@ -499,6 +508,7 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         const existing = helperMap.get(helperId) || {
           helperName: "",
           helperPhone: "",
+          helperEmail: "",
           orderCount: 0,
           supplyPrice: 0,
           vat: 0,
@@ -513,6 +523,7 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         const helper = userMap.get(helperId);
         existing.helperName = helper?.name || "Unknown";
         existing.helperPhone = helper?.phoneNumber || "";
+        existing.helperEmail = helper?.email || "";
         existing.orderCount += 1;
 
         // 정산 스냅샷이 있으면 사용, 없으면 일정산과 동일한 방식으로 계산
@@ -526,13 +537,15 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
           // 일정산과 동일한 계산 방식 적용
           const deliveredCount = cr.deliveredCount || 0;
           const returnedCount = cr.returnedCount || 0;
+          const etcCount = cr.etcCount || 0;
           const pricePerBox = order?.pricePerUnit || 0;
+          const etcPricePerUnit = cr.etcPricePerUnit || 0;
 
           // extraCosts 계산
           const extraCostsJson = cr.extraCostsJson ? (typeof cr.extraCostsJson === "string" ? JSON.parse(cr.extraCostsJson) : cr.extraCostsJson) : null;
           const extraTotal = extraCostsJson?.reduce((sum: number, item: any) => sum + (item.amount || item.unitPrice * item.quantity || 0), 0) || 0;
 
-          const baseAmount = (deliveredCount + returnedCount) * pricePerBox;
+          const baseAmount = (deliveredCount + returnedCount) * pricePerBox + etcCount * etcPricePerUnit;
           const supplyPrice = baseAmount + extraTotal;
           const vat = calculateVat(supplyPrice);
           const totalAmount = supplyPrice + vat;
@@ -551,7 +564,12 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         helperMap.set(helperId, existing);
       }
 
-      res.json(Array.from(helperMap.values()));
+      // helperId를 응답에 포함 (기존 key에만 있고 value에 없던 버그 수정)
+      const result = Array.from(helperMap.entries()).map(([id, data]) => ({
+        helperId: id,
+        ...data,
+      }));
+      res.json(result);
     } catch (err: any) {
       console.error("Helper settlement error:", err);
       res.status(500).json({ message: "Internal server error" });
@@ -616,13 +634,23 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         )
         .orderBy(desc(closingReports.createdAt));
 
-      const orders = await storage.getOrders();
-      const orderMap = new Map<number, any>(orders.map(o => [o.id, o]));
+      const allOrders = await storage.getOrders();
+      const orderMap = new Map<number, any>(allOrders.map(o => [o.id, o]));
       const allCourierSettings = await storage.getAllCourierSettings();
+      const allUsers = await storage.getAllUsers();
+      const userMap = new Map<string, any>(allUsers.map(u => [u.id, u]));
+
+      // 산재보험료율 조회 (SSOT: settlement-calculator.ts와 동일 공식)
+      const insuranceRateSetting = await storage.getSystemSetting('industrial_accident_insurance_rate');
+      const insuranceRate = insuranceRateSetting ? parseFloat(insuranceRateSetting.settingValue) : 1.06;
+
+      // 헬퍼 정보
+      const helperUser = userMap.get(helperId);
 
       let totalSupply = 0, totalVat = 0, totalAmount = 0, totalDeduction = 0, totalPayout = 0;
+      let totalInsurance = 0, totalDamageDeduction = 0;
 
-      const orderDetails = closingReportsList.map(cr => {
+      const orderDetails = await Promise.all(closingReportsList.map(async (cr) => {
         const order = orderMap.get(cr.orderId);
         const deliveredCount = cr.deliveredCount || 0;
         const returnedCount = cr.returnedCount || 0;
@@ -636,6 +664,13 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         if (courierSetting?.category === "freight") category = "냉탑전용";
         else if (courierSetting?.category === "etc") category = "기타택배";
 
+        // 요청자 정보
+        const requesterUser = order?.requesterId ? userMap.get(order.requesterId) : null;
+
+        // extraCosts 계산
+        const extraCostsJson = cr.extraCostsJson ? (typeof cr.extraCostsJson === "string" ? JSON.parse(cr.extraCostsJson) : cr.extraCostsJson) : null;
+        const extraTotal = extraCostsJson?.reduce((sum: number, item: any) => sum + (item.amount || item.unitPrice * item.quantity || 0), 0) || 0;
+
         // 금액 계산 (스냅샷 우선)
         let supplyAmount, vatAmount, total, platformFee, netAmount;
         if (cr.supplyAmount) {
@@ -646,19 +681,66 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
           netAmount = Number(cr.netAmount) || 0;
         } else {
           const baseAmount = (deliveredCount + returnedCount) * pricePerBox + etcCount * etcPricePerUnit;
-          supplyAmount = baseAmount;
-          vatAmount = calculateVat(baseAmount);
+          supplyAmount = baseAmount + extraTotal;
+          vatAmount = calculateVat(supplyAmount);
           total = supplyAmount + vatAmount;
           const feeRate = cr.platformFeeRate ? Number(cr.platformFeeRate) / 10000 : 0;
           platformFee = Math.round(total * feeRate);
           netAmount = total - platformFee;
         }
 
+        // 산재보험료 계산 (SSOT: totalAmount × insuranceRate% × 50%)
+        const insurance = Math.round(total * (insuranceRate / 100) * 0.5);
+
+        // 차감액 조회 (사고차감 + 관리자 수동 조정)
+        let damageDeduction = 0;
+        const deductionBreakdown: Array<{ type: string; label: string; amount: number; reason?: string }> = [];
+        let adminMemo = "";
+        try {
+          // 1. 사고 차감 (incidentReports — 월정산서 생성 로직과 동일)
+          const incidents = await db.select().from(incidentReports)
+            .where(and(
+              eq(incidentReports.orderId, cr.orderId),
+              eq(incidentReports.helperDeductionApplied, true)
+            ));
+          for (const ir of incidents) {
+            const amt = ir.deductionAmount || 0;
+            damageDeduction += amt;
+            if (amt > 0) {
+              deductionBreakdown.push({
+                type: "incident",
+                label: "화물사고",
+                amount: amt,
+                reason: ir.description || "",
+              });
+            }
+          }
+
+          // 2. 관리자 수동 차감 (deductions 테이블)
+          const adminDeductions = await db.select().from(deductions)
+            .where(and(
+              eq(deductions.orderId, cr.orderId),
+              eq(deductions.category, "ADMIN_ADJUSTMENT")
+            ));
+          for (const d of adminDeductions) {
+            damageDeduction += (d.amount || 0);
+            deductionBreakdown.push({
+              type: "admin",
+              label: "관리자 조정",
+              amount: d.amount || 0,
+              reason: d.reason || "",
+            });
+            if (d.memo) adminMemo = d.memo;
+          }
+        } catch { /* ignore */ }
+
         totalSupply += supplyAmount;
         totalVat += vatAmount;
         totalAmount += total;
         totalDeduction += platformFee;
-        totalPayout += netAmount;
+        totalInsurance += insurance;
+        totalDamageDeduction += damageDeduction;
+        totalPayout += (total - insurance - damageDeduction);
 
         // 차감 상세 내역
         const deductionDetails: string[] = [];
@@ -672,6 +754,9 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
           date: cr.createdAt,
           category,
           courierCompany: order?.companyName || order?.courierCompany || "-",
+          helperName: helperUser?.name || "",
+          helperEmail: helperUser?.email || "",
+          requesterName: requesterUser?.name || "",
           deliveredCount,
           returnedCount,
           pricePerBox,
@@ -680,12 +765,16 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
           supplyAmount,
           vatAmount,
           totalAmount: total,
+          insurance,
+          damageDeduction,
+          deductionBreakdown,
+          adminMemo,
           deduction: platformFee,
-          payout: netAmount,
+          payout: total - insurance - damageDeduction,
           deductionDetails,
           memo: cr.memo || "",
         };
-      });
+      }));
 
       res.json({
         orders: orderDetails,
@@ -695,11 +784,83 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
           totalAmount,
           totalDeduction,
           totalPayout,
+          totalInsurance,
+          totalDamageDeduction,
+          insuranceRate,
         }
       });
     } catch (err: any) {
       console.error("Helper orders detail error:", err);
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // 오더별 차감액 수정 API (관리자 수동 조정)
+  app.patch("/api/admin/settlements/helper/:helperId/orders/:orderId/deduction", adminAuth, requirePermission("settlements.edit"), async (req, res) => {
+    try {
+      const { helperId, orderId } = req.params;
+      const { deductionAmount, reason, adminMemo } = req.body;
+      const adminUserId = (req as any).adminUser?.id;
+
+      if (deductionAmount === undefined || deductionAmount === null) {
+        return res.status(400).json({ message: "차감액(deductionAmount)은 필수 항목입니다." });
+      }
+
+      // 해당 마감 건 확인
+      const crList = await db.select().from(closingReports)
+        .where(and(
+          eq(closingReports.helperId, helperId),
+          eq(closingReports.orderId, Number(orderId))
+        ))
+        .limit(1);
+
+      if (!crList.length) {
+        return res.status(404).json({ message: "해당 마감 건을 찾을 수 없습니다." });
+      }
+
+      // 기존 관리자 수동 차감 조회
+      const existingDeductions = await db.select().from(deductions)
+        .where(and(
+          eq(deductions.orderId, Number(orderId)),
+          eq(deductions.category, "ADMIN_ADJUSTMENT")
+        ));
+
+      if (existingDeductions.length > 0) {
+        if (Number(deductionAmount) === 0) {
+          // 차감액이 0이면 기존 기록 삭제
+          await db.delete(deductions)
+            .where(eq(deductions.id, existingDeductions[0].id));
+        } else {
+          // 기존 차감 업데이트
+          await db.update(deductions)
+            .set({
+              amount: Number(deductionAmount),
+              reason: reason || "관리자 수동 조정",
+              memo: adminMemo || existingDeductions[0].memo || null,
+              updatedAt: new Date(),
+            })
+            .where(eq(deductions.id, existingDeductions[0].id));
+        }
+      } else if (Number(deductionAmount) > 0) {
+        // 새 차감 생성
+        await db.insert(deductions).values({
+          orderId: Number(orderId),
+          helperId: helperId,
+          targetType: "helper",
+          targetId: helperId,
+          amount: Number(deductionAmount),
+          reason: reason || "관리자 수동 조정",
+          memo: adminMemo || null,
+          category: "ADMIN_ADJUSTMENT",
+          status: "confirmed",
+          createdBy: adminUserId,
+        });
+      }
+
+      res.json({ success: true, message: "차감액이 저장되었습니다." });
+    } catch (err: any) {
+      console.error("Deduction update error:", err);
+      res.status(500).json({ message: "차감액 저장 실패" });
     }
   });
 
@@ -712,6 +873,8 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
       const ordersData = await storage.getOrders();
       const closingReportsList = await db.select().from(closingReports);
       const closingMap = new Map<number, any>(closingReportsList.map(cr => [cr.orderId, cr]));
+      const allUsers = await storage.getAllUsers();
+      const userMap = new Map<string, any>(allUsers.map(u => [u.id, u]));
 
       const requesterOrders = ordersData.filter(o => {
         if (o.requesterId !== requesterId) return false;
@@ -728,13 +891,31 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         const pricePerBox = order.pricePerUnit || 0;
         const etcPricePerUnit = closing?.etcPricePerUnit || 0;
 
+        // extraCosts 계산
+        const extraCostsJson = closing?.extraCostsJson ? (typeof closing.extraCostsJson === "string" ? JSON.parse(closing.extraCostsJson) : closing.extraCostsJson) : null;
+        const extraTotal = extraCostsJson?.reduce((sum: number, item: any) => sum + (item.amount || item.unitPrice * item.quantity || 0), 0) || 0;
+
+        // 공급가액/부가세 분리 계산
+        let supplyAmount = 0;
+        let vatAmount = 0;
         let totalAmount = 0;
-        if (closing?.totalAmount) {
+        if (closing?.supplyAmount) {
+          supplyAmount = Number(closing.supplyAmount) || 0;
+          vatAmount = Number(closing.vatAmount) || 0;
+          totalAmount = Number(closing.totalAmount) || (supplyAmount + vatAmount);
+        } else if (closing?.totalAmount) {
           totalAmount = Number(closing.totalAmount) || 0;
+          supplyAmount = Math.round(totalAmount / 1.1);
+          vatAmount = totalAmount - supplyAmount;
         } else if (closing) {
           const baseAmount = (deliveredCount + returnedCount) * pricePerBox + etcCount * etcPricePerUnit;
-          totalAmount = Math.round(baseAmount * 1.1);
+          supplyAmount = baseAmount + extraTotal;
+          vatAmount = Math.round(supplyAmount * 0.1);
+          totalAmount = supplyAmount + vatAmount;
         }
+
+        // 헬퍼 정보 조회
+        const helperUser = order.matchedHelperId ? userMap.get(order.matchedHelperId) : null;
 
         // 계약금 정보 조회
         const depositInfo = await getOrderDepositInfo(order.id);
@@ -745,10 +926,13 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
           orderId: order.id,
           orderDate: order.scheduledDate || order.createdAt,
           courierCompany: order.courierCompany || order.companyName || '-',
+          helperName: helperUser?.name || '-',
           deliveredCount,
           returnedCount,
           etcCount,
           pricePerBox,
+          supplyAmount,
+          vatAmount,
           totalAmount,
           depositAmount,
           balanceAmount,
@@ -760,6 +944,8 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
 
       // 총합계 정보 추가
       const summary = {
+        totalSupply: result.reduce((sum, o) => sum + o.supplyAmount, 0),
+        totalVat: result.reduce((sum, o) => sum + o.vatAmount, 0),
         totalAmount: result.reduce((sum, o) => sum + o.totalAmount, 0),
         totalDeposit: result.reduce((sum, o) => sum + o.depositAmount, 0),
         totalBalance: result.reduce((sum, o) => sum + o.balanceAmount, 0),
@@ -801,6 +987,7 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
           requesterId: requesterId.toString(),
           requesterName: "",
           requesterPhone: "",
+          requesterEmail: "",
           businessName: "",
           orderCount: 0,
           billedAmount: 0,
@@ -811,6 +998,7 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         const requester = userMap.get(requesterId);
         existing.requesterName = requester?.name || "Unknown";
         existing.requesterPhone = requester?.phoneNumber || "";
+        existing.requesterEmail = requester?.email || "";
         existing.businessName = order.companyName || "";
         existing.orderCount += 1;
 
@@ -826,7 +1014,10 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
             const etcCount = closingReport.etcCount || 0;
             const pricePerBox = order.pricePerUnit || 0;
             const etcPricePerUnit = closingReport.etcPricePerUnit || 0;
-            const baseAmount = (deliveredCount + returnedCount) * pricePerBox + etcCount * etcPricePerUnit;
+            // extraCosts 계산
+            const ecJson = closingReport.extraCostsJson ? (typeof closingReport.extraCostsJson === "string" ? JSON.parse(closingReport.extraCostsJson) : closingReport.extraCostsJson) : null;
+            const ecTotal = ecJson?.reduce((sum: number, item: any) => sum + (item.amount || item.unitPrice * item.quantity || 0), 0) || 0;
+            const baseAmount = (deliveredCount + returnedCount) * pricePerBox + etcCount * etcPricePerUnit + ecTotal;
             totalAmount = Math.round(baseAmount * 1.1);
           }
         }
@@ -848,6 +1039,24 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
       res.json(Array.from(requesterMap.values()));
     } catch (err: any) {
       console.error("Requester settlement error:", err);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // Get settlement statement by orderId (for dispute settlement editing)
+  app.get("/api/admin/settlements/by-order/:orderId", adminAuth, requirePermission("settlements.view"), async (req, res) => {
+    try {
+      const orderId = Number(req.params.orderId);
+      if (!orderId || isNaN(orderId)) {
+        return res.status(400).json({ message: "유효한 주문 ID가 필요합니다" });
+      }
+      const settlement = await storage.getSettlementStatementByOrder(orderId);
+      if (!settlement) {
+        return res.status(404).json({ message: "해당 주문의 정산 내역이 없습니다" });
+      }
+      res.json(settlement);
+    } catch (err: any) {
+      console.error("Get settlement by order error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -1196,13 +1405,31 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
 
       // 기사에게 알림
       if (settlement.helperId) {
+        const payoutText = `${(settlement.netAmount || 0).toLocaleString()}원`;
         await storage.createNotification({
           userId: settlement.helperId,
           type: "settlement_completed",
           title: "정산 확정",
-          message: `정산이 확정되었습니다. 지급 예정 금액: ${(settlement.netAmount || 0).toLocaleString()}원`,
+          message: `정산이 확정되었습니다. 지급 예정 금액: ${payoutText}`,
           payload: JSON.stringify({ settlementId: id }),
         });
+
+        // 푸시 알림
+        sendPushToUser(settlement.helperId, {
+          title: "정산 확정",
+          body: `정산이 확정되었습니다. 지급 예정: ${payoutText}`,
+          url: "/helper-home",
+          tag: `settlement-confirmed-${id}`,
+        });
+
+        // SMS: 정산 확정 알림
+        const settlementHelper = await storage.getUser(settlement.helperId);
+        if (settlementHelper?.phoneNumber) {
+          try {
+            await smsService.sendCustomMessage(settlementHelper.phoneNumber,
+              `[헬프미] 정산이 확정되었습니다. 지급 예정: ${payoutText}. 앱에서 확인하세요.`);
+          } catch (smsErr) { console.error("[SMS Error] settlement confirmed:", smsErr); }
+        }
 
         // Notify helper via WebSocket
         notificationWS.sendDataRefresh(settlement.helperId, {
@@ -1269,13 +1496,31 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
 
       // 기사에게 알림
       if (settlement.helperId) {
+        const paidAmtText = `${(settlement.netAmount || 0).toLocaleString()}원`;
         await storage.createNotification({
           userId: settlement.helperId,
           type: "settlement_completed",
           title: "정산금 지급 완료",
-          message: `${(settlement.netAmount || 0).toLocaleString()}원이 지급 완료되었습니다.`,
+          message: `${paidAmtText}이 지급 완료되었습니다.`,
           payload: JSON.stringify({ settlementId: id }),
         });
+
+        // 푸시 알림
+        sendPushToUser(settlement.helperId, {
+          title: "정산금 지급 완료",
+          body: `${paidAmtText}이 지급 완료되었습니다. 앱에서 확인하세요.`,
+          url: "/helper-home",
+          tag: `settlement-paid-${id}`,
+        });
+
+        // SMS: 정산금 지급 완료 알림
+        const paidHelper = await storage.getUser(settlement.helperId);
+        if (paidHelper?.phoneNumber) {
+          try {
+            await smsService.sendCustomMessage(paidHelper.phoneNumber,
+              `[헬프미] 정산금 ${paidAmtText}이 지급 완료되었습니다. 앱에서 확인하세요.`);
+          } catch (smsErr) { console.error("[SMS Error] settlement paid:", smsErr); }
+        }
 
         // Notify helper via WebSocket
         notificationWS.sendDataRefresh(settlement.helperId, {
@@ -1668,14 +1913,35 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
               teamLeaderId = effectiveRate.teamLeaderId;
             }
 
-            const totalAmount = Number(order.pricePerUnit) || 0;
+            // 마감 보고서에서 실제 수량 조회 (정확한 금액 산출)
+            const [closingRpt] = await db.select().from(closingReports)
+              .where(eq(closingReports.orderId, order.id))
+              .limit(1);
+
+            let supplyAmount: number;
+            let vatAmount: number;
+            let totalAmount: number;
+
+            if (closingRpt?.totalAmount) {
+              // 마감 보고서에 이미 계산된 금액이 있으면 사용
+              totalAmount = Number(closingRpt.totalAmount) || 0;
+              supplyAmount = Number(closingRpt.supplyAmount) || Math.round(totalAmount / 1.1);
+              vatAmount = Number(closingRpt.vatAmount) || (totalAmount - supplyAmount);
+            } else {
+              // 마감 보고서가 없으면 오더 정보로 계산
+              const qty = parseInt(String(order.averageQuantity || "0").replace(/[^0-9]/g, "")) || 0;
+              const unitPrice = Number(order.pricePerUnit) || 0;
+              const etcCount = closingRpt?.etcCount || 0;
+              const etcPricePerUnit = closingRpt?.etcPricePerUnit || 0;
+              supplyAmount = (qty * unitPrice) + (etcCount * etcPricePerUnit);
+              vatAmount = Math.round(supplyAmount * 0.1);
+              totalAmount = supplyAmount + vatAmount;
+            }
+
             const commissionAmount = Math.round(totalAmount * commissionRate / 100);
             const platformCommission = Math.round(totalAmount * platformRate / 100);
             const teamLeaderIncentive = Math.round(totalAmount * teamLeaderRate / 100);
-            const netAmountBeforeVAT = totalAmount - commissionAmount;
-            // VAT calculation: (total - commission) / 1.1
-            const supplyAmount = Math.round(netAmountBeforeVAT / 1.1);
-            const vatAmount = netAmountBeforeVAT - supplyAmount;
+            const netAmount = totalAmount - commissionAmount;
 
             await storage.createSettlementStatement({
               orderId: order.id,
@@ -1692,7 +1958,7 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
               supplyAmount,
               vatAmount,
               totalAmount,
-              netAmount: netAmountBeforeVAT,
+              netAmount,
               status: "pending",
             });
             created++;
@@ -1833,12 +2099,14 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
           createdAt: d.createdAt,
           resolvedAt: d.resolvedAt,
           resolution: d.resolution,
+          evidencePhotoUrls: d.evidencePhotoUrl ? (() => { try { return JSON.parse(d.evidencePhotoUrl); } catch { return [d.evidencePhotoUrl]; } })() : [],
           helperName: helper?.name || null,
           helperPhone: helper?.phoneNumber || null,
           requesterName: requester?.name || null,
           requesterPhone: requester?.phoneNumber || null,
           settlementId: d.settlementId,
           orderId: d.orderId,
+          orderNumber: order?.orderNumber || null,
           requestedDeliveryCount: d.requestedDeliveryCount,
           requestedReturnCount: d.requestedReturnCount,
           requestedPickupCount: d.requestedPickupCount,
@@ -2053,16 +2321,30 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         return {
           id: d.id,
           orderId: d.orderId,
+          orderNumber: order?.orderNumber || null,
           helperId: d.helperId,
           submitterRole: d.submitterRole || "helper",
           submitterName: d.submitterRole === "requester" ? (requester?.name || "요청자") : (helper?.name || "헬퍼"),
           disputeType: d.disputeType,
           status: d.status,
           description: d.description,
+          evidencePhotoUrls: d.evidencePhotoUrl ? (() => { try { return JSON.parse(d.evidencePhotoUrl); } catch { return [d.evidencePhotoUrl]; } })() : [],
           createdAt: d.createdAt,
           resolvedAt: d.resolvedAt,
           helperName: helper?.name || null,
           requesterName: requester?.name || null,
+          settlementId: d.settlementId,
+          workDate: d.workDate,
+          courierName: d.courierName,
+          invoiceNumber: d.invoiceNumber,
+          requestedDeliveryCount: d.requestedDeliveryCount,
+          requestedReturnCount: d.requestedReturnCount,
+          requestedPickupCount: d.requestedPickupCount,
+          requestedOtherCount: d.requestedOtherCount,
+          resolution: d.resolution,
+          adminReply: d.adminReply,
+          helperPhone: helper?.phoneNumber || null,
+          requesterPhone: requester?.phoneNumber || null,
         };
       });
 
@@ -2090,22 +2372,45 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
         id: dispute.id,
         orderId: dispute.orderId,
         helperId: dispute.helperId,
+        settlementId: dispute.settlementId,
         submitterRole: dispute.submitterRole || "helper",
         submitterName: dispute.submitterRole === "requester" ? (requester?.name || "요청자") : (helper?.name || "헬퍼"),
         disputeType: dispute.disputeType,
         status: dispute.status,
         description: dispute.description,
+        workDate: dispute.workDate,
+        courierName: dispute.courierName,
+        invoiceNumber: dispute.invoiceNumber,
+        evidencePhotoUrls: dispute.evidencePhotoUrl ? (() => { try { return JSON.parse(dispute.evidencePhotoUrl); } catch { return [dispute.evidencePhotoUrl]; } })() : [],
         adminNote: dispute.adminReply,
         adminReplyAt: dispute.adminReplyAt,
         adminReplyBy: dispute.adminReplyBy,
         createdAt: dispute.createdAt,
         resolvedAt: dispute.resolvedAt,
         resolution: dispute.resolution,
+        requestedDeliveryCount: dispute.requestedDeliveryCount,
+        requestedReturnCount: dispute.requestedReturnCount,
+        requestedPickupCount: dispute.requestedPickupCount,
+        requestedOtherCount: dispute.requestedOtherCount,
         order: order ? {
           id: order.id,
-          carrierName: order.carrierName || "",
-          pickupLocation: order.pickupLocation || "",
-          deliveryLocation: order.deliveryLocation || "",
+          carrierName: (order as any).carrierName || (order as any).courierCompany || "",
+          pickupLocation: (order as any).pickupLocation || (order as any).campAddress || "",
+          deliveryLocation: (order as any).deliveryLocation || (order as any).deliveryArea || "",
+          scheduledDate: (order as any).scheduledDate || null,
+          companyName: (order as any).companyName || null,
+        } : null,
+        helper: helper ? {
+          id: helper.id,
+          name: helper.name,
+          nickname: (helper as any).nickname || null,
+          phone: helper.phoneNumber,
+        } : null,
+        requester: requester ? {
+          id: requester.id,
+          name: requester.name,
+          phone: requester.phoneNumber,
+          companyName: (order as any)?.companyName || null,
         } : null,
         helperName: helper?.name || null,
         helperPhone: helper?.phoneNumber || null,
@@ -3906,6 +4211,214 @@ export async function registerSettlementRoutes(ctx: RouteContext): Promise<void>
       res.json({ team: { ...team, leader } });
     } catch (err: any) {
       res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  // ============================================
+  // 월 정산서 전송 API
+  // ============================================
+
+  // POST /api/admin/settlements/send-monthly-statement - 헬퍼에게 월 정산서 전송
+  app.post("/api/admin/settlements/send-monthly-statement", adminAuth, requirePermission("settlements.edit"), async (req: any, res: any) => {
+    try {
+      const { helperIds, year, month } = req.body;
+      const adminUserId = (req as any).adminUser?.id;
+
+      if (!helperIds || !Array.isArray(helperIds) || helperIds.length === 0) {
+        return res.status(400).json({ message: "helperIds는 필수 항목입니다." });
+      }
+      if (!year || !month) {
+        return res.status(400).json({ message: "year, month는 필수 항목입니다." });
+      }
+
+      // 보험료율 조회
+      const insuranceRateSetting = await storage.getSystemSetting('industrial_accident_insurance_rate');
+      const insuranceRate = insuranceRateSetting ? parseFloat(insuranceRateSetting.settingValue) : 1.06;
+
+      const startDate = new Date(year, month - 1, 1);
+      const endDate = new Date(year, month, 0, 23, 59, 59);
+      const lastDay = new Date(year, month, 0).getDate();
+
+      const results: { helperId: string; success: boolean; error?: string }[] = [];
+
+      for (const helperId of helperIds) {
+        try {
+          // 해당 헬퍼의 해당 월 마감 보고서 조회
+          const helperClosingReports = await db.select().from(closingReports)
+            .where(and(
+              eq(closingReports.helperId, helperId),
+              gte(closingReports.createdAt, startDate),
+              lte(closingReports.createdAt, endDate)
+            ));
+
+          let totalSupply = 0, totalVat = 0, totalAmount = 0;
+          let totalDeductions = 0;
+          const dailyData: any[] = [];
+          const workDates = new Set<string>();
+
+          for (const cr of helperClosingReports) {
+            const order = await storage.getOrder(cr.orderId);
+            if (!order) continue;
+
+            let supplyAmount: number, vatAmount: number, total: number;
+            if (cr.supplyAmount) {
+              supplyAmount = Number(cr.supplyAmount) || 0;
+              vatAmount = Number(cr.vatAmount) || 0;
+              total = Number(cr.totalAmount) || 0;
+            } else {
+              const deliveredCount = cr.deliveredCount || 0;
+              const returnedCount = cr.returnedCount || 0;
+              const pricePerBox = order.pricePerUnit || 0;
+              const extraCostsJson = cr.extraCostsJson ? (typeof cr.extraCostsJson === "string" ? JSON.parse(cr.extraCostsJson) : cr.extraCostsJson) : null;
+              const extraTotal = extraCostsJson?.reduce((sum: number, item: any) => sum + (item.amount || 0), 0) || 0;
+              supplyAmount = (deliveredCount + returnedCount) * pricePerBox + extraTotal;
+              vatAmount = calculateVat(supplyAmount);
+              total = supplyAmount + vatAmount;
+            }
+
+            totalSupply += supplyAmount;
+            totalVat += vatAmount;
+            totalAmount += total;
+
+            // 차감액 (화물사고)
+            const incidents = await db.select().from(incidentReports)
+              .where(and(
+                eq(incidentReports.orderId, cr.orderId),
+                eq(incidentReports.helperDeductionApplied, true)
+              ));
+            const orderDeduction = incidents.reduce((sum, ir) => sum + (ir.deductionAmount || 0), 0);
+            totalDeductions += orderDeduction;
+
+            const dateStr = cr.createdAt ? new Date(cr.createdAt).toISOString().split('T')[0] : '';
+            if (dateStr) workDates.add(dateStr);
+
+            dailyData.push({
+              date: dateStr,
+              orderId: cr.orderId,
+              orderTitle: order.companyName || order.deliveryArea || '오더',
+              totalAmount: total,
+              deductions: orderDeduction,
+            });
+          }
+
+          // 수수료 계산
+          const effectiveRate = await storage.getEffectiveCommissionRate(helperId);
+          const commissionRate = effectiveRate.rate;
+          const commissionAmount = Math.round(totalAmount * commissionRate / 100);
+
+          // 산재보험료 계산
+          const insuranceDeduction = Math.round(totalAmount * (insuranceRate / 100) * 0.5);
+
+          // 최종 지급액
+          const payoutAmount = Math.max(0, totalAmount - commissionAmount - insuranceDeduction - totalDeductions);
+
+          // 일별 집계
+          const dailyGrouped: Record<string, any> = {};
+          for (const item of dailyData) {
+            if (!dailyGrouped[item.date]) {
+              dailyGrouped[item.date] = { date: item.date, orderCount: 0, totalAmount: 0, deductions: 0 };
+            }
+            dailyGrouped[item.date].orderCount += 1;
+            dailyGrouped[item.date].totalAmount += item.totalAmount;
+            dailyGrouped[item.date].deductions += item.deductions;
+          }
+          const dailySummary = Object.values(dailyGrouped).map((d: any) => ({
+            ...d,
+            commission: Math.round(d.totalAmount * commissionRate / 100),
+            insurance: Math.round(d.totalAmount * (insuranceRate / 100) * 0.5),
+            payout: Math.max(0, d.totalAmount - Math.round(d.totalAmount * commissionRate / 100) - Math.round(d.totalAmount * (insuranceRate / 100) * 0.5) - d.deductions),
+          }));
+
+          // 기존 정산서 확인 (upsert)
+          const existing = await storage.getMonthlySettlementStatementByHelperAndMonth(helperId, year, month);
+          let statement;
+          if (existing) {
+            statement = await storage.updateMonthlySettlementStatement(existing.id, {
+              totalAmount,
+              commissionRate,
+              commissionAmount,
+              insuranceRate: String(insuranceRate),
+              insuranceDeduction,
+              otherDeductions: totalDeductions,
+              payoutAmount,
+              totalWorkDays: workDates.size,
+              totalOrders: helperClosingReports.length,
+              settlementDataJson: JSON.stringify(dailySummary),
+              status: "sent",
+              sentAt: new Date(),
+              sentBy: adminUserId,
+              viewedAt: null,
+            });
+          } else {
+            statement = await storage.createMonthlySettlementStatement({
+              helperId,
+              year,
+              month,
+              totalAmount,
+              commissionRate,
+              commissionAmount,
+              insuranceRate: String(insuranceRate),
+              insuranceDeduction,
+              otherDeductions: totalDeductions,
+              payoutAmount,
+              totalWorkDays: workDates.size,
+              totalOrders: helperClosingReports.length,
+              settlementDataJson: JSON.stringify(dailySummary),
+              status: "sent",
+              sentAt: new Date(),
+              sentBy: adminUserId,
+            });
+          }
+
+          // 인앱 알림
+          await storage.createNotification({
+            userId: helperId,
+            type: "monthly_statement",
+            title: "월 정산서 도착",
+            message: `${year}년 ${month}월 정산서가 발송되었습니다. 확인해주세요.`,
+            relatedId: statement.id,
+            payload: JSON.stringify({ statementId: statement.id, year, month }),
+          });
+
+          // 푸시 알림
+          const payoutText = payoutAmount.toLocaleString() + "원";
+          sendPushToUser(helperId, {
+            title: "월 정산서 도착",
+            body: `${year}년 ${month}월 정산서가 발송되었습니다. 지급 예정: ${payoutText}`,
+            url: "/settlement",
+            tag: `monthly-statement-${year}-${month}`,
+          });
+
+          // SMS
+          const helper = await storage.getUser(helperId);
+          if (helper?.phoneNumber) {
+            try {
+              await smsService.sendCustomMessage(helper.phoneNumber,
+                `[헬프미] ${year}년 ${month}월 정산서가 발송되었습니다. 지급 예정: ${payoutText}. 앱에서 확인하세요.`);
+            } catch (smsErr) {
+              console.error("[SMS Error] monthly statement:", smsErr);
+            }
+          }
+
+          results.push({ helperId, success: true });
+        } catch (helperErr: any) {
+          console.error(`Monthly statement error for helper ${helperId}:`, helperErr);
+          results.push({ helperId, success: false, error: helperErr.message });
+        }
+      }
+
+      const successCount = results.filter(r => r.success).length;
+      const failCount = results.filter(r => !r.success).length;
+
+      res.json({
+        message: `정산서 전송 완료: 성공 ${successCount}건, 실패 ${failCount}건`,
+        results,
+        successCount,
+        failCount,
+      });
+    } catch (err: any) {
+      console.error("Send monthly statement error:", err);
+      res.status(500).json({ message: "정산서 전송에 실패했습니다" });
     }
   });
 

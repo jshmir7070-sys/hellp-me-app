@@ -1,3 +1,8 @@
+/**
+ * SVG icon paths derived from Feather Icons (https://feathericons.com/)
+ * Copyright (c) 2013-2023 Cole Bemis
+ * Licensed under the MIT License (https://github.com/feathericons/feather/blob/main/LICENSE)
+ */
 import React from "react";
 import { View, ViewStyle } from "react-native";
 import Svg, { Path, Circle, Rect, Line, Polyline } from "react-native-svg";

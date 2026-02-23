@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,16 +13,25 @@ import { adminFetch } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { ExcelTable, ColumnDef } from '@/components/common/ExcelTable';
 import { DateRangePicker, getDefaultDateRange, Pagination } from '@/components/common';
-import { 
-  AlertTriangle, 
-  RefreshCw, 
-  Download, 
+import {
+  AlertTriangle,
+  RefreshCw,
+  Download,
   Search,
   Plus,
   DollarSign,
   RotateCcw,
   Check,
   X,
+  CheckCircle,
+  XCircle,
+  User,
+  Phone,
+  FileText,
+  MessageSquare,
+  Image as ImageIcon,
+  Eye,
+  ExternalLink,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -34,12 +44,46 @@ interface Incident {
   incidentType: string;
   description: string;
   requestedAmount: number | null;
+  damageAmount: number | null;
   deductionAmount: number | null;
   deductionReason: string | null;
+  deductionMethod: string | null;
   adminReply: string | null;
+  adminMemo: string | null;
   status: string;
+  reporterId: string | null;
+  reporterType: string | null;
+  helperId: string | null;
+  requesterId: string | null;
+  helperStatus: string | null;
+  helperNote: string | null;
+  helperActionAt: string | null;
+  helperResponseDeadline: string | null;
+  helperResponseRequired: boolean;
+  helperDeductionApplied: boolean;
+  adminForceProcessed: boolean;
+  trackingNumber: string | null;
+  deliveryAddress: string | null;
+  customerName: string | null;
+  customerPhone: string | null;
   createdAt: string;
+  resolvedAt: string | null;
   evidenceUrls?: string[];
+  // enriched from detail API
+  order?: {
+    id: number;
+    orderNumber?: string | null;
+    deliveryArea: string;
+    courierCompany: string;
+    scheduledDate: string;
+    helperName: string;
+    companyName: string;
+  };
+  helper?: { id: string; name: string; phone: string };
+  requester?: { id: string; name: string; phone: string; companyName?: string };
+  reporter?: { id: string; name: string; role: string };
+  evidence?: { id: number; fileUrl: string; fileType: string; description: string }[];
+  actions?: { id: number; actionType: string; note: string; createdAt: string; performedBy: string }[];
 }
 
 interface Deduction {
@@ -94,6 +138,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
+  requested: '접수됨',
   submitted: '접수됨',
   pending: '검토 대기',
   reviewing: '검토 중',
@@ -105,6 +150,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
+  requested: 'bg-blue-100 text-blue-800',
   submitted: 'bg-blue-100 text-blue-800',
   pending: 'bg-yellow-100 text-yellow-800',
   reviewing: 'bg-purple-100 text-purple-800',
@@ -113,6 +159,13 @@ const STATUS_COLORS: Record<string, string> = {
   applied: 'bg-green-100 text-green-800',
   cancelled: 'bg-gray-100 text-gray-800',
   completed: 'bg-green-100 text-green-800',
+};
+
+const HELPER_STATUS_LABELS: Record<string, string> = {
+  item_found: '물품 발견',
+  request_handling: '처리 요청중',
+  confirmed: '동의함',
+  dispute: '이의제기',
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -125,6 +178,16 @@ const CATEGORY_LABELS: Record<string, string> = {
 function formatAmount(amount: number | null | undefined): string {
   if (amount === null || amount === undefined) return '-';
   return amount.toLocaleString('ko-KR') + '원';
+}
+
+function formatOrderNumber(orderNumber: string | null | undefined, orderId: number): string {
+  if (orderNumber) {
+    if (orderNumber.length === 12) {
+      return `${orderNumber.slice(0, 1)}-${orderNumber.slice(1, 4)}-${orderNumber.slice(4, 8)}-${orderNumber.slice(8, 12)}`;
+    }
+    return orderNumber;
+  }
+  return `#${orderId}`;
 }
 
 // ============ 메인 컴포넌트 ============
@@ -160,6 +223,7 @@ export default function IncidentsPageV2() {
   const [selectedRefundDetail, setSelectedRefundDetail] = useState<IncidentRefund | null>(null);
   const [showConfirmRefundModal, setShowConfirmRefundModal] = useState(false);
   const [adminMemo, setAdminMemo] = useState('');
+  const [detailAdminMemo, setDetailAdminMemo] = useState('');
 
   // 페이지네이션 상태
   const [incidentPage, setIncidentPage] = useState(1);
@@ -214,6 +278,19 @@ export default function IncidentsPageV2() {
       return res.json();
     },
   });
+
+  // 사고접수 상세 (선택 시)
+  const { data: incidentDetail } = useQuery<Incident>({
+    queryKey: ['/api/admin/incidents', selectedIncident?.id],
+    queryFn: async () => {
+      const res = await adminFetch(`/api/admin/incidents/${selectedIncident!.id}`);
+      if (!res.ok) throw new Error('Failed to fetch');
+      return res.json();
+    },
+    enabled: !!selectedIncident?.id && isIncidentDetailOpen,
+  });
+
+  const displayIncident = incidentDetail || selectedIncident;
 
   const isLoading = loadingIncidents || loadingDeductions || loadingRefunds;
 
@@ -294,7 +371,7 @@ export default function IncidentsPageV2() {
         '요청금액': item.requestedAmount || 0,
         '차감금액': item.deductionAmount || 0,
         '상태': STATUS_LABELS[item.status] || item.status,
-        '접수일': new Date(item.createdAt).toLocaleDateString('ko-KR'),
+        '접수일': new Date(item.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }),
       }));
       filename = `사고접수_${new Date().toISOString().slice(0, 10)}.csv`;
     } else if (activeTab === 'deductions') {
@@ -306,7 +383,7 @@ export default function IncidentsPageV2() {
         '사유': item.reason,
         '카테고리': CATEGORY_LABELS[item.category || ''] || item.category || '',
         '상태': STATUS_LABELS[item.status] || item.status,
-        '적용일': item.appliedAt ? new Date(item.appliedAt).toLocaleDateString('ko-KR') : '',
+        '적용일': item.appliedAt ? new Date(item.appliedAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
       }));
       filename = `사고차감_${new Date().toISOString().slice(0, 10)}.csv`;
     } else {
@@ -318,7 +395,7 @@ export default function IncidentsPageV2() {
         '요청금액': item.requestedAmount,
         '환불금액': item.refundAmount || item.requestedAmount,
         '환불상태': item.requesterRefundApplied ? '완료' : '대기',
-        '확정일': item.refundConfirmedAt ? new Date(item.refundConfirmedAt).toLocaleDateString('ko-KR') : '',
+        '확정일': item.refundConfirmedAt ? new Date(item.refundConfirmedAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
       }));
       filename = `사고환불_${new Date().toISOString().slice(0, 10)}.csv`;
     }
@@ -422,6 +499,47 @@ export default function IncidentsPageV2() {
     },
   });
 
+  // 사고 상태 변경 (검토중, 해결, 기각)
+  const updateIncidentMutation = useMutation({
+    mutationFn: async (data: { id: number; status: string; adminMemo?: string; deductionAmount?: number; deductionReason?: string; deductionMethod?: string }) => {
+      const res = await adminFetch(`/api/admin/incidents/${data.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error('Failed to update');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/incidents'] });
+      toast({ title: '사고 상태가 변경되었습니다', variant: 'success' });
+      setIsIncidentDetailOpen(false);
+      setSelectedIncident(null);
+    },
+  });
+
+  // 사고 차감 확정 — 필요 시 재활성화
+  // const confirmIncidentDeductionMutation = useMutation({ ... });
+
+  // 관리자 강제 처리
+  const forceProcessMutation = useMutation({
+    mutationFn: async (data: { id: number; reason: string }) => {
+      const res = await adminFetch(`/api/admin/incidents/${data.id}/force-process`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: data.reason }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/incidents'] });
+      toast({ title: '강제 처리 완료', variant: 'success' });
+      setIsIncidentDetailOpen(false);
+      setSelectedIncident(null);
+    },
+  });
+
   // ============ 컬럼 정의 ============
 
   const incidentColumns: ColumnDef<Incident>[] = [
@@ -484,7 +602,7 @@ export default function IncidentsPageV2() {
       header: '접수일',
       width: 100,
       render: (value) => (
-        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR')}</span>
+        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
       ),
     },
   ];
@@ -547,7 +665,7 @@ export default function IncidentsPageV2() {
       header: '적용일',
       width: 100,
       render: (value) => value ? (
-        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR')}</span>
+        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
       ) : (
         <span className="text-sm text-muted-foreground">-</span>
       ),
@@ -655,7 +773,7 @@ export default function IncidentsPageV2() {
       header: '확정일',
       width: 100,
       render: (value) => value ? (
-        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR')}</span>
+        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
       ) : (
         <span className="text-sm text-muted-foreground">-</span>
       ),
@@ -1070,80 +1188,393 @@ export default function IncidentsPageV2() {
       </Dialog>
 
       {/* 사고접수 상세 모달 */}
-      <Dialog open={isIncidentDetailOpen} onOpenChange={setIsIncidentDetailOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>사고접수 상세</DialogTitle>
-          </DialogHeader>
-          {selectedIncident && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">사고 ID</p>
-                  <p className="font-medium">{selectedIncident.id}</p>
+      <Dialog open={isIncidentDetailOpen} onOpenChange={(open) => { setIsIncidentDetailOpen(open); if (!open) { setSelectedIncident(null); setDetailAdminMemo(''); } }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          {displayIncident && (() => {
+            const status = displayIncident.status || 'requested';
+            const isRejected = status === 'rejected';
+            const stepIdx = status === 'resolved' || status === 'completed' ? 3
+              : status === 'rejected' ? 3
+              : status === 'reviewing' ? 2 : 1;
+            const steps = [
+              { key: 'requested', label: '접수' },
+              { key: 'reviewing', label: '검토 중' },
+              { key: 'resolved', label: '완료' },
+            ];
+
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-xs font-medium">사고접수</span>
+                    #{displayIncident.id}
+                    <span className="text-sm font-normal text-muted-foreground ml-1">
+                      {TYPE_LABELS[displayIncident.incidentType] || displayIncident.incidentType}
+                    </span>
+                  </DialogTitle>
+                </DialogHeader>
+
+                {/* 프로그레스 스테퍼 */}
+                <div className="flex items-center justify-center gap-0 my-4">
+                  {steps.map((step, idx) => (
+                    <div key={step.key} className="flex items-center">
+                      <div className="flex flex-col items-center">
+                        <div className={cn(
+                          'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2',
+                          idx + 1 < stepIdx ? 'bg-green-500 border-green-500 text-white' :
+                          idx + 1 === stepIdx && isRejected && idx === 2 ? 'bg-red-500 border-red-500 text-white' :
+                          idx + 1 === stepIdx ? 'bg-blue-500 border-blue-500 text-white' :
+                          'bg-gray-100 border-gray-300 text-gray-400'
+                        )}>
+                          {idx + 1 < stepIdx ? <CheckCircle className="w-4 h-4" /> :
+                           idx + 1 === stepIdx && isRejected ? <XCircle className="w-4 h-4" /> :
+                           idx + 1}
+                        </div>
+                        <span className={cn(
+                          'text-xs mt-1',
+                          idx + 1 <= stepIdx ? 'text-foreground font-medium' : 'text-muted-foreground'
+                        )}>
+                          {isRejected && idx === 2 ? '기각' : step.label}
+                        </span>
+                      </div>
+                      {idx < steps.length - 1 && (
+                        <div className={cn(
+                          'w-16 h-0.5 mx-2 mt-[-14px]',
+                          idx + 1 < stepIdx ? 'bg-green-500' : 'bg-gray-200'
+                        )} />
+                      )}
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">주문 ID</p>
-                  <p className="font-medium">{selectedIncident.orderId}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">사고 유형</p>
-                  <p className="font-medium">{selectedIncident.incidentType}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">상태</p>
-                  <Badge variant={selectedIncident.status === 'resolved' ? 'default' : 'secondary'}>
-                    {selectedIncident.status}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">요청 금액</p>
-                  <p className="font-medium">{selectedIncident.requestedAmount?.toLocaleString() ?? '-'}원</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">차감 금액</p>
-                  <p className="font-medium">{selectedIncident.deductionAmount?.toLocaleString() ?? '-'}원</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">접수일</p>
-                  <p className="font-medium">{new Date(selectedIncident.createdAt).toLocaleDateString('ko-KR')}</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">사고 설명</p>
-                <p className="mt-1 text-sm whitespace-pre-wrap">{selectedIncident.description}</p>
-              </div>
-              {selectedIncident.deductionReason && (
-                <div>
-                  <p className="text-sm text-muted-foreground">차감 사유</p>
-                  <p className="mt-1 text-sm">{selectedIncident.deductionReason}</p>
-                </div>
-              )}
-              {selectedIncident.adminReply && (
-                <div>
-                  <p className="text-sm text-muted-foreground">관리자 답변</p>
-                  <p className="mt-1 text-sm">{selectedIncident.adminReply}</p>
-                </div>
-              )}
-              {selectedIncident.evidenceUrls && selectedIncident.evidenceUrls.length > 0 && (
-                <div>
-                  <p className="text-sm text-muted-foreground">증거자료</p>
-                  <div className="flex gap-2 mt-2 flex-wrap">
-                    {selectedIncident.evidenceUrls.map((url, idx) => (
-                      <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline text-sm">
-                        첨부파일 {idx + 1}
-                      </a>
-                    ))}
+
+                <div className="space-y-4">
+                  {/* 기본 정보 */}
+                  <div className="grid grid-cols-3 gap-3 text-sm bg-muted/30 rounded-lg p-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">사고 유형</p>
+                      <p className="font-medium">{TYPE_LABELS[displayIncident.incidentType] || displayIncident.incidentType}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">상태</p>
+                      <span className={cn('px-2 py-0.5 rounded text-xs font-medium', STATUS_COLORS[status] || 'bg-gray-100')}>
+                        {STATUS_LABELS[status] || status}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">접수자</p>
+                      <p className="font-medium">
+                        <span className={cn(
+                          'px-2 py-0.5 rounded text-xs font-medium',
+                          displayIncident.reporterType === 'requester' ? 'bg-green-100 text-green-700' :
+                          displayIncident.reporterType === 'helper' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-700'
+                        )}>
+                          {displayIncident.reporterType === 'requester' ? '요청자' : displayIncident.reporterType === 'helper' ? '헬퍼' : '본사'}
+                        </span>
+                        <span className="ml-1">{displayIncident.reporter?.name || '알 수 없음'}</span>
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">접수일</p>
+                      <p className="font-medium">{displayIncident.createdAt ? new Date(displayIncident.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">오더</p>
+                      <p className="font-medium">{formatOrderNumber(displayIncident.order?.orderNumber, displayIncident.orderId)}</p>
+                    </div>
+                    {displayIncident.order?.scheduledDate && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">배송일</p>
+                        <p className="font-medium">{new Date(displayIncident.order.scheduledDate).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</p>
+                      </div>
+                    )}
                   </div>
+
+                  {/* 사고 설명 */}
+                  {displayIncident.description && (
+                    <div className="bg-muted/20 rounded-lg p-4">
+                      <p className="text-sm font-medium mb-1 flex items-center gap-1">
+                        <FileText className="w-4 h-4" />
+                        사고 설명
+                      </p>
+                      <p className="text-sm whitespace-pre-wrap">{displayIncident.description}</p>
+                    </div>
+                  )}
+
+                  {/* 금액 정보 (핵심 섹션) */}
+                  {(displayIncident.damageAmount || displayIncident.deductionAmount || displayIncident.requestedAmount) && (
+                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                      <p className="text-sm font-medium mb-3 flex items-center gap-1 text-orange-800">
+                        <DollarSign className="w-4 h-4" />
+                        금액 정보
+                      </p>
+                      <div className="grid grid-cols-3 gap-3 text-sm">
+                        <div className="text-center bg-white rounded p-2 border">
+                          <p className="text-xs text-muted-foreground mb-1">피해 금액</p>
+                          <p className="text-lg font-bold text-orange-700">{formatAmount(displayIncident.damageAmount)}</p>
+                        </div>
+                        <div className="text-center bg-white rounded p-2 border">
+                          <p className="text-xs text-muted-foreground mb-1">차감 금액</p>
+                          <p className="text-lg font-bold text-red-600">{formatAmount(displayIncident.deductionAmount)}</p>
+                        </div>
+                        <div className="text-center bg-white rounded p-2 border">
+                          <p className="text-xs text-muted-foreground mb-1">차감 방법</p>
+                          <p className="text-sm font-medium mt-1">
+                            {displayIncident.deductionMethod === 'helper_deduct' ? '헬퍼 정산 공제'
+                              : displayIncident.deductionMethod === 'requester_refund' ? '요청자 환불'
+                              : displayIncident.deductionMethod === 'both' ? '공제 + 환불'
+                              : '-'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 오더 정보 */}
+                  {displayIncident.order && (
+                    <div className="bg-muted/20 rounded-lg p-4">
+                      <p className="text-sm font-medium mb-2">오더 정보</p>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">오더번호</p>
+                          <p className="font-medium">{formatOrderNumber(displayIncident.order.orderNumber, displayIncident.order.id)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">운송사</p>
+                          <p className="font-medium">{displayIncident.order.courierCompany || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">배송지역</p>
+                          <p className="font-medium">{displayIncident.order.deliveryArea || '-'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">수행 헬퍼</p>
+                          <p className="font-medium">{displayIncident.order.helperName || displayIncident.helper?.name || '-'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 헬퍼/요청자 정보 */}
+                  {(displayIncident.helper || displayIncident.requester) && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {displayIncident.helper && (
+                        <div className="bg-muted/20 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <User className="w-4 h-4 text-muted-foreground" />
+                            <p className="text-xs font-medium text-muted-foreground">헬퍼</p>
+                          </div>
+                          <p className="text-sm font-medium">{displayIncident.helper.name}</p>
+                          {displayIncident.helper.phone && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                              <Phone className="w-3 h-3" />{displayIncident.helper.phone}
+                            </p>
+                          )}
+                          {displayIncident.helperStatus && (
+                            <span className={cn(
+                              'inline-block mt-2 px-2 py-0.5 rounded text-xs font-medium',
+                              displayIncident.helperStatus === 'confirmed' ? 'bg-green-100 text-green-700' :
+                              displayIncident.helperStatus === 'dispute' ? 'bg-red-100 text-red-700' :
+                              'bg-gray-100 text-gray-700'
+                            )}>
+                              {HELPER_STATUS_LABELS[displayIncident.helperStatus] || displayIncident.helperStatus}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {displayIncident.requester && (
+                        <div className="bg-muted/20 rounded-lg p-3">
+                          <div className="flex items-center gap-2 mb-2">
+                            <User className="w-4 h-4 text-muted-foreground" />
+                            <p className="text-xs font-medium text-muted-foreground">요청자 (업체)</p>
+                          </div>
+                          <p className="text-sm font-medium">{displayIncident.requester.name}</p>
+                          {displayIncident.requester.companyName && (
+                            <p className="text-xs text-muted-foreground">{displayIncident.requester.companyName}</p>
+                          )}
+                          {displayIncident.requester.phone && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                              <Phone className="w-3 h-3" />{displayIncident.requester.phone}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 헬퍼 응답 상태 */}
+                  {displayIncident.helperResponseRequired && (
+                    <div className={cn(
+                      "rounded-lg p-4 border",
+                      displayIncident.helperStatus === 'dispute' ? "bg-red-50 border-red-200" :
+                      displayIncident.helperStatus === 'confirmed' ? "bg-green-50 border-green-200" :
+                      "bg-yellow-50 border-yellow-200"
+                    )}>
+                      <p className="text-sm font-medium mb-3 flex items-center gap-1">
+                        <AlertTriangle className="w-4 h-4" />
+                        헬퍼 대응 상태
+                      </p>
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <p className="text-xs text-muted-foreground">헬퍼 상태</p>
+                          <p className="font-medium">{displayIncident.helperStatus ? (HELPER_STATUS_LABELS[displayIncident.helperStatus] || displayIncident.helperStatus) : '미응답'}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">응답 기한</p>
+                          <p className="font-medium">{displayIncident.helperResponseDeadline ? new Date(displayIncident.helperResponseDeadline).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'}</p>
+                        </div>
+                        {displayIncident.helperNote && (
+                          <div className="col-span-2">
+                            <p className="text-xs text-muted-foreground">헬퍼 메모</p>
+                            <p className="text-sm mt-1">{displayIncident.helperNote}</p>
+                          </div>
+                        )}
+                        <div>
+                          <p className="text-xs text-muted-foreground">차감 적용</p>
+                          <span className={cn(
+                            'px-2 py-0.5 rounded text-xs font-medium',
+                            displayIncident.helperDeductionApplied ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
+                          )}>
+                            {displayIncident.helperDeductionApplied ? '차감됨' : '미적용'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 증거자료 */}
+                  {displayIncident.evidence && displayIncident.evidence.length > 0 && (
+                    <div className="bg-muted/20 rounded-lg p-4">
+                      <p className="text-sm font-medium mb-2 flex items-center gap-1">
+                        <ImageIcon className="w-4 h-4" />
+                        증거자료 ({displayIncident.evidence.length})
+                      </p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {displayIncident.evidence.map((ev, idx) => (
+                          <a key={ev.id || idx} href={ev.fileUrl?.startsWith('http') ? ev.fileUrl : `${window.location.origin}${ev.fileUrl}`} target="_blank" rel="noopener noreferrer"
+                             className="block aspect-square bg-gray-100 rounded overflow-hidden hover:opacity-80">
+                            {ev.fileType?.startsWith('image') ? (
+                              <img src={ev.fileUrl?.startsWith('http') ? ev.fileUrl : `${window.location.origin}${ev.fileUrl}`} alt={`증거 ${idx + 1}`} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+                                첨부 {idx + 1}
+                              </div>
+                            )}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 관리자 처리 내역 */}
+                  {(displayIncident.adminMemo || displayIncident.adminReply || displayIncident.deductionReason) && (
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 space-y-2">
+                      <p className="text-sm font-medium text-emerald-800">관리자 처리 내역</p>
+                      {(displayIncident.adminMemo || displayIncident.adminReply) && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">관리자 메모</p>
+                          <p className="text-sm whitespace-pre-wrap">{displayIncident.adminMemo || displayIncident.adminReply}</p>
+                        </div>
+                      )}
+                      {displayIncident.deductionReason && (
+                        <div>
+                          <p className="text-xs text-muted-foreground">차감 사유</p>
+                          <p className="text-sm whitespace-pre-wrap">{displayIncident.deductionReason}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 관리자 메모 입력 (미완료 상태) */}
+                  {!['resolved', 'rejected', 'completed'].includes(status) && (
+                    <div className="bg-muted/20 rounded-lg p-4 space-y-2">
+                      <Label className="text-sm font-medium flex items-center gap-1">
+                        <MessageSquare className="w-4 h-4" />
+                        관리자 답변 / 처리 메모
+                      </Label>
+                      <Textarea
+                        value={detailAdminMemo}
+                        onChange={(e) => setDetailAdminMemo(e.target.value)}
+                        placeholder="사고접수에 대한 답변 또는 처리 사유를 입력하세요..."
+                        rows={3}
+                      />
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setIsIncidentDetailOpen(false); setSelectedIncident(null); }}>
-              닫기
-            </Button>
-          </DialogFooter>
+
+                {/* 액션 버튼 */}
+                <DialogFooter className="flex flex-wrap gap-2 sm:justify-start">
+                  {/* 오더 상세 이동 */}
+                  {displayIncident.orderId && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-blue-600 border-blue-300 hover:bg-blue-50"
+                      asChild
+                    >
+                      <Link to={`/closings?orderId=${displayIncident.orderId}`}>
+                        <ExternalLink className="w-4 h-4 mr-1" />
+                        오더 보기
+                      </Link>
+                    </Button>
+                  )}
+
+                  {(status === 'requested' || status === 'submitted') && (
+                    <Button
+                      size="sm"
+                      onClick={() => updateIncidentMutation.mutate({ id: displayIncident.id, status: 'reviewing' })}
+                      disabled={updateIncidentMutation.isPending}
+                    >
+                      <Eye className="w-4 h-4 mr-1" />
+                      검토 시작
+                    </Button>
+                  )}
+                  {status === 'reviewing' && (
+                    <>
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                        onClick={() => {
+                          const memo = detailAdminMemo.trim() || '사고 인정 처리';
+                          updateIncidentMutation.mutate({ id: displayIncident.id, status: 'resolved', adminMemo: memo });
+                        }}
+                        disabled={updateIncidentMutation.isPending}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        인정 (해결)
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          const memo = detailAdminMemo.trim() || '사고 기각 처리';
+                          updateIncidentMutation.mutate({ id: displayIncident.id, status: 'rejected', adminMemo: memo });
+                        }}
+                        disabled={updateIncidentMutation.isPending}
+                      >
+                        <XCircle className="w-4 h-4 mr-1" />
+                        기각
+                      </Button>
+                    </>
+                  )}
+                  {!displayIncident.adminForceProcessed && displayIncident.helperResponseDeadline && new Date(displayIncident.helperResponseDeadline) < new Date() && !displayIncident.helperStatus && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-orange-600 border-orange-300 hover:bg-orange-50"
+                      onClick={() => forceProcessMutation.mutate({ id: displayIncident.id, reason: '헬퍼 응답 기한 초과' })}
+                      disabled={forceProcessMutation.isPending}
+                    >
+                      강제 처리
+                    </Button>
+                  )}
+                  <Button variant="outline" size="sm" onClick={() => { setIsIncidentDetailOpen(false); setSelectedIncident(null); setDetailAdminMemo(''); }}>
+                    닫기
+                  </Button>
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -1162,7 +1593,7 @@ export default function IncidentsPageV2() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">주문 ID</p>
-                  <p className="font-medium">{selectedDeduction.orderId ? `#${selectedDeduction.orderId}` : '-'}</p>
+                  <p className="font-medium">{selectedDeduction.orderId ? formatOrderNumber(null, selectedDeduction.orderId) : '-'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">대상자</p>
@@ -1195,12 +1626,12 @@ export default function IncidentsPageV2() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">생성일</p>
-                  <p className="font-medium">{new Date(selectedDeduction.createdAt).toLocaleDateString('ko-KR')}</p>
+                  <p className="font-medium">{new Date(selectedDeduction.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</p>
                 </div>
                 {selectedDeduction.appliedAt && (
                   <div>
                     <p className="text-sm text-muted-foreground">적용일</p>
-                    <p className="font-medium">{new Date(selectedDeduction.appliedAt).toLocaleDateString('ko-KR')}</p>
+                    <p className="font-medium">{new Date(selectedDeduction.appliedAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</p>
                   </div>
                 )}
                 {selectedDeduction.appliedToSettlementId && (
@@ -1278,12 +1709,12 @@ export default function IncidentsPageV2() {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">접수일</p>
-                  <p className="font-medium">{new Date(selectedRefundDetail.createdAt).toLocaleDateString('ko-KR')}</p>
+                  <p className="font-medium">{new Date(selectedRefundDetail.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</p>
                 </div>
                 {selectedRefundDetail.refundConfirmedAt && (
                   <div>
                     <p className="text-sm text-muted-foreground">확정일</p>
-                    <p className="font-medium">{new Date(selectedRefundDetail.refundConfirmedAt).toLocaleDateString('ko-KR')}</p>
+                    <p className="font-medium">{new Date(selectedRefundDetail.refundConfirmedAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</p>
                   </div>
                 )}
               </div>

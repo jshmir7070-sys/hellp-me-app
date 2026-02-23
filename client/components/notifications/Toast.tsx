@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View, Dimensions, Pressable } from 'react-native';
+import { StyleSheet, View, Pressable } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -66,8 +66,6 @@ const TOAST_VARIANTS: Record<ToastVariant, ToastVariantConfig> = {
   },
 };
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-const TOAST_WIDTH = SCREEN_WIDTH - 32;
 const TOAST_HEIGHT = 76; // Includes 12px margin
 const SWIPE_THRESHOLD = -50;
 
@@ -170,6 +168,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
+    maxWidth: 500,
+    alignSelf: 'center',
     zIndex: 9999,
   },
   container: {

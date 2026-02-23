@@ -15,6 +15,7 @@ import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/them
 import { JobsStackParamList } from "@/navigation/types";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
 import { getToken } from '@/utils/secure-token-storage';
+import { useResponsive } from "@/hooks/useResponsive";
 
 type ClosingReportScreenProps = NativeStackScreenProps<JobsStackParamList, 'ClosingReport'>;
 
@@ -29,6 +30,7 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const { orderId } = route.params;
   const queryClient = useQueryClient();
 
@@ -215,12 +217,18 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
     setExtraCosts(extraCosts.filter((_, i) => i !== index));
   };
 
-  const calculateTotal = () => {
+  const calculateSupply = () => {
     const unitPrice = order?.pricePerUnit || 0;
     const delivered = parseInt(deliveredCount) || 0;
     const returns = parseInt(returnedCount) || 0;
+    const etc = parseInt(etcCount) || 0;
     const extras = extraCosts.reduce((sum, c) => sum + c.amount, 0);
-    return (delivered + returns) * unitPrice + extras;
+    return (delivered + returns) * unitPrice + etc * etcPricePerUnit + extras;
+  };
+
+  const calculateTotal = () => {
+    const supply = calculateSupply();
+    return supply + Math.round(supply * 0.1); // 공급가 + VAT 10%
   };
 
   const handleSubmit = () => {
@@ -252,8 +260,13 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
       <ScrollView
         contentContainerStyle={{
           paddingTop: Spacing.lg,
-          paddingBottom: tabBarHeight + Spacing.xl,
+          paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
           paddingHorizontal: Spacing.lg,
+          ...(showDesktopLayout && {
+            maxWidth: containerMaxWidth,
+            alignSelf: 'center' as const,
+            width: '100%' as any,
+          }),
         }}
       >
         {/* 오더 정보 섹션 */}
@@ -324,18 +337,26 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
 
         <Card style={styles.card}>
           <View style={styles.sectionHeader}>
-            <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
-              기타비용
-            </ThemedText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
+                추가비용
+              </ThemedText>
+              <View style={{ backgroundColor: '#FEF3C7', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                <ThemedText style={{ fontSize: 10, fontWeight: '600', color: '#92400E' }}>VAT별도</ThemedText>
+              </View>
+            </View>
             <Pressable style={[styles.addButton, { borderColor: BrandColors.helper }]} onPress={addExtraCost}>
               <Icon name="add-outline" size={16} color={BrandColors.helper} />
               <ThemedText style={[styles.addButtonText, { color: BrandColors.helper }]}>추가</ThemedText>
             </Pressable>
           </View>
+          <ThemedText style={{ fontSize: 11, color: theme.tabIconDefault, marginBottom: 8 }}>
+            공급가액(VAT별도)으로 입력하세요. 부가세 10%는 자동 계산됩니다.
+          </ThemedText>
 
           {extraCosts.length === 0 ? (
             <ThemedText style={[styles.emptyText, { color: theme.tabIconDefault }]}>
-              기타비용이 없습니다
+              추가비용이 없습니다
             </ThemedText>
           ) : (
             extraCosts.map((cost, index) => (
@@ -352,7 +373,7 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
                   value={cost.amount ? String(cost.amount) : ""}
                   onChangeText={(v) => updateExtraCost(index, "amount", v)}
                   keyboardType="numeric"
-                  placeholder="금액"
+                  placeholder="공급가액"
                   placeholderTextColor={theme.tabIconDefault}
                 />
                 <Pressable onPress={() => removeExtraCost(index)} style={styles.removeButton}>
@@ -466,7 +487,19 @@ export default function ClosingReportScreen({ navigation, route }: ClosingReport
 
         <Card style={styles.summaryCard}>
           <View style={styles.summaryRow}>
-            <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>예상 정산 금액</ThemedText>
+            <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>공급가액</ThemedText>
+            <ThemedText style={[styles.summaryLabel, { color: theme.text }]}>
+              {new Intl.NumberFormat("ko-KR").format(calculateSupply())}원
+            </ThemedText>
+          </View>
+          <View style={styles.summaryRow}>
+            <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>부가세 (10%)</ThemedText>
+            <ThemedText style={[styles.summaryLabel, { color: theme.text }]}>
+              {new Intl.NumberFormat("ko-KR").format(Math.round(calculateSupply() * 0.1))}원
+            </ThemedText>
+          </View>
+          <View style={styles.summaryRow}>
+            <ThemedText style={[styles.summaryLabel, { color: theme.tabIconDefault }]}>예상 합계 (VAT 포함)</ThemedText>
             <ThemedText style={[styles.summaryValue, { color: BrandColors.helper }]}>
               {new Intl.NumberFormat("ko-KR").format(calculateTotal())}원
             </ThemedText>

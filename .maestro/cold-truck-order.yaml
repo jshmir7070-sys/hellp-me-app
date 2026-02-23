@@ -1,0 +1,62 @@
+# ============================================
+# 냉탑전용 오더 등록 테스트 (로그인 → 오더등록 전체 플로우)
+# ============================================
+
+appId: host.exp.exponent
+
+---
+
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# ── 로그인 ──
+- tapOn: "이메일을 입력하세요"
+- inputText: ${TEST_EMAIL}
+- tapOn: "비밀번호를 입력하세요"
+- inputText: ${TEST_PASSWORD}
+- hideKeyboard
+- scrollUntilVisible:
+    element: "로그인"
+    direction: DOWN
+- tapOn: "로그인"
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# ── 홈 화면 확인 ──
+- assertVisible: "홈"
+- takeScreenshot: "cold-00-login-success"
+
+# ── 오더등록 탭으로 이동 ──
+- tapOn: "오더등록"
+- waitForAnimationToEnd
+
+- takeScreenshot: "cold-01-order-tab"
+
+# ── 냉탑전용 탭 선택 ──
+- tapOn: "냉탑전용"
+- waitForAnimationToEnd
+
+- takeScreenshot: "cold-02-cold-truck-tab"
+
+# ── 업체명 텍스트 입력 확인 ──
+- assertVisible: "냉탑 업체명"
+
+- takeScreenshot: "cold-03-company-input-empty"
+
+# ── 업체명 입력 ──
+- tapOn: "업체명 입력 (최소 2자)"
+- inputText: "테스트냉동"
+- hideKeyboard
+- waitForAnimationToEnd
+
+- takeScreenshot: "cold-04-valid-input"
+
+# ── 다음 버튼 클릭 ──
+- tapOn: "다음"
+- waitForAnimationToEnd
+
+# ── 2단계 화면 진입 확인 ──
+- assertVisible: "2단계"
+
+- takeScreenshot: "cold-05-step2-reached"

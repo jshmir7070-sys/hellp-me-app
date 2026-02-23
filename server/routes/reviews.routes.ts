@@ -19,6 +19,19 @@ export function registerReviewRoutes(ctx: RouteContext): void {
 
       const { contractId, orderId, helperId, rating, comment } = req.body;
 
+      // 평점 유효성 검증
+      if (typeof rating !== 'number' || rating < 1 || rating > 5) {
+        return res.status(400).json({ message: "평점은 1~5 사이여야 합니다" });
+      }
+
+      // 오더 소유권 검증
+      if (orderId) {
+        const order = await storage.getOrder(Number(orderId));
+        if (!order || (order as any).requesterId !== userId) {
+          return res.status(403).json({ message: "이 오더에 대한 리뷰 권한이 없습니다" });
+        }
+      }
+
       // Check for requester->helper review specifically
       const existingReview = await storage.getReviewByContractAndType(contractId, "requester");
       if (existingReview) {
@@ -47,7 +60,7 @@ export function registerReviewRoutes(ctx: RouteContext): void {
         try {
           const helperReviews = await storage.getHelperReviews(resolvedHelperId);
           const totalRating = helperReviews.reduce((sum: number, r: any) => sum + r.rating, 0);
-          const avgRating = helperReviews.length > 0 ? Math.round((totalRating / helperReviews.length) * 100) : 0;
+          const avgRating = helperReviews.length > 0 ? Math.round((totalRating / helperReviews.length) * 10) / 10 : 0;
           await storage.upsertHelperRatingSummary({
             helperUserId: resolvedHelperId,
             avgRating,
@@ -65,7 +78,7 @@ export function registerReviewRoutes(ctx: RouteContext): void {
   });
 
   // 헬퍼 리뷰 목록 및 평균 평점
-  app.get("/api/reviews/helper/:helperId", async (req, res) => {
+  app.get("/api/reviews/helper/:helperId", requireAuth, async (req: any, res) => {
     try {
       const reviews = await storage.getHelperReviews(req.params.helperId);
       const avgRating = await storage.getHelperAverageRating(req.params.helperId);

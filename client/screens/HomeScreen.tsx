@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { View, FlatList, Pressable, StyleSheet, RefreshControl, ActivityIndicator, ScrollView, Dimensions, Modal, Alert, Platform, Image, Linking } from "react-native";
+import { View, FlatList, Pressable, StyleSheet, RefreshControl, ActivityIndicator, ScrollView, Modal, Alert, Platform, Image, Linking, Dimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
@@ -17,12 +17,14 @@ import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { OrderCard } from "@/components/order/OrderCard";
 import { EditOrderModal } from "@/components/order/EditOrderModal";
-import { JobDetailModal } from "@/components/order/JobDetailModal";
 import { adaptHelperMyOrder, adaptRequesterOrder, type OrderCardDTO } from "@/adapters/orderCardAdapter";
 import { Avatar } from "@/components/Avatar";
 import { HelperCard } from "@/components/HelperCard";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
 import { apiRequest, getApiUrl } from "@/lib/query-client";
+import { useOrderWebSocket } from "@/hooks/useOrderWebSocket";
+import { BannerAdCarousel } from "@/components/BannerAdCarousel";
+import { useNavigation, useFocusEffect } from "@react-navigation/native";
 
 interface Applicant {
   id: number;
@@ -48,9 +50,16 @@ interface Applicant {
     createdAt: string;
     requesterName?: string;
   }>;
+  recentReviews?: Array<{
+    id: number;
+    rating: number;
+    comment?: string;
+    createdAt: string;
+    requesterName?: string;
+  }>;
 }
 
-const SCREEN_WIDTH = Dimensions.get("window").width;
+// SCREEN_WIDTH는 제거 — useResponsive().contentWidth 사용
 
 interface DashboardStats {
   monthlyEarnings?: number;
@@ -94,6 +103,7 @@ interface PopupAnnouncement {
   imageUrl?: string | null;
   linkUrl?: string | null;
   isPopup: boolean;
+  type?: string; // "notice" | "ad"
   priority?: string;
   createdAt: string;
 }
@@ -105,30 +115,37 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
-  const { user } = useAuth();
-  const { isDesktop, isTablet, isMobile, containerMaxWidth } = useResponsive();
+  const { user, refreshUser } = useAuth();
+
+  // WebSocket 연결 (실시간 오더 + 온보딩 상태 업데이트)
+  useOrderWebSocket({ onOnboardingUpdate: refreshUser });
+  const { isDesktop, isTablet, isMobile, containerMaxWidth, contentWidth, showDesktopLayout, columns } = useResponsive();
 
   const [editOrder, setEditOrder] = useState<any>(null);
-  const [selectedOrder, setSelectedOrder] = useState<OrderCardDTO | null>(null);
-  const [selectedRawOrder, setSelectedRawOrder] = useState<any>(null);
-  const [modalVisible, setModalVisible] = useState(false);
 
   // 팝업 공지 상태
   const [popupVisible, setPopupVisible] = useState(false);
   const [currentPopupIndex, setCurrentPopupIndex] = useState(0);
   const [dismissedToday, setDismissedToday] = useState<Record<number, boolean>>({});
+  // 공지/광고 분리 상태
+  const [popupPhase, setPopupPhase] = useState<'notice' | 'ad'>('notice');
+  const [currentAdIndex, setCurrentAdIndex] = useState(0);
+  const [adsDismissedToday, setAdsDismissedToday] = useState(false);
+  const adScrollRef = useRef<ScrollView>(null);
+  const adTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const AD_CAROUSEL_WIDTH = Math.min(360, Dimensions.get('window').width - Spacing.xl * 2);
 
   const isHelper = user?.role === 'helper';
   const primaryColor = isHelper ? BrandColors.helper : BrandColors.requester;
   
   const showOnboardingBanner = isHelper && user?.onboardingStatus !== 'approved';
 
-  const { data: helperStats, isLoading: isLoadingHelperStats } = useQuery<any>({
+  const { data: helperStats, isLoading: isLoadingHelperStats, refetch: refetchHelperStats } = useQuery<any>({
     queryKey: ['/api/helper/work-history', { limit: 10 }],
     enabled: isHelper,
   });
 
-  const { data: requesterOrders, isLoading: isLoadingRequesterOrders } = useQuery<any[]>({
+  const { data: requesterOrders, isLoading: isLoadingRequesterOrders, refetch: refetchRequesterOrders } = useQuery<any[]>({
     queryKey: ['/api/requester/orders'],
     enabled: !isHelper,
   });
@@ -153,9 +170,21 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
   }, [isHelper, helperStats, requesterOrders]);
 
   const isLoadingStats = isHelper ? isLoadingHelperStats : isLoadingRequesterOrders;
-  const isRefetching = false;
+  const [isRefetching, setIsRefetching] = useState(false);
 
-  const refetchStats = () => {};
+  const refetchStats = useCallback(async () => {
+    setIsRefetching(true);
+    try {
+      if (isHelper) {
+        await refetchHelperStats?.();
+        await refetchScheduled?.();
+      } else {
+        await refetchRequesterOrders?.();
+      }
+    } finally {
+      setIsRefetching(false);
+    }
+  }, [isHelper]);
 
   const { data: scheduledOrdersRaw = [], refetch: refetchScheduled } = useQuery<any[]>({
     queryKey: ['/api/orders/scheduled'],
@@ -188,14 +217,21 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, []);
 
-  // AsyncStorage에서 오늘 dismiss한 공지 ID 로드
+  // AsyncStorage에서 오늘 dismiss한 공지/광고 ID 로드
   useEffect(() => {
     const loadDismissed = async () => {
       try {
-        const key = `popup_dismissed_${getTodayDate()}`;
+        const today = getTodayDate();
+        const key = `popup_dismissed_${today}`;
         const stored = await AsyncStorage.getItem(key);
         if (stored) {
           setDismissedToday(JSON.parse(stored));
+        }
+        // 광고 그룹 dismiss 로드
+        const adKey = `ad_dismissed_${today}`;
+        const adStored = await AsyncStorage.getItem(adKey);
+        if (adStored === 'true') {
+          setAdsDismissedToday(true);
         }
       } catch (e) {
         console.error("Failed to load dismissed popups:", e);
@@ -204,22 +240,34 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     loadDismissed();
   }, [getTodayDate]);
 
-  // 표시할 팝업이 있으면 모달 표시
-  const visiblePopups = useMemo(() => {
-    return popupAnnouncements.filter(a => !dismissedToday[a.id]);
+  // 공지와 광고를 분리
+  const visibleNotices = useMemo(() => {
+    return popupAnnouncements.filter(a => (a.type || 'notice') !== 'ad' && !dismissedToday[a.id]);
   }, [popupAnnouncements, dismissedToday]);
 
+  const visibleAds = useMemo(() => {
+    if (adsDismissedToday) return [];
+    return popupAnnouncements.filter(a => a.type === 'ad');
+  }, [popupAnnouncements, adsDismissedToday]);
+
+  // 팝업 표시 트리거: 공지 먼저 → 공지 없으면 광고
   useEffect(() => {
-    if (visiblePopups.length > 0 && !popupVisible) {
+    if (visibleNotices.length > 0 && !popupVisible) {
+      setPopupPhase('notice');
       setCurrentPopupIndex(0);
       setPopupVisible(true);
+    } else if (visibleNotices.length === 0 && visibleAds.length > 0 && !popupVisible && !adsDismissedToday) {
+      setPopupPhase('ad');
+      setCurrentAdIndex(0);
+      setPopupVisible(true);
     }
-  }, [visiblePopups.length]);
+  }, [visibleNotices.length, visibleAds.length, adsDismissedToday]);
 
-  const currentPopup: PopupAnnouncement | null = visiblePopups.length > 0 && currentPopupIndex < visiblePopups.length
-    ? visiblePopups[currentPopupIndex]
+  const currentPopup: PopupAnnouncement | null = visibleNotices.length > 0 && currentPopupIndex < visibleNotices.length
+    ? visibleNotices[currentPopupIndex]
     : null;
 
+  // 공지: 건당 "오늘 하루 안보기"
   const handleDismissToday = useCallback(async (announcementId: number) => {
     try {
       const key = `popup_dismissed_${getTodayDate()}`;
@@ -229,22 +277,53 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
     } catch (e) {
       console.error("Failed to save dismissed popup:", e);
     }
-    // 다음 팝업으로 이동 or 닫기
-    if (currentPopupIndex < visiblePopups.length - 1) {
+    // 다음 공지로 이동 or 광고 phase로 전환 or 닫기
+    if (currentPopupIndex < visibleNotices.length - 1) {
       setCurrentPopupIndex(prev => prev + 1);
+    } else if (visibleAds.length > 0) {
+      setPopupPhase('ad');
+      setCurrentAdIndex(0);
     } else {
       setPopupVisible(false);
     }
-  }, [dismissedToday, getTodayDate, currentPopupIndex, visiblePopups.length]);
+  }, [dismissedToday, getTodayDate, currentPopupIndex, visibleNotices.length, visibleAds.length]);
 
+  // 공지: 건당 닫기 (다음으로 넘어감)
   const handleClosePopup = useCallback(() => {
-    // 다음 팝업으로 이동 or 닫기
-    if (currentPopupIndex < visiblePopups.length - 1) {
-      setCurrentPopupIndex(prev => prev + 1);
+    if (popupPhase === 'notice') {
+      if (currentPopupIndex < visibleNotices.length - 1) {
+        setCurrentPopupIndex(prev => prev + 1);
+      } else if (visibleAds.length > 0) {
+        setPopupPhase('ad');
+        setCurrentAdIndex(0);
+      } else {
+        setPopupVisible(false);
+      }
     } else {
+      // 광고 닫기
       setPopupVisible(false);
+      if (adTimerRef.current) clearInterval(adTimerRef.current);
     }
-  }, [currentPopupIndex, visiblePopups.length]);
+  }, [popupPhase, currentPopupIndex, visibleNotices.length, visibleAds.length]);
+
+  // 광고: 일괄 "오늘 하루 안보기"
+  const handleDismissAdsToday = useCallback(async () => {
+    try {
+      const adKey = `ad_dismissed_${getTodayDate()}`;
+      await AsyncStorage.setItem(adKey, 'true');
+      setAdsDismissedToday(true);
+    } catch (e) {
+      console.error("Failed to save ad dismissal:", e);
+    }
+    setPopupVisible(false);
+    if (adTimerRef.current) clearInterval(adTimerRef.current);
+  }, [getTodayDate]);
+
+  // 광고: 닫기
+  const handleCloseAds = useCallback(() => {
+    setPopupVisible(false);
+    if (adTimerRef.current) clearInterval(adTimerRef.current);
+  }, []);
 
   const handlePopupImagePress = useCallback((popup: PopupAnnouncement) => {
     if (popup.linkUrl) {
@@ -254,8 +333,26 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         navigation.navigate(popup.linkUrl as any);
       }
       setPopupVisible(false);
+      if (adTimerRef.current) clearInterval(adTimerRef.current);
     }
   }, [navigation]);
+
+  // 광고 자동 슬라이드 타이머
+  useEffect(() => {
+    if (popupPhase === 'ad' && popupVisible && visibleAds.length > 1) {
+      adTimerRef.current = setInterval(() => {
+        setCurrentAdIndex(prev => {
+          const next = (prev + 1) % visibleAds.length;
+          adScrollRef.current?.scrollTo({ x: next * AD_CAROUSEL_WIDTH, animated: true });
+          return next;
+        });
+      }, 3500);
+
+      return () => {
+        if (adTimerRef.current) clearInterval(adTimerRef.current);
+      };
+    }
+  }, [popupPhase, popupVisible, visibleAds.length, AD_CAROUSEL_WIDTH]);
   // ===== 팝업 공지사항 끝 =====
 
   const formatCurrency = (amount?: number) => {
@@ -338,29 +435,32 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
           <ActivityIndicator size="small" color={primaryColor} />
         </Card>
       ) : isHelper ? (
-        <HelperDashboard 
-          theme={theme} 
-          primaryColor={primaryColor} 
+        <HelperDashboard
+          theme={theme}
+          primaryColor={primaryColor}
           stats={stats}
           scheduledOrders={scheduledOrders}
           formatCurrency={formatCurrency}
+          contentWidth={contentWidth}
+          showDesktopLayout={showDesktopLayout}
+          columns={columns}
           navigation={navigation}
-          onShowModal={(order) => {
-            setSelectedOrder(order);
-            setModalVisible(true);
+          onNavigateDetail={(orderId) => {
+            navigation.navigate('JobDetail' as any, { jobId: String(orderId) });
           }}
         />
       ) : (
-        <RequesterDashboard 
-          theme={theme} 
+        <RequesterDashboard
+          theme={theme}
           primaryColor={primaryColor}
+          contentWidth={contentWidth}
+          showDesktopLayout={showDesktopLayout}
+          columns={columns}
           orders={requesterOrders || []}
           navigation={navigation}
           onEditOrder={setEditOrder}
-          onShowModal={(order, rawOrder) => {
-            setSelectedOrder(order);
-            setSelectedRawOrder(rawOrder);
-            setModalVisible(true);
+          onNavigateDetail={(orderId) => {
+            navigation.navigate('JobDetail' as any, { jobId: String(orderId) });
           }}
         />
       )}
@@ -374,8 +474,13 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         style={{ flex: 1, backgroundColor: theme.backgroundRoot }}
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.xl,
-          paddingBottom: tabBarHeight + Spacing.xl,
-          paddingHorizontal: Spacing.lg,
+          paddingBottom: showDesktopLayout ? Spacing['3xl'] : tabBarHeight + Spacing['3xl'],
+          paddingHorizontal: showDesktopLayout ? Spacing['2xl'] : Spacing.lg,
+          ...(showDesktopLayout && {
+            maxWidth: Math.min(containerMaxWidth, 960),
+            alignSelf: 'center' as const,
+            width: '100%' as any,
+          }),
         }}
         scrollIndicatorInsets={{ bottom: insets.bottom }}
         data={[]}
@@ -396,121 +501,160 @@ export default function HomeScreen({ navigation }: HomeScreenProps) {
         currentUnitPrice={editOrder?.pricePerUnit}
         currentDate={editOrder?.scheduledDate}
       />
-      <JobDetailModal
-        visible={modalVisible}
-        onClose={() => {
-          setModalVisible(false);
-          setSelectedOrder(null);
-          setSelectedRawOrder(null);
-        }}
-        order={selectedOrder}
-        hideButtons={isHelper}
-        isRequester={!isHelper}
-        onEdit={selectedRawOrder ? () => {
-          setModalVisible(false);
-          setEditOrder(selectedRawOrder);
-        } : undefined}
-        onDelete={selectedRawOrder ? async () => {
-          const orderId = selectedRawOrder.id;
-          try {
-            const { apiRequest, queryClient: qc } = await import('@/lib/query-client');
-            await apiRequest('DELETE', `/api/orders/${orderId}`);
-            setModalVisible(false);
-            setSelectedOrder(null);
-            setSelectedRawOrder(null);
-            qc.invalidateQueries({ queryKey: ['/api/requester/orders'] });
-          } catch (err) {
-            console.error('Delete order error:', err);
-          }
-        } : undefined}
-        onHide={selectedRawOrder && ['closing_submitted', 'final_amount_confirmed', 'balance_paid', 'settlement_paid', 'closed'].includes(selectedRawOrder.status?.toLowerCase() || '') ? async () => {
-          const orderId = selectedRawOrder.id;
-          try {
-            const { apiRequest, queryClient: qc } = await import('@/lib/query-client');
-            await apiRequest('POST', `/api/orders/${orderId}/hide`);
-            setModalVisible(false);
-            setSelectedOrder(null);
-            setSelectedRawOrder(null);
-            qc.invalidateQueries({ queryKey: ['/api/requester/orders'] });
-          } catch (err) {
-            console.error('Hide order error:', err);
-          }
-        } : undefined}
-      />
 
-      {/* 팝업 공지사항 모달 */}
-      {currentPopup ? (
+      {/* 팝업 공지/광고 모달 */}
+      {popupVisible ? (
         <Modal
           visible={popupVisible}
           transparent
           animationType="fade"
           statusBarTranslucent
-          onRequestClose={handleClosePopup}
+          onRequestClose={popupPhase === 'notice' ? handleClosePopup : handleCloseAds}
         >
           <View style={popupStyles.overlay}>
             <View style={popupStyles.container}>
-              {currentPopup.imageUrl ? (
-                <Pressable
-                  onPress={() => handlePopupImagePress(currentPopup)}
-                  style={popupStyles.imageWrap}
-                >
-                  <ExpoImage
-                    source={{ uri: `${getApiUrl()}${currentPopup.imageUrl}` }}
-                    style={popupStyles.image}
-                    contentFit="cover"
-                    transition={300}
-                  />
-                  {currentPopup.linkUrl ? (
-                    <View style={popupStyles.linkBadge}>
-                      <Icon name="open-outline" size={14} color="#fff" />
-                      <ThemedText style={popupStyles.linkBadgeText}>자세히 보기</ThemedText>
-                    </View>
-                  ) : null}
-                </Pressable>
-              ) : (
-                <Pressable
-                  onPress={() => handlePopupImagePress(currentPopup)}
-                  style={popupStyles.textOnlyWrap}
-                >
-                  <View style={[popupStyles.textOnlyIcon, { backgroundColor: primaryColor + '15' }]}>
-                    <Icon name="megaphone-outline" size={32} color={primaryColor} />
-                  </View>
-                  <ThemedText style={popupStyles.textOnlyTitle}>{currentPopup.title}</ThemedText>
-                  <ThemedText style={popupStyles.textOnlyContent}>{currentPopup.content}</ThemedText>
-                  {currentPopup.linkUrl ? (
-                    <View style={[popupStyles.linkRow, { backgroundColor: primaryColor + '10' }]}>
-                      <Icon name="open-outline" size={14} color={primaryColor} />
-                      <ThemedText style={[popupStyles.linkRowText, { color: primaryColor }]}>자세히 보기</ThemedText>
-                    </View>
-                  ) : null}
-                </Pressable>
-              )}
+              {/* ===== 공지 Phase: 건당 닫기 ===== */}
+              {popupPhase === 'notice' && currentPopup ? (
+                <>
+                  {currentPopup.imageUrl ? (
+                    <Pressable
+                      onPress={() => handlePopupImagePress(currentPopup)}
+                      style={popupStyles.imageWrap}
+                    >
+                      <ExpoImage
+                        source={{ uri: `${getApiUrl().replace(/\/$/, '')}${currentPopup.imageUrl}` }}
+                        style={popupStyles.image}
+                        contentFit="cover"
+                        transition={300}
+                      />
+                      {currentPopup.linkUrl ? (
+                        <View style={popupStyles.linkBadge}>
+                          <Icon name="open-outline" size={14} color="#fff" />
+                          <ThemedText style={popupStyles.linkBadgeText}>자세히 보기</ThemedText>
+                        </View>
+                      ) : null}
+                    </Pressable>
+                  ) : (
+                    <Pressable
+                      onPress={() => handlePopupImagePress(currentPopup)}
+                      style={popupStyles.textOnlyWrap}
+                    >
+                      <View style={[popupStyles.textOnlyIcon, { backgroundColor: primaryColor + '15' }]}>
+                        <Icon name="megaphone-outline" size={32} color={primaryColor} />
+                      </View>
+                      <ThemedText style={popupStyles.textOnlyTitle}>{currentPopup.title}</ThemedText>
+                      <ThemedText style={popupStyles.textOnlyContent}>{currentPopup.content}</ThemedText>
+                      {currentPopup.linkUrl ? (
+                        <View style={[popupStyles.linkRow, { backgroundColor: primaryColor + '10' }]}>
+                          <Icon name="open-outline" size={14} color={primaryColor} />
+                          <ThemedText style={[popupStyles.linkRowText, { color: primaryColor }]}>자세히 보기</ThemedText>
+                        </View>
+                      ) : null}
+                    </Pressable>
+                  )}
 
-              {/* 팝업 카운터 */}
-              {visiblePopups.length > 1 ? (
-                <View style={popupStyles.counter}>
-                  <ThemedText style={popupStyles.counterText}>
-                    {currentPopupIndex + 1} / {visiblePopups.length}
-                  </ThemedText>
-                </View>
+                  {/* 공지 카운터 */}
+                  {visibleNotices.length > 1 ? (
+                    <View style={popupStyles.counter}>
+                      <ThemedText style={popupStyles.counterText}>
+                        {currentPopupIndex + 1} / {visibleNotices.length}
+                      </ThemedText>
+                    </View>
+                  ) : null}
+
+                  {/* 공지 하단 버튼 */}
+                  <View style={popupStyles.footer}>
+                    <Pressable
+                      onPress={() => handleDismissToday(currentPopup.id)}
+                      style={popupStyles.dismissBtn}
+                    >
+                      <Icon name="time-outline" size={14} color="#999" />
+                      <ThemedText style={popupStyles.dismissText}>오늘 하루 안보기</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      onPress={handleClosePopup}
+                      style={popupStyles.closeBtn}
+                    >
+                      <ThemedText style={popupStyles.closeText}>닫기</ThemedText>
+                    </Pressable>
+                  </View>
+                </>
               ) : null}
 
-              {/* 하단 버튼 */}
-              <View style={popupStyles.footer}>
-                <Pressable
-                  onPress={() => handleDismissToday(currentPopup.id)}
-                  style={popupStyles.dismissBtn}
-                >
-                  <Icon name="time-outline" size={14} color="#999" />
-                  <ThemedText style={popupStyles.dismissText}>오늘 하루 안보기</ThemedText>
-                </Pressable>
-                <Pressable
-                  onPress={handleClosePopup}
-                  style={popupStyles.closeBtn}
-                >
-                  <ThemedText style={popupStyles.closeText}>닫기</ThemedText>
-                </Pressable>
-              </View>
+              {/* ===== 광고 Phase: 자동 슬라이드 캐러셀 ===== */}
+              {popupPhase === 'ad' && visibleAds.length > 0 ? (
+                <>
+                  <ScrollView
+                    ref={adScrollRef}
+                    horizontal
+                    pagingEnabled
+                    showsHorizontalScrollIndicator={false}
+                    onMomentumScrollEnd={(e) => {
+                      const index = Math.round(e.nativeEvent.contentOffset.x / AD_CAROUSEL_WIDTH);
+                      setCurrentAdIndex(index);
+                      // 수동 스와이프 시 타이머 리셋
+                      if (adTimerRef.current) clearInterval(adTimerRef.current);
+                      if (visibleAds.length > 1) {
+                        adTimerRef.current = setInterval(() => {
+                          setCurrentAdIndex(prev => {
+                            const next = (prev + 1) % visibleAds.length;
+                            adScrollRef.current?.scrollTo({ x: next * AD_CAROUSEL_WIDTH, animated: true });
+                            return next;
+                          });
+                        }, 3500);
+                      }
+                    }}
+                    style={{ width: AD_CAROUSEL_WIDTH }}
+                  >
+                    {visibleAds.map((ad) => (
+                      <Pressable
+                        key={ad.id}
+                        onPress={() => handlePopupImagePress(ad)}
+                        style={{ width: AD_CAROUSEL_WIDTH }}
+                      >
+                        <ExpoImage
+                          source={{ uri: `${getApiUrl().replace(/\/$/, '')}${ad.imageUrl}` }}
+                          style={[popupStyles.adImage, { width: AD_CAROUSEL_WIDTH }]}
+                          contentFit="cover"
+                          transition={300}
+                        />
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+
+                  {/* 광고 도트 인디케이터 */}
+                  {visibleAds.length > 1 ? (
+                    <View style={popupStyles.adDots}>
+                      {visibleAds.map((_, idx) => (
+                        <View
+                          key={idx}
+                          style={[
+                            popupStyles.adDot,
+                            { backgroundColor: idx === currentAdIndex ? '#333' : '#ccc' }
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  ) : null}
+
+                  {/* 광고 하단 버튼 */}
+                  <View style={popupStyles.footer}>
+                    <Pressable
+                      onPress={handleDismissAdsToday}
+                      style={popupStyles.dismissBtn}
+                    >
+                      <Icon name="time-outline" size={14} color="#999" />
+                      <ThemedText style={popupStyles.dismissText}>오늘 하루 안보기</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      onPress={handleCloseAds}
+                      style={popupStyles.closeBtn}
+                    >
+                      <ThemedText style={popupStyles.closeText}>닫기</ThemedText>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
             </View>
           </View>
         </Modal>
@@ -742,22 +886,28 @@ function SimpleCalendar({
   );
 }
 
-function HelperDashboard({ 
-  theme, 
-  primaryColor, 
+function HelperDashboard({
+  theme,
+  primaryColor,
   stats,
   scheduledOrders,
   formatCurrency,
   navigation,
-  onShowModal,
-}: { 
-  theme: any; 
+  onNavigateDetail,
+  contentWidth,
+  showDesktopLayout,
+  columns,
+}: {
+  theme: any;
   primaryColor: string;
   stats?: DashboardStats;
   scheduledOrders: ScheduledOrder[];
   formatCurrency: (amount?: number) => string;
   navigation: NativeStackNavigationProp<any>;
-  onShowModal: (order: OrderCardDTO) => void;
+  onNavigateDetail: (orderId: number) => void;
+  contentWidth: number;
+  showDesktopLayout: boolean;
+  columns: number;
 }) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentOrderIndex, setCurrentOrderIndex] = useState(0);
@@ -768,9 +918,15 @@ function HelperDashboard({
     return scheduledOrders.filter(order => order.workDate?.startsWith(dateStr));
   }, [scheduledOrders, selectedDate]);
 
+  const cardWidth = contentWidth - Spacing.lg * 2;
+  // 데스크탑 그리드용 카드 너비: 컬럼 수에 맞춰 분할
+  const desktopColumns = Math.min(columns, 2); // 헬퍼 일정은 최대 2열
+  const gridCardWidth = showDesktopLayout
+    ? (cardWidth - Spacing.md * (desktopColumns - 1)) / desktopColumns
+    : cardWidth;
+
   const handleScroll = (event: any) => {
     const offsetX = event.nativeEvent.contentOffset.x;
-    const cardWidth = SCREEN_WIDTH - Spacing.lg * 2;
     const index = Math.round(offsetX / cardWidth);
     setCurrentOrderIndex(index);
   };
@@ -781,6 +937,9 @@ function HelperDashboard({
 
   return (
     <>
+      {/* 홈 배너 광고 */}
+      <BannerAdCarousel />
+
       <View style={styles.sectionHeader}>
         <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>
           {formatDate(selectedDate)} 일정
@@ -788,6 +947,31 @@ function HelperDashboard({
       </View>
 
       {filteredOrders.length > 0 ? (
+        showDesktopLayout ? (
+          /* 데스크탑: 그리드 레이아웃으로 카드 나열 */
+          <View style={styles.desktopGrid}>
+            {filteredOrders.map((order) => {
+              const orderDTO = adaptHelperMyOrder(order);
+              const isScheduled = ['scheduled', 'assigned'].includes((order.status || '').toLowerCase());
+              return (
+                <View key={order.id} style={{ width: gridCardWidth }}>
+                  <OrderCard
+                    data={orderDTO}
+                    context="helper_home"
+                    onPress={() => {
+                      if (isScheduled) {
+                        navigation.navigate('QRCheckin' as any);
+                      } else {
+                        onNavigateDetail(order.id);
+                      }
+                    }}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        ) : (
+        /* 모바일: 가로 스와이프 */
         <ScrollView
           ref={scrollViewRef}
           horizontal
@@ -795,7 +979,7 @@ function HelperDashboard({
           showsHorizontalScrollIndicator={false}
               nestedScrollEnabled={true}
           decelerationRate="fast"
-          snapToInterval={SCREEN_WIDTH - Spacing.lg * 2}
+          snapToInterval={cardWidth}
           snapToAlignment="start"
           contentContainerStyle={styles.horizontalScrollContent}
           onScroll={handleScroll}
@@ -803,17 +987,25 @@ function HelperDashboard({
         >
           {filteredOrders.map((order, index) => {
             const orderDTO = adaptHelperMyOrder(order);
+            const isScheduled = ['scheduled', 'assigned'].includes((order.status || '').toLowerCase());
             return (
-              <View key={order.id} style={styles.swipeOrderCard}>
+              <View key={order.id} style={[styles.swipeOrderCard, { width: cardWidth }]}>
                 <OrderCard
                   data={orderDTO}
                   context="helper_home"
-                  onPress={(data) => onShowModal(data)}
+                  onPress={() => {
+                    if (isScheduled) {
+                      navigation.navigate('QRCheckin' as any);
+                    } else {
+                      onNavigateDetail(order.id);
+                    }
+                  }}
                 />
               </View>
             );
           })}
         </ScrollView>
+        )
       ) : (
         <Card style={styles.emptyCard}>
           <View style={[styles.emptyIconContainer, { backgroundColor: BrandColors.helperLight }]}>
@@ -828,11 +1020,11 @@ function HelperDashboard({
         </Card>
       )}
 
-      {filteredOrders.length > 1 ? (
+      {!showDesktopLayout && filteredOrders.length > 1 ? (
         <View style={styles.paginationDots}>
           {filteredOrders.map((_, idx) => (
             <View key={idx} style={[
-              styles.dot, 
+              styles.dot,
               { backgroundColor: idx === currentOrderIndex ? primaryColor : theme.tabIconDefault }
             ]} />
           ))}
@@ -854,32 +1046,57 @@ function HelperDashboard({
   );
 }
 
-function RequesterDashboard({ 
-  theme, 
+function RequesterDashboard({
+  theme,
   primaryColor,
   orders,
   navigation,
   onEditOrder,
-  onShowModal,
-}: { 
-  theme: any; 
+  onNavigateDetail,
+  contentWidth,
+  showDesktopLayout,
+  columns,
+}: {
+  theme: any;
   primaryColor: string;
   orders: any[];
   navigation: NativeStackNavigationProp<any>;
   onEditOrder: (order: any) => void;
-  onShowModal: (order: OrderCardDTO, rawOrder: any) => void;
+  onNavigateDetail: (orderId: number) => void;
+  contentWidth: number;
+  showDesktopLayout: boolean;
+  columns: number;
 }) {
   const [currentOrderIndex, setCurrentOrderIndex] = useState(0);
   const [selectedApplicant, setSelectedApplicant] = useState<Applicant | null>(null);
   const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const [applicantModalVisible, setApplicantModalVisible] = useState(false);
   const queryClient = useQueryClient();
+  const rootNavigation = useNavigation<any>();
+
+  // 화면 포커스 시 오더 목록 새로고침 (오더등록/계약서작성 후 복귀 시 즉시 반영)
+  useFocusEffect(
+    useCallback(() => {
+      queryClient.invalidateQueries({ queryKey: ['/api/requester/orders'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/helper/work-history'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/orders/scheduled'] });
+    }, [queryClient])
+  );
+
+  // 계약서 미작성(입금대기) 오더 — 별도 배너로 표시
+  const pendingContractOrders = useMemo(() => {
+    return orders.filter((o: any) => {
+      const status = (o.status || '').toUpperCase();
+      return status === 'AWAITING_DEPOSIT';
+    });
+  }, [orders]);
 
   const activeOrders = useMemo(() => {
     const filtered = orders.filter((o: any) => {
       const status = (o.status || '').toUpperCase();
+      // AWAITING_DEPOSIT 제외: 계약서 작성+입금 완료 전 오더는 별도 배너로 표시
       return [
-        'AWAITING_DEPOSIT', 'REGISTERED', 'OPEN', 'MATCHING', 'ASSIGNED', 'SCHEDULED',
+        'REGISTERED', 'OPEN', 'MATCHING', 'ASSIGNED', 'SCHEDULED',
         'IN_PROGRESS', 'CHECKED_IN', 'CLOSING_SUBMITTED', 'FINAL_AMOUNT_CONFIRMED'
       ].includes(status);
     });
@@ -890,11 +1107,11 @@ function RequesterDashboard({
       seen.add(id);
       return true;
     });
-    unique.sort((a: any, b: any) => 
+    unique.sort((a: any, b: any) =>
       new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
     );
-    return unique.slice(0, 5);
-  }, [orders]);
+    return unique.slice(0, showDesktopLayout ? 12 : 5);
+  }, [orders, showDesktopLayout]);
 
   React.useEffect(() => {
     if (currentOrderIndex >= activeOrders.length) {
@@ -928,9 +1145,15 @@ function RequesterDashboard({
     },
   });
 
+  const cardWidth = contentWidth - Spacing.lg * 2;
+  // 데스크탑 그리드용 카드 너비
+  const desktopColumns = Math.min(columns, 3);
+  const gridCardWidth = showDesktopLayout
+    ? (cardWidth - Spacing.md * (desktopColumns - 1)) / desktopColumns
+    : cardWidth;
+
   const handleScroll = (event: any) => {
     const offsetX = event.nativeEvent.contentOffset.x;
-    const cardWidth = SCREEN_WIDTH - Spacing.lg * 2;
     const index = Math.round(offsetX / cardWidth);
     if (index !== currentOrderIndex && index >= 0 && index < activeOrders.length) {
       setCurrentOrderIndex(index);
@@ -945,7 +1168,21 @@ function RequesterDashboard({
 
   const handleSelectHelper = () => {
     if (selectedApplicant && selectedOrderId) {
-      selectHelperMutation.mutate({ helperId: selectedApplicant.helperId, orderId: selectedOrderId });
+      const helperName = selectedApplicant.helperName || '선택한 헬퍼';
+      if (Platform.OS === 'web') {
+        if (confirm(`${helperName}님을 이 오더에 배정하시겠습니까?`)) {
+          selectHelperMutation.mutate({ helperId: selectedApplicant.helperId, orderId: selectedOrderId });
+        }
+      } else {
+        Alert.alert(
+          '헬퍼 선택 확인',
+          `${helperName}님을 이 오더에 배정하시겠습니까?\n다른 지원자들은 자동으로 미선택 처리됩니다.`,
+          [
+            { text: '취소', style: 'cancel' },
+            { text: '배정하기', onPress: () => selectHelperMutation.mutate({ helperId: selectedApplicant.helperId, orderId: selectedOrderId }) },
+          ]
+        );
+      }
     }
   };
 
@@ -956,7 +1193,7 @@ function RequesterDashboard({
       stars.push(
         <Icon
           key={i}
-          name={i <= displayRating ? "star-outline" : "star-outline"}
+          name={i <= displayRating ? "star" : "star-outline"}
           size={18}
           color={i <= displayRating ? BrandColors.warning : BrandColors.neutral}
           style={{ marginRight: 2 }}
@@ -968,11 +1205,99 @@ function RequesterDashboard({
 
   return (
     <>
+      {/* 입금대기 오더 배너: 계약서 미작성 / 입금 대기 구분 */}
+      {pendingContractOrders.length > 0 && pendingContractOrders.map((pendingOrder: any) => {
+        const isContractDone = !!pendingOrder.contractConfirmed;
+        return (
+          <Pressable
+            key={`pending-${pendingOrder.id}`}
+            style={({ pressed }) => [
+              styles.pendingContractBanner,
+              { backgroundColor: isContractDone ? '#DBEAFE' : BrandColors.warningLight, opacity: pressed ? 0.85 : 1 },
+            ]}
+            onPress={() => {
+              if (isContractDone) {
+                onNavigateDetail(pendingOrder.id);
+              } else {
+                Alert.alert(
+                  '계약서 작성',
+                  '계약서 작성을 진행하시겠습니까?\n취소 시 오더가 삭제됩니다.',
+                  [
+                    { text: '닫기', style: 'cancel' },
+                    {
+                      text: '오더 삭제',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          await apiRequest('DELETE', `/api/orders/${pendingOrder.id}`);
+                          queryClient.invalidateQueries({ queryKey: ['/api/requester/orders'] });
+                          Alert.alert('삭제 완료', '오더가 삭제되었습니다.');
+                        } catch (err: any) {
+                          Alert.alert('오류', err.message || '오더 삭제에 실패했습니다.');
+                        }
+                      },
+                    },
+                    {
+                      text: '계약 진행',
+                      onPress: () => rootNavigation.navigate('CreateContract', { orderId: pendingOrder.id }),
+                    },
+                  ]
+                );
+              }
+            }}
+          >
+            <View style={styles.pendingContractBannerContent}>
+              <View style={[styles.pendingContractIcon, { backgroundColor: isContractDone ? BrandColors.requester : BrandColors.warning }]}>
+                <Icon name={isContractDone ? "card-outline" : "document-text-outline"} size={18} color="#FFFFFF" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText style={[styles.pendingContractTitle, { color: isContractDone ? '#1E40AF' : '#92400E' }]}>
+                  {isContractDone ? '예약금 입금이 필요합니다' : '계약서 작성이 필요합니다'}
+                </ThemedText>
+                <ThemedText style={[styles.pendingContractSubtitle, { color: isContractDone ? '#2563EB' : '#B45309' }]}>
+                  {pendingOrder.companyName || '오더'} — {isContractDone ? '입금 확인 후 헬퍼 매칭이 시작됩니다' : '계약서 작성 및 입금 후 등록이 완료됩니다'}
+                </ThemedText>
+              </View>
+              <Icon name="chevron-forward" size={20} color={isContractDone ? BrandColors.requester : BrandColors.warning} />
+            </View>
+          </Pressable>
+        );
+      })}
+
+      {/* 홈 배너 광고 */}
+      <BannerAdCarousel />
+
       <View style={styles.sectionHeader}>
         <ThemedText style={[styles.sectionTitle, { color: theme.text }]}>나의 오더</ThemedText>
       </View>
 
       {activeOrders.length > 0 ? (
+        showDesktopLayout ? (
+          /* 데스크탑: 그리드 레이아웃 — 모든 오더카드 한눈에 */
+          <View style={styles.desktopGrid}>
+            {activeOrders.map((order: any, idx: number) => {
+              const orderDTO = adaptRequesterOrder(order);
+              const isSelected = idx === currentOrderIndex;
+              return (
+                <Pressable
+                  key={order.id}
+                  style={[
+                    { width: gridCardWidth },
+                    isSelected && styles.desktopCardSelected,
+                  ]}
+                  onPress={() => setCurrentOrderIndex(idx)}
+                  onLongPress={() => onNavigateDetail(order.id)}
+                >
+                  <OrderCard
+                    data={orderDTO}
+                    context="requester_home"
+                    onPress={() => onNavigateDetail(order.id)}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : (
         <>
           <ScrollView
             horizontal
@@ -980,7 +1305,7 @@ function RequesterDashboard({
             showsHorizontalScrollIndicator={false}
               nestedScrollEnabled={true}
             decelerationRate="fast"
-            snapToInterval={SCREEN_WIDTH - Spacing.lg * 2}
+            snapToInterval={cardWidth}
             snapToAlignment="center"
             contentContainerStyle={styles.horizontalScrollContent}
             onMomentumScrollEnd={handleScroll}
@@ -988,11 +1313,11 @@ function RequesterDashboard({
             {activeOrders.map((order: any, orderIdx: number) => {
               const orderDTO = adaptRequesterOrder(order);
               return (
-                <View key={order.id} style={styles.swipeOrderCard}>
+                <View key={order.id} style={[styles.swipeOrderCard, { width: cardWidth }]}>
                   <OrderCard
                     data={orderDTO}
                     context="requester_home"
-                    onPress={(data) => onShowModal(data, order)}
+                    onPress={() => onNavigateDetail(order.id)}
                   />
                 </View>
               );
@@ -1002,13 +1327,14 @@ function RequesterDashboard({
             <View style={styles.paginationDots}>
               {activeOrders.map((_: any, idx: number) => (
                 <View key={idx} style={[
-                  styles.dot, 
+                  styles.dot,
                   { backgroundColor: idx === currentOrderIndex ? primaryColor : theme.tabIconDefault }
                 ]} />
               ))}
             </View>
           ) : null}
         </>
+        )
       ) : (
         <Card style={styles.emptyCard}>
           <View style={[styles.emptyIconContainer, { backgroundColor: BrandColors.requesterLight }]}>
@@ -1038,8 +1364,14 @@ function RequesterDashboard({
               </Pressable>
             ) : null}
           </View>
-          <View style={styles.helperCardsList}>
-            {applicants.slice(0, 3).map((applicant: Applicant) => {
+          {/* 3명 이상이면 세로 스크롤 영역, 미만이면 그냥 세로 리스트 */}
+          <ScrollView
+            nestedScrollEnabled={true}
+            showsVerticalScrollIndicator={applicants.length >= 3}
+            style={applicants.length >= 3 ? { maxHeight: 200 } : undefined}
+            contentContainerStyle={[styles.helperCardsList, showDesktopLayout && styles.helperCardsListDesktop]}
+          >
+            {applicants.map((applicant: Applicant) => {
               const imgUrl = applicant.profileImageUrl || applicant.profileImage;
               const displayName = applicant.helperNickname || applicant.helperName || '헬퍼';
               const rating = applicant.averageRating || 0;
@@ -1049,10 +1381,10 @@ function RequesterDashboard({
                   style={({ pressed }) => [
                     styles.helperCompactCard,
                     { opacity: pressed ? 0.85 : 1 },
+                    showDesktopLayout && { width: `calc(50% - ${Spacing.sm / 2}px)` as any },
                   ]}
                   onPress={() => handleApplicantPress(applicant, currentOrder.id)}
                 >
-                  {/* 아바타 */}
                   <View style={styles.helperCompactAvatar}>
                     {imgUrl ? (
                       imgUrl.startsWith('avatar:') ? (
@@ -1067,7 +1399,6 @@ function RequesterDashboard({
                       <Icon name="person" size={22} color={BrandColors.helper} />
                     )}
                   </View>
-                  {/* 정보 */}
                   <View style={styles.helperCompactInfo}>
                     <View style={styles.helperCompactNameRow}>
                       <ThemedText style={[styles.helperCompactName, { color: theme.text }]} numberOfLines={1}>
@@ -1097,7 +1428,7 @@ function RequesterDashboard({
                 </Pressable>
               );
             })}
-          </View>
+          </ScrollView>
         </View>
       ) : null}
 
@@ -1196,9 +1527,9 @@ function RequesterDashboard({
                         {selectedApplicant.reviewCount || 0}건
                       </ThemedText>
                     </View>
-                    {selectedApplicant.reviews && selectedApplicant.reviews.length > 0 ? (
+                    {(selectedApplicant.recentReviews || selectedApplicant.reviews) && (selectedApplicant.recentReviews || selectedApplicant.reviews)!.length > 0 ? (
                       <>
-                        {selectedApplicant.reviews.map((review) => (
+                        {(selectedApplicant.recentReviews || selectedApplicant.reviews)!.map((review) => (
                           <View key={review.id} style={[styles.fbReviewCard, { backgroundColor: '#F5F5F5' }]}>
                             <View style={styles.fbReviewHeader}>
                               <View style={styles.miniStarsRow}>
@@ -1428,7 +1759,7 @@ const styles = StyleSheet.create({
   },
   dayCell: {
     flex: 1,
-    aspectRatio: 1,
+    height: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1597,7 +1928,18 @@ const styles = StyleSheet.create({
     paddingRight: Spacing.lg,
   },
   swipeOrderCard: {
-    width: SCREEN_WIDTH - Spacing.lg * 2,
+    // width는 인라인으로 contentWidth 기반 동적 설정
+  },
+  desktopGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.md,
+    marginBottom: Spacing.lg,
+  },
+  desktopCardSelected: {
+    borderRadius: BorderRadius.xl,
+    borderWidth: 2,
+    borderColor: BrandColors.requester,
   },
   paginationDots: {
     flexDirection: 'row',
@@ -1757,6 +2099,48 @@ const styles = StyleSheet.create({
   },
   helperCardsList: {
     gap: Spacing.xs,
+  },
+  helperCardsListDesktop: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  /* 가로 스크롤 헬퍼 카드 (3명 이상일 때) */
+  helperScrollCard: {
+    width: 110,
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.sm,
+    borderRadius: BorderRadius.lg,
+    gap: 4,
+  },
+  helperScrollAvatar: {
+    marginBottom: 4,
+  },
+  helperScrollAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  helperScrollName: {
+    fontSize: 13,
+    fontWeight: '600',
+    textAlign: 'center',
+    maxWidth: 100,
+  },
+  helperScrollRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  helperScrollRatingText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  helperScrollStatText: {
+    fontSize: 10,
   },
   helperCompactCard: {
     flexDirection: 'row',
@@ -1969,7 +2353,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   fbProfileModal: {
-    width: SCREEN_WIDTH - Spacing.xl * 2,
+    width: '90%',
+    maxWidth: 640,
     height: '85%',
     borderRadius: BorderRadius.xl,
     overflow: 'hidden',
@@ -2196,6 +2581,35 @@ const styles = StyleSheet.create({
   fbMiniRatingText: {
     fontSize: 11,
   },
+  pendingContractBanner: {
+    marginBottom: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    overflow: 'hidden',
+  },
+  pendingContractBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.md,
+    gap: Spacing.sm,
+  },
+  pendingContractIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pendingContractTitle: {
+    ...Typography.body,
+    fontWeight: '700',
+    color: '#92400E',
+  },
+  pendingContractSubtitle: {
+    ...Typography.small,
+    color: '#B45309',
+    marginTop: 2,
+  },
 });
 
 const popupStyles = StyleSheet.create({
@@ -2317,5 +2731,20 @@ const popupStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
+  },
+  // 광고 캐러셀 스타일
+  adImage: {
+    aspectRatio: 9 / 14,
+  },
+  adDots: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: Spacing.sm,
+  },
+  adDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
 });

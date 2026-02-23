@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Icon } from "@/components/Icon";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
@@ -58,6 +59,7 @@ export default function HelperDisputeListScreen({ navigation }: HelperDisputeLis
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
 
   const { data: disputes = [], isLoading, refetch, isRefetching } = useQuery<Dispute[]>({
     queryKey: ['/api/helper/disputes'],
@@ -172,8 +174,13 @@ export default function HelperDisputeListScreen({ navigation }: HelperDisputeLis
         contentContainerStyle={{
           paddingTop: headerHeight + Spacing.lg,
           paddingHorizontal: Spacing.lg,
-          paddingBottom: tabBarHeight + Spacing.xl,
+          paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
           flexGrow: 1,
+          ...(showDesktopLayout && {
+            maxWidth: containerMaxWidth,
+            alignSelf: 'center' as const,
+            width: '100%' as any,
+          }),
         }}
         refreshControl={
           <RefreshControl refreshing={isRefetching} onRefresh={refetch} />

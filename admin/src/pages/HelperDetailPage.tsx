@@ -403,7 +403,7 @@ export default function HelperDetailPage() {
       ['필수동의', termsAgreement?.requiredTermsAgreed ? 'O' : 'X'],
       ['선택동의', termsAgreement?.optionalTermsAgreed ? 'O' : 'X'],
       ['마케팅동의', termsAgreement?.marketingAgreed ? 'O' : 'X'],
-      ['가입일', user.createdAt ? new Date(user.createdAt).toLocaleDateString('ko-KR') : '-'],
+      ['가입일', user.createdAt ? new Date(user.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'],
     ];
 
     const csvContent = [headers, ...rows]
@@ -540,7 +540,7 @@ export default function HelperDetailPage() {
               <InfoRow label="전화번호" value={user.phoneNumber} />
               <InfoRow label="이메일" value={user.email} />
               <InfoRow label="가입일" value={
-                user.createdAt ? new Date(user.createdAt).toLocaleDateString('ko-KR') : '-'
+                user.createdAt ? new Date(user.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '-'
               } />
             </div>
             <div className="grid grid-cols-1 border-t">
@@ -593,7 +593,7 @@ export default function HelperDetailPage() {
             </div>
             {termsAgreement?.agreedAt && (
               <div className="px-4 py-2 bg-muted/30 text-xs text-muted-foreground border-t">
-                동의일시: {new Date(termsAgreement.agreedAt).toLocaleString('ko-KR')}
+                동의일시: {new Date(termsAgreement.agreedAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}
               </div>
             )}
           </div>
@@ -658,7 +658,7 @@ export default function HelperDetailPage() {
                   <div className="p-3 bg-background">
                     {doc?.uploadedAt && (
                       <p className="text-xs text-muted-foreground mb-2">
-                        제출: {new Date(doc.uploadedAt).toLocaleDateString('ko-KR')}
+                        제출: {new Date(doc.uploadedAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}
                       </p>
                     )}
 

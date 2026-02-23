@@ -103,6 +103,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           isLoading: false,
           isAuthenticated: true,
         });
+      } else if (res.status === 401) {
+        // Access token 만료 → refresh token으로 갱신 시도
+        const refreshToken = await getRefreshToken();
+        if (refreshToken) {
+          try {
+            const refreshRes = await fetch(new URL('/api/auth/refresh', baseUrl).href, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refreshToken }),
+            });
+            if (refreshRes.ok) {
+              const refreshData = await refreshRes.json();
+              await saveToken(refreshData.token);
+              if (refreshData.refreshToken) {
+                await saveRefreshToken(refreshData.refreshToken);
+              }
+              // 새 토큰으로 다시 사용자 정보 조회
+              const retryRes = await fetch(new URL('/api/auth/me', baseUrl).href, {
+                headers: { 'Authorization': `Bearer ${refreshData.token}` },
+              });
+              if (retryRes.ok) {
+                const retryData = await retryRes.json();
+                setState({
+                  user: retryData.user,
+                  isLoading: false,
+                  isAuthenticated: true,
+                });
+                return;
+              }
+            }
+          } catch (refreshError) {
+            console.error('Token refresh failed:', refreshError);
+          }
+        }
+        // refresh도 실패하면 로그아웃 처리
+        await clearTokens();
+        setState({ user: null, isLoading: false, isAuthenticated: false });
       } else {
         await clearTokens();
         setState({ user: null, isLoading: false, isAuthenticated: false });
@@ -207,9 +244,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: data.message || '역할 선택에 실패했습니다' };
       }
 
+      // 서버 응답의 user 정보 사용 (서버에서 실제 반영된 값 반영)
       setState(prev => ({
         ...prev,
-        user: prev.user ? { ...prev.user, role } : null,
+        user: data.user ? data.user : (prev.user ? { ...prev.user, role } : null),
       }));
 
       return { success: true };
@@ -222,13 +260,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function logout() {
     try {
       const token = await getToken();
+      const refreshToken = await getRefreshToken();
       if (token) {
         const baseUrl = getApiUrl();
         await fetch(new URL('/api/auth/logout', baseUrl).href, {
           method: 'POST',
           headers: {
+            'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
           },
+          body: JSON.stringify({ refreshToken: refreshToken || undefined }),
         });
       }
     } catch (error) {

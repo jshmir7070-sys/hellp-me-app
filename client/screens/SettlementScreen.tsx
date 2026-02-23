@@ -7,9 +7,11 @@ import { useQuery } from "@tanstack/react-query";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Spacing, BorderRadius, Typography, BrandColors } from "@/constants/theme";
+import { formatOrderNumber } from "@/lib/format-order-number";
 
 type SettlementScreenProps = {
   navigation: NativeStackNavigationProp<any>;
@@ -20,6 +22,8 @@ interface SettlementSummary {
   payoutAmount: number;
   commissionRate?: number;
   commissionAmount?: number;
+  insuranceRate?: number;
+  insuranceDeduction?: number;
   deductions?: number;
   workDays: any[];
 }
@@ -28,6 +32,7 @@ export default function SettlementScreen({ navigation }: SettlementScreenProps) 
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
 
   const today = new Date();
   const currentYear = today.getFullYear();
@@ -54,7 +59,7 @@ export default function SettlementScreen({ navigation }: SettlementScreenProps) 
       <Card style={styles.workDayCard}>
         <View style={styles.workDayHeader}>
           <ThemedText style={[styles.workDayTitle, { color: theme.text }]} numberOfLines={1}>
-            {item.orderTitle || `오더 #${item.orderId}`}
+            {item.orderTitle || formatOrderNumber(item.orderNumber, item.orderId)}
           </ThemedText>
           <ThemedText style={[styles.workDayAmount, { color: BrandColors.helper }]}>
             {formatCurrency(minPayout)}
@@ -162,6 +167,27 @@ export default function SettlementScreen({ navigation }: SettlementScreenProps) 
             사고 접수
           </ThemedText>
         </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.menuButton,
+            {
+              backgroundColor: theme.backgroundDefault,
+              opacity: pressed ? 0.7 : 1,
+            },
+          ]}
+          onPress={() => navigation.navigate('MonthlyStatementList')}
+        >
+          <View style={[styles.menuIconContainer, { backgroundColor: '#E0E7FF' }]}>
+            <Icon name="document-text-outline" size={24} color="#6366F1" />
+          </View>
+          <ThemedText style={[styles.menuButtonText, { color: theme.text }]}>
+            월 정산서
+          </ThemedText>
+          <ThemedText style={[styles.menuButtonDesc, { color: theme.tabIconDefault }]}>
+            정산서 확인
+          </ThemedText>
+        </Pressable>
       </View>
     </View>
   );
@@ -171,9 +197,14 @@ export default function SettlementScreen({ navigation }: SettlementScreenProps) 
       style={[styles.container, { backgroundColor: theme.backgroundRoot }]}
       contentContainerStyle={{
         paddingTop: headerHeight + Spacing.lg,
-        paddingBottom: tabBarHeight + Spacing.xl,
+        paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
         paddingHorizontal: Spacing.lg,
         flexGrow: 1,
+        ...(showDesktopLayout && {
+          maxWidth: containerMaxWidth,
+          alignSelf: 'center' as const,
+          width: '100%' as any,
+        }),
       }}
       data={recentWorkDays}
       keyExtractor={(item, index) => `${item.orderId}-${index}`}
@@ -201,10 +232,11 @@ const styles = StyleSheet.create({
   },
   menuGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: Spacing.md,
   },
   menuButton: {
-    flex: 1,
+    width: '47%',
     padding: Spacing.lg,
     borderRadius: BorderRadius.md,
     alignItems: 'center',

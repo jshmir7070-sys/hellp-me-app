@@ -185,6 +185,13 @@ export async function registerAuthRoutes(ctx: RouteContext): Promise<void> {
         });
         return res.status(404).json({ message: "비회원입니다. 회원가입을 진행해주세요." });
       }
+      if (!user.password) {
+        await logAuthEvent(req, "login_failed", "failure", {
+          userId: user.id,
+          metadata: { reason: "social_login_user" }
+        });
+        return res.status(401).json({ message: "소셜 로그인으로 가입된 계정입니다. 소셜 로그인을 이용해주세요." });
+      }
       const validPassword = await bcrypt.compare(input.password, user.password);
       if (!validPassword) {
         await logAuthEvent(req, "login_failed", "failure", {
@@ -288,18 +295,19 @@ export async function registerAuthRoutes(ctx: RouteContext): Promise<void> {
       const { password, reason } = req.body;
 
       // 비밀번호 확인 (소셜 로그인 사용자는 제외)
-      if (user.passwordHash && password) {
-        const bcrypt = require('bcryptjs');
-        const isValid = await bcrypt.compare(password, user.passwordHash);
+      if (user.password) {
+        if (!password) {
+          return res.status(400).json({ message: "비밀번호를 입력해주세요" });
+        }
+        const isValid = await bcrypt.compare(password, user.password);
         if (!isValid) {
           return res.status(400).json({ message: "비밀번호가 일치하지 않습니다" });
         }
       }
 
-      // 진행 중인 오더 확인
+      // 진행 중인 오더 확인 (타겟 쿼리 — 전체 오더 스캔 방지)
       const activeOrders = await storage.getOrdersByRequesterId(user.id);
-      const allOrdersRaw = await storage.getOrders();
-      const helperOrders = allOrdersRaw.filter(o => o.matchedHelperId === user.id);
+      const helperOrders = await storage.getOrdersByMatchedHelper(user.id);
       const allOrders = [...activeOrders, ...helperOrders];
       const hasActiveOrder = allOrders.some(o => 
         !['completed', 'closed', 'cancelled'].includes(o.status)
@@ -447,12 +455,8 @@ export async function registerAuthRoutes(ctx: RouteContext): Promise<void> {
     try {
       const { phoneNumber, name } = req.body;
       
-      const users = await storage.getAllUsers();
-      const user = users.find(u => 
-        u.phoneNumber === phoneNumber && 
-        u.name === name && 
-        !u.isHqStaff
-      );
+      // 타겟 쿼리로 사용자 검색 (전체 스캔 방지)
+      const user = await storage.getUserByPhoneAndName(phoneNumber, name);
       
       if (!user) {
         return res.status(404).json({ message: "일치하는 계정을 찾을 수 없습니다" });
@@ -536,13 +540,13 @@ export async function registerAuthRoutes(ctx: RouteContext): Promise<void> {
       if (recentByIp.length >= 3) {
         return res.status(429).json({ message: "너무 많은 요청입니다. 1분 후 다시 시도해주세요." });
       }
-      
+
       // 같은 전화번호로 1분에 3회 제한
       const recentByPhone = await storage.getRecentPhoneVerificationCodes(phoneNumber, 60);
       if (recentByPhone.length >= 3) {
         return res.status(429).json({ message: "이 번호로 너무 많은 요청이 있습니다. 1분 후 다시 시도해주세요." });
       }
-      
+
       // 개발 환경에서는 고정 테스트 인증코드 사용
       const isTestMode = process.env.NODE_ENV !== "production";
       const code = isTestMode ? "123456" : String(require("crypto").randomInt(100000, 999999));
@@ -639,18 +643,18 @@ export async function registerAuthRoutes(ctx: RouteContext): Promise<void> {
       // IPv6 mapped IPv4 정규화 (::ffff:127.0.0.1 -> 127.0.0.1)
       const ipAddress = rawIp.replace(/^::ffff:/, '');
       
-      // 같은 IP에서 1분에 3회 제한 (모든 IP에 적용)
+      // 같은 IP에서 1분에 3회 제한
       const recentByIp = await storage.getRecentPhoneVerificationCodesByIp(ipAddress, 60);
       if (recentByIp.length >= 3) {
         return res.status(429).json({ message: "너무 많은 요청입니다. 1분 후 다시 시도해주세요." });
       }
-      
+
       // 같은 전화번호로 1분에 3회 제한
       const recentByPhone = await storage.getRecentPhoneVerificationCodes(phoneNumber, 60);
       if (recentByPhone.length >= 3) {
         return res.status(429).json({ message: "이 번호로 너무 많은 요청이 있습니다. 1분 후 다시 시도해주세요." });
       }
-      
+
       // 개발 환경에서는 고정 테스트 인증코드 사용
       const isTestMode = process.env.NODE_ENV !== "production";
       const code = isTestMode ? "123456" : String(require("crypto").randomInt(100000, 999999));

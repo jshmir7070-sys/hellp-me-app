@@ -173,8 +173,8 @@ export default function MembersPageV2() {
         '차량종류': item.vehicleType || '',
         '차량번호': item.vehiclePlate || '',
         '상태': statusLabels[item.status] || item.status,
-        '가입일': new Date(item.createdAt).toLocaleDateString('ko-KR'),
-        '승인일': item.approvedAt ? new Date(item.approvedAt).toLocaleDateString('ko-KR') : '',
+        '가입일': new Date(item.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }),
+        '승인일': item.approvedAt ? new Date(item.approvedAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
       }));
       filename = `헬퍼목록_${new Date().toISOString().slice(0, 10)}.csv`;
     } else {
@@ -186,8 +186,8 @@ export default function MembersPageV2() {
         '사업자명': item.businessName || '',
         '사업자번호': item.businessNumber || '',
         '상태': statusLabels[item.status] || item.status,
-        '가입일': new Date(item.createdAt).toLocaleDateString('ko-KR'),
-        '승인일': item.approvedAt ? new Date(item.approvedAt).toLocaleDateString('ko-KR') : '',
+        '가입일': new Date(item.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }),
+        '승인일': item.approvedAt ? new Date(item.approvedAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' }) : '',
       }));
       filename = `요청자목록_${new Date().toISOString().slice(0, 10)}.csv`;
     }
@@ -295,7 +295,7 @@ export default function MembersPageV2() {
       header: '가입일',
       width: 100,
       render: (value) => (
-        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR')}</span>
+        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
       ),
     },
     {
@@ -389,7 +389,7 @@ export default function MembersPageV2() {
       header: '가입일',
       width: 100,
       render: (value) => (
-        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR')}</span>
+        <span className="text-sm">{new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
       ),
     },
     {
@@ -679,14 +679,14 @@ export default function MembersPageV2() {
                   <div>
                     <div className="text-sm text-muted-foreground">가입일</div>
                     <div className="font-medium">
-                      {new Date(selectedMember.createdAt).toLocaleDateString('ko-KR')}
+                      {new Date(selectedMember.createdAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}
                     </div>
                   </div>
                   {selectedMember.approvedAt && (
                     <div>
                       <div className="text-sm text-muted-foreground">승인일</div>
                       <div className="font-medium">
-                        {new Date(selectedMember.approvedAt).toLocaleDateString('ko-KR')}
+                        {new Date(selectedMember.approvedAt).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}
                       </div>
                     </div>
                   )}

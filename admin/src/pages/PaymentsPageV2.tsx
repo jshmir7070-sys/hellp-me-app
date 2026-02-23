@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,6 +33,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 interface DepositPayment {
   id: number;
   orderId: number;
+  orderNumber?: string | null;
   orderDate: string;
   requesterName: string;
   requesterEmail: string;
@@ -47,6 +49,7 @@ interface DepositPayment {
 interface BalancePayment {
   id: number;
   orderId: number;
+  orderNumber?: string | null;
   orderDate: string;
   requesterName: string;
   requesterEmail: string;
@@ -77,6 +80,7 @@ interface BalancePayment {
 interface Refund {
   id: number;
   orderId: number;
+  orderNumber?: string | null;
   orderDate: string;
   requesterName: string;
   requesterEmail: string;
@@ -149,6 +153,16 @@ const statusColors: Record<string, string> = {
   rejected: 'bg-red-100 text-red-800',
 };
 
+function formatOrderNumber(orderNumber: string | null | undefined, orderId: number): string {
+  if (orderNumber) {
+    if (orderNumber.length === 12) {
+      return `${orderNumber.slice(0, 1)}-${orderNumber.slice(1, 4)}-${orderNumber.slice(4, 8)}-${orderNumber.slice(8, 12)}`;
+    }
+    return orderNumber;
+  }
+  return `#${orderId}`;
+}
+
 // ============ 메인 컴포넌트 ============
 
 export default function PaymentsPageV2() {
@@ -157,6 +171,7 @@ export default function PaymentsPageV2() {
   
   const [activeTab, setActiveTab] = useState<'deposit' | 'balance' | 'refunds'>('deposit');
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useDebouncedValue(searchTerm, 300);
   const [dateRange] = useState(getDefaultDateRange(30));
   const [selectedIds, setSelectedIds] = useState<Set<string | number>>(new Set());
   const [selectedDeposit, setSelectedDeposit] = useState<DepositPayment | null>(null);
@@ -263,26 +278,26 @@ export default function PaymentsPageV2() {
   // ============ 필터링 ============
 
   const filteredDepositPayments = depositPayments.filter(p =>
-    p.requesterEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.requesterName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.requesterPhone?.includes(searchTerm) ||
-    String(p.orderId).includes(searchTerm)
+    p.requesterEmail?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    p.requesterName?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    p.requesterPhone?.includes(debouncedSearch) ||
+    String(p.orderId).includes(debouncedSearch)
   );
 
   const filteredBalancePayments = balancePayments.filter(p =>
-    p.requesterEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.requesterName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.helperName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.requesterPhone?.includes(searchTerm) ||
-    String(p.orderId).includes(searchTerm)
+    p.requesterEmail?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    p.requesterName?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    p.helperName?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    p.requesterPhone?.includes(debouncedSearch) ||
+    String(p.orderId).includes(debouncedSearch)
   );
 
   const filteredRefunds = refunds.filter(r =>
-    r.requesterEmail?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.requesterName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.requesterPhone?.includes(searchTerm) ||
-    r.cancelReason?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    String(r.orderId).includes(searchTerm)
+    r.requesterEmail?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    r.requesterName?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    r.requesterPhone?.includes(debouncedSearch) ||
+    r.cancelReason?.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+    String(r.orderId).includes(debouncedSearch)
   );
 
   // ============ 통계 계산 ============
@@ -298,11 +313,10 @@ export default function PaymentsPageV2() {
   const balanceStats = {
     paid: filteredBalancePayments.filter(p => p.paymentStatus === 'paid').length,
     unpaid: filteredBalancePayments.filter(p => p.paymentStatus === 'unpaid').length,
-    overdue: filteredBalancePayments.filter(p => 
+    overdue: filteredBalancePayments.filter(p =>
       p.paymentStatus === 'unpaid' && p.balanceDueDate && new Date(p.balanceDueDate) < new Date()
     ).length,
     totalAmount: filteredBalancePayments
-      .filter(p => p.paymentStatus === 'paid')
       .reduce((sum, p) => sum + (p.balanceAmount || 0), 0),
   };
 
@@ -409,8 +423,8 @@ export default function PaymentsPageV2() {
     {
       key: 'orderId',
       header: '오더번호',
-      width: 90,
-      render: (value) => <span className="font-mono text-sm font-medium">{value}</span>,
+      width: 150,
+      render: (value, row) => <span className="font-mono text-sm font-medium">{formatOrderNumber(row.orderNumber, value)}</span>,
     },
     {
       key: 'orderDate',
@@ -482,8 +496,8 @@ export default function PaymentsPageV2() {
     {
       key: 'orderId',
       header: '오더번호',
-      width: 80,
-      render: (value) => <span className="font-mono text-sm font-medium">{value}</span>,
+      width: 150,
+      render: (value, row) => <span className="font-mono text-sm font-medium">{formatOrderNumber(row.orderNumber, value)}</span>,
     },
     {
       key: 'orderDate',
@@ -568,8 +582,8 @@ export default function PaymentsPageV2() {
     {
       key: 'orderId',
       header: '오더번호',
-      width: 80,
-      render: (value) => <span className="font-mono text-sm font-medium">{value}</span>,
+      width: 150,
+      render: (value, row) => <span className="font-mono text-sm font-medium">{formatOrderNumber(row.orderNumber, value)}</span>,
     },
     {
       key: 'orderDate',
@@ -910,7 +924,7 @@ export default function PaymentsPageV2() {
       <Dialog open={!!selectedDeposit} onOpenChange={() => setSelectedDeposit(null)}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>계약금 상세 - 오더 #{selectedDeposit?.orderId}</DialogTitle>
+            <DialogTitle>계약금 상세 - 오더 {selectedDeposit ? formatOrderNumber(selectedDeposit.orderNumber, selectedDeposit.orderId) : ''}</DialogTitle>
           </DialogHeader>
           
           {selectedDeposit && (
@@ -988,7 +1002,7 @@ export default function PaymentsPageV2() {
                     onClick={async () => {
                       try {
                         await apiRequest(`/orders/${selectedDeposit.orderId}/approve-deposit`, { method: 'POST' });
-                        toast({ title: '입금 확인 완료', description: `오더 #${selectedDeposit.orderId}의 입금이 확인되었습니다.` });
+                        toast({ title: '입금 확인 완료', description: `오더 ${formatOrderNumber(selectedDeposit.orderNumber, selectedDeposit.orderId)}의 입금이 확인되었습니다.` });
                         queryClient.invalidateQueries({ queryKey: ['/api/admin/payments'] });
                         setSelectedDeposit(null);
                       } catch (error: any) {
@@ -1010,7 +1024,7 @@ export default function PaymentsPageV2() {
       <Dialog open={!!selectedBalance} onOpenChange={() => setSelectedBalance(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>잔금 상세 - 오더 #{selectedBalance?.orderId}</DialogTitle>
+            <DialogTitle>잔금 상세 - 오더 {selectedBalance ? formatOrderNumber(selectedBalance.orderNumber, selectedBalance.orderId) : ''}</DialogTitle>
           </DialogHeader>
           
           {selectedBalance && (
@@ -1144,7 +1158,7 @@ export default function PaymentsPageV2() {
       <Dialog open={!!selectedRefund} onOpenChange={() => setSelectedRefund(null)}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>환불 상세 - 오더 #{selectedRefund?.orderId}</DialogTitle>
+            <DialogTitle>환불 상세 - 오더 {selectedRefund ? formatOrderNumber(selectedRefund.orderNumber, selectedRefund.orderId) : ''}</DialogTitle>
           </DialogHeader>
           
           {selectedRefund && (
@@ -1282,7 +1296,7 @@ export default function PaymentsPageV2() {
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <div className="text-sm text-muted-foreground mb-1">오더 #{selectedRefund?.orderId}</div>
+              <div className="text-sm text-muted-foreground mb-1">오더 {selectedRefund ? formatOrderNumber(selectedRefund.orderNumber, selectedRefund.orderId) : ''}</div>
               <div className="text-lg font-bold text-orange-600">
                 환불 금액: {selectedRefund?.refundAmount.toLocaleString()}원
               </div>

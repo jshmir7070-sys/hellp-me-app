@@ -12,6 +12,7 @@ import { ExcelTable, ColumnDef } from '@/components/common/ExcelTable';
 interface CSTicket {
   id: number;
   orderId: number | null;
+  orderNumber?: string | null;
   userId: number;
   userName: string;
   userRole: string;
@@ -20,6 +21,16 @@ interface CSTicket {
   message: string;
   status: string;
   createdAt: string;
+}
+
+function formatOrderNumber(orderNumber: string | null | undefined, orderId: number): string {
+  if (orderNumber) {
+    if (orderNumber.length === 12) {
+      return `${orderNumber.slice(0, 1)}-${orderNumber.slice(1, 4)}-${orderNumber.slice(4, 8)}-${orderNumber.slice(8, 12)}`;
+    }
+    return orderNumber;
+  }
+  return `#${orderId}`;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -81,9 +92,9 @@ export default function CSPage() {
     },
     {
       key: 'orderId',
-      header: '오더ID',
-      width: 80,
-      render: (value) => <span className="font-mono text-sm">{value ? `#${value}` : '-'}</span>,
+      header: '오더번호',
+      width: 150,
+      render: (value, row) => <span className="font-mono text-sm">{value ? formatOrderNumber(row.orderNumber, value) : '-'}</span>,
     },
     {
       key: 'userName',
@@ -129,7 +140,7 @@ export default function CSPage() {
       width: 100,
       render: (value) => (
         <span className="text-sm text-muted-foreground">
-          {new Date(value).toLocaleDateString('ko-KR')}
+          {new Date(value).toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}
         </span>
       ),
     },
@@ -216,7 +227,7 @@ export default function CSPage() {
                 </div>
                 <div>
                   <h4 className="text-sm font-medium text-muted-foreground">오더</h4>
-                  <p>{selectedTicket.orderId ? `#${selectedTicket.orderId}` : '-'}</p>
+                  <p>{selectedTicket.orderId ? formatOrderNumber(selectedTicket.orderNumber, selectedTicket.orderId) : '-'}</p>
                 </div>
                 <div>
                   <h4 className="text-sm font-medium text-muted-foreground">유형</h4>
@@ -224,7 +235,7 @@ export default function CSPage() {
                 </div>
                 <div>
                   <h4 className="text-sm font-medium text-muted-foreground">생성일</h4>
-                  <p>{new Date(selectedTicket.createdAt).toLocaleString('ko-KR')}</p>
+                  <p>{new Date(selectedTicket.createdAt).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}</p>
                 </div>
               </div>
               <div>

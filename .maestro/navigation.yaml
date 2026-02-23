@@ -1,0 +1,49 @@
+# ============================================
+# 기본 탭 네비게이션 테스트
+# ============================================
+
+appId: host.exp.exponent
+
+---
+
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# ── 로그인 ──
+- tapOn: "이메일을 입력하세요"
+- inputText: ${TEST_EMAIL}
+- tapOn: "비밀번호를 입력하세요"
+- inputText: ${TEST_PASSWORD}
+- tapOn: "로그인"
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# ── 홈 탭 확인 ──
+- assertVisible: "홈"
+- takeScreenshot: "nav-01-home"
+
+# ── 오더등록 탭 ──
+- tapOn: "오더등록"
+- waitForAnimationToEnd
+- takeScreenshot: "nav-02-create-order"
+
+# ── 마감확인 탭 ──
+- tapOn: "마감확인"
+- waitForAnimationToEnd
+- takeScreenshot: "nav-03-work-status"
+
+# ── 이력/리뷰 탭 ──
+- tapOn: "이력/리뷰"
+- waitForAnimationToEnd
+- takeScreenshot: "nav-04-reviews"
+
+# ── 나의정보 탭 ──
+- tapOn: "나의정보"
+- waitForAnimationToEnd
+- takeScreenshot: "nav-05-profile"
+
+# ── 홈으로 돌아오기 ──
+- tapOn: "홈"
+- waitForAnimationToEnd
+- takeScreenshot: "nav-06-back-to-home"

@@ -1,7 +1,14 @@
-import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import { getApiUrl } from '@/lib/query-client';
+
+// expo-image-manipulator를 동적 import (설치되지 않은 환경에서도 안전)
+let ImageManipulator: any = null;
+try {
+  ImageManipulator = require('expo-image-manipulator');
+} catch (e) {
+  // expo-image-manipulator가 설치되지 않은 경우 무시
+}
 
 export type ImagePickerOptions = {
   allowsEditing?: boolean;
@@ -85,15 +92,26 @@ export async function compressImage(
   uri: string,
   options: CompressOptions = {}
 ): Promise<string> {
-  const { maxWidth = 1200, maxHeight = 1200, quality = 0.7 } = options;
+  // expo-image-manipulator가 없으면 원본 URI 그대로 반환
+  if (!ImageManipulator || !ImageManipulator.manipulateAsync) {
+    console.warn('[image-upload] expo-image-manipulator not available, skipping compression');
+    return uri;
+  }
 
-  const manipulateResult = await ImageManipulator.manipulateAsync(
-    uri,
-    [{ resize: { width: maxWidth, height: maxHeight } }],
-    { compress: quality, format: ImageManipulator.SaveFormat.JPEG }
-  );
+  try {
+    const { maxWidth = 1200, maxHeight = 1200, quality = 0.7 } = options;
 
-  return manipulateResult.uri;
+    const manipulateResult = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: maxWidth, height: maxHeight } }],
+      { compress: quality, format: ImageManipulator.SaveFormat.JPEG }
+    );
+
+    return manipulateResult.uri;
+  } catch (err) {
+    console.warn('[image-upload] Image compression failed, using original:', err);
+    return uri;
+  }
 }
 
 export async function uploadImage(
@@ -104,59 +122,76 @@ export async function uploadImage(
   authToken?: string | null
 ): Promise<UploadResult> {
   try {
-    const compressedUri = await compressImage(uri);
-
-    const fileInfo = await FileSystem.getInfoAsync(compressedUri);
-    if (!fileInfo.exists) {
-      return { success: false, error: '파일을 찾을 수 없습니다' };
+    // 1. content:// URI → file:// 로 복사 (Android 필수)
+    let safeUri = uri;
+    if (uri.startsWith('content://') || uri.startsWith('ph://')) {
+      try {
+        const destDir = (FileSystem.cacheDirectory || FileSystem.documentDirectory || '').replace(/\/$/, '');
+        const destPath = `${destDir}/upload_${Date.now()}.jpg`;
+        await FileSystem.copyAsync({ from: uri, to: destPath });
+        safeUri = destPath;
+        console.log('[image-upload] Copied to:', safeUri);
+      } catch (copyErr) {
+        console.warn('[image-upload] URI copy failed, using original:', copyErr);
+      }
     }
 
-    const filename = compressedUri.split('/').pop() || 'upload.jpg';
-    const match = /\.(\w+)$/.exec(filename);
-    const type = match ? `image/${match[1]}` : 'image/jpeg';
+    // 2. 파일명과 MIME 타입 추출
+    const filename = safeUri.split('/').pop() || `upload_${Date.now()}.jpg`;
+    const ext = filename.split('.').pop()?.toLowerCase() || 'jpg';
+    const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
 
+    // 3. FormData 구성
     const formData = new FormData();
     formData.append(fieldName, {
-      uri: compressedUri,
+      uri: safeUri,
       name: filename,
-      type,
+      type: mimeType,
     } as any);
 
     Object.entries(additionalData).forEach(([key, value]) => {
       formData.append(key, value);
     });
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'multipart/form-data',
-    };
+    // 4. 업로드 URL 구성
+    const baseUrl = getApiUrl().replace(/\/$/, '');
+    const uploadUrl = `${baseUrl}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
+    console.log(`[image-upload] Uploading to ${uploadUrl}, uri: ${safeUri.substring(0, 80)}`);
+
+    // 5. fetch로 업로드
+    const headers: Record<string, string> = {};
     if (authToken) {
       headers['Authorization'] = `Bearer ${authToken}`;
     }
+    // Content-Type을 설정하지 않음 — fetch가 FormData boundary를 자동 생성
 
-    const response = await fetch(new URL(endpoint, getApiUrl()).toString(), {
+    const response = await fetch(uploadUrl, {
       method: 'POST',
       body: formData,
       headers,
     });
 
+    console.log('[image-upload] Response status:', response.status);
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      console.error('[image-upload] Server error:', response.status, errorData);
       return {
         success: false,
-        error: errorData.message || '업로드에 실패했습니다',
+        error: errorData.message || `업로드 실패 (${response.status})`,
       };
     }
 
     const data = await response.json();
     return {
       success: true,
-      url: data.url || data.path,
+      url: data.url || data.imageUrl || data.path,
     };
-  } catch (error) {
-    console.error('Image upload error:', error);
+  } catch (error: any) {
+    console.error('[image-upload] Upload error:', error?.message || error);
     return {
       success: false,
-      error: '업로드 중 오류가 발생했습니다',
+      error: error?.message || '업로드 중 오류가 발생했습니다',
     };
   }
 }

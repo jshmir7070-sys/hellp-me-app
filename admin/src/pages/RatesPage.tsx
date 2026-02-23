@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, Trash2, Check, X, ChevronUp, ChevronDown, RefreshCw, Download } from 'lucide-react';
+import { Plus, Trash2, Check, X, ChevronUp, ChevronDown, RefreshCw, Download, Calendar } from 'lucide-react';
+import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 
@@ -22,7 +23,7 @@ const MIN_TOTAL_OPTIONS = [
   100000, 150000, 200000, 250000, 300000, 350000, 400000, 450000, 500000
 ];
 
-const RATE_OPTIONS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+const RATE_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
 interface CourierSetting {
   id: number;
@@ -49,10 +50,13 @@ const CATEGORY_TABS = [
 const MAIN_TABS = [
   { value: 'rates', label: '운임 정책' },
   { value: 'teams', label: '팀 수수료' },
+  { value: 'platform_fee', label: '플랫폼 수수료' },
+  { value: 'urgent', label: '긴급할증' },
   { value: 'deposit', label: '계약금/취소규정' },
+  { value: 'history', label: '변경 이력' },
 ] as const;
 
-type MainTabType = 'rates' | 'teams' | 'deposit';
+type MainTabType = 'rates' | 'teams' | 'platform_fee' | 'urgent' | 'deposit' | 'history';
 type CategoryType = 'parcel' | 'other' | 'cold';
 type EditableFields = Partial<CourierSetting>;
 
@@ -70,6 +74,47 @@ interface TeamWithLeader {
     name: string;
     phone?: string;
   };
+}
+
+/** 예약 적용 + 변경 사유 입력 컴포넌트 */
+function ScheduleFields({
+  effectiveFrom,
+  setEffectiveFrom,
+  changeReason,
+  setChangeReason,
+  compact = false,
+}: {
+  effectiveFrom: string;
+  setEffectiveFrom: (v: string) => void;
+  changeReason: string;
+  setChangeReason: (v: string) => void;
+  compact?: boolean;
+}) {
+  return (
+    <div className={cn('flex gap-3 items-end', compact ? 'flex-row flex-wrap' : 'flex-row')}>
+      <div className="flex flex-col gap-1">
+        <Label className="text-xs text-muted-foreground flex items-center gap-1">
+          <Calendar className="h-3 w-3" />
+          적용일 (비워두면 즉시)
+        </Label>
+        <Input
+          type="datetime-local"
+          value={effectiveFrom}
+          onChange={e => setEffectiveFrom(e.target.value)}
+          className="h-8 text-xs w-[200px]"
+        />
+      </div>
+      <div className="flex flex-col gap-1 flex-1 min-w-[150px]">
+        <Label className="text-xs text-muted-foreground">변경 사유 (선택)</Label>
+        <Input
+          value={changeReason}
+          onChange={e => setChangeReason(e.target.value)}
+          placeholder="사유를 입력하세요"
+          className="h-8 text-xs"
+        />
+      </div>
+    </div>
+  );
 }
 
 export default function RatesPage() {
@@ -95,6 +140,14 @@ export default function RatesPage() {
   const [depositSettings, setDepositSettings] = useState({
     depositRate: '10',
   });
+
+  // 예약 적용 공통 state
+  const [courierSchedule, setCourierSchedule] = useState({ effectiveFrom: '', changeReason: '' });
+  const [otherSchedule, setOtherSchedule] = useState({ effectiveFrom: '', changeReason: '' });
+  const [coldSchedule, setColdSchedule] = useState({ effectiveFrom: '', changeReason: '' });
+  const [teamSchedule, setTeamSchedule] = useState({ effectiveFrom: '', changeReason: '' });
+  const [depositSchedule, setDepositSchedule] = useState({ effectiveFrom: '', changeReason: '' });
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -137,6 +190,55 @@ export default function RatesPage() {
     enabled: mainTab === 'teams',
   });
 
+  // Platform Fee Policies
+  const { data: platformFeePolicies = [] } = useQuery<any[]>({
+    queryKey: ['/api/admin/settings/platform-fee-policies'],
+    queryFn: async () => {
+      const res = await adminFetch('/api/admin/settings/platform-fee-policies');
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: mainTab === 'platform_fee',
+  });
+
+  // Urgent Fee Policies
+  const { data: urgentFeePolicies = [] } = useQuery<any[]>({
+    queryKey: ['/api/admin/settings/urgent-fee-policies'],
+    queryFn: async () => {
+      const res = await adminFetch('/api/admin/settings/urgent-fee-policies');
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: mainTab === 'urgent',
+  });
+
+  // Change History
+  const [historyFilter, setHistoryFilter] = useState({ settingType: '', status: '', page: 1 });
+  const { data: changeHistoryData, refetch: refetchHistory } = useQuery<{ data: any[]; total: number }>({
+    queryKey: ['/api/admin/settings/change-history', historyFilter],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (historyFilter.settingType) params.set('settingType', historyFilter.settingType);
+      if (historyFilter.status) params.set('status', historyFilter.status);
+      params.set('page', String(historyFilter.page));
+      params.set('limit', '20');
+      const res = await adminFetch(`/api/admin/settings/change-history?${params}`);
+      if (!res.ok) return { data: [], total: 0 };
+      return res.json();
+    },
+    enabled: mainTab === 'history',
+  });
+
+  // Pending changes count (for badge)
+  const { data: pendingChanges = [] } = useQuery<any[]>({
+    queryKey: ['/api/admin/settings/change-history/pending'],
+    queryFn: async () => {
+      const res = await adminFetch('/api/admin/settings/change-history/pending');
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
   const [editingTeam, setEditingTeam] = useState<number | null>(null);
   const [teamFormData, setTeamFormData] = useState<Partial<TeamWithLeader>>({});
   const [isAddingTeam, setIsAddingTeam] = useState(false);
@@ -144,18 +246,24 @@ export default function RatesPage() {
   const [selectedLeaderId, setSelectedLeaderId] = useState<string>('');
 
   const updateTeamMutation = useMutation({
-    mutationFn: async ({ teamId, data }: { teamId: number; data: Partial<TeamWithLeader> }) => {
+    mutationFn: async ({ teamId, data, effectiveFrom, changeReason }: { teamId: number; data: Partial<TeamWithLeader>; effectiveFrom?: string; changeReason?: string }) => {
+      const body: Record<string, any> = { ...data };
+      if (effectiveFrom) body.effectiveFrom = effectiveFrom;
+      if (changeReason) body.changeReason = changeReason;
       const res = await adminFetch(`/api/admin/teams/${teamId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error('Failed to update');
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/teams'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/settings/change-history'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/settings/change-history/pending'] });
       setEditingTeam(null);
+      setTeamSchedule({ effectiveFrom: '', changeReason: '' });
       toast({ title: '팀 정보가 수정되었습니다.' });
     },
     onError: () => {
@@ -215,56 +323,83 @@ export default function RatesPage() {
     }
   }, [systemSettings]);
 
+  /** datetime-local → "YYYY-MM-DD HH:mm" */
+  const formatScheduleDate = (dtLocal: string) => dtLocal ? dtLocal.replace('T', ' ') : undefined;
+
   const saveSystemSettingMutation = useMutation({
-    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+    mutationFn: async ({ key, value, effectiveFrom, changeReason }: { key: string; value: string; effectiveFrom?: string; changeReason?: string }) => {
+      const body: Record<string, any> = { key, value };
+      if (effectiveFrom) body.effectiveFrom = effectiveFrom;
+      if (changeReason) body.changeReason = changeReason;
       const res = await adminFetch('/api/admin/settings/system', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, value }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error('Failed to save');
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/settings/system'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/settings/change-history'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/settings/change-history/pending'] });
     },
   });
 
   const saveOtherSettings = async () => {
-    if (!await confirm({ title: '설정 저장', description: '기타택배 설정을 저장하시겠습니까?' })) return;
+    const scheduled = formatScheduleDate(otherSchedule.effectiveFrom);
+    const desc = scheduled ? `기타택배 설정을 ${otherSchedule.effectiveFrom}에 예약 적용하시겠습니까?` : '기타택배 설정을 저장하시겠습니까?';
+    if (!await confirm({ title: '설정 저장', description: desc })) return;
     try {
+      const common = { effectiveFrom: scheduled, changeReason: otherSchedule.changeReason || undefined };
       await Promise.all([
-        saveSystemSettingMutation.mutateAsync({ key: 'other_destination_price', value: otherSettings.destinationPrice }),
-        saveSystemSettingMutation.mutateAsync({ key: 'other_box_price', value: otherSettings.boxPrice }),
-        saveSystemSettingMutation.mutateAsync({ key: 'other_min_daily_fee', value: otherSettings.minDailyFee }),
-        saveSystemSettingMutation.mutateAsync({ key: 'other_commission_rate', value: otherSettings.commissionRate }),
-        saveSystemSettingMutation.mutateAsync({ key: 'other_urgent_commission_rate', value: otherSettings.urgentCommissionRate }),
+        saveSystemSettingMutation.mutateAsync({ key: 'other_destination_price', value: otherSettings.destinationPrice, ...common }),
+        saveSystemSettingMutation.mutateAsync({ key: 'other_box_price', value: otherSettings.boxPrice, ...common }),
+        saveSystemSettingMutation.mutateAsync({ key: 'other_min_daily_fee', value: otherSettings.minDailyFee, ...common }),
+        saveSystemSettingMutation.mutateAsync({ key: 'other_commission_rate', value: otherSettings.commissionRate, ...common }),
+        saveSystemSettingMutation.mutateAsync({ key: 'other_urgent_commission_rate', value: otherSettings.urgentCommissionRate, ...common }),
       ]);
-      toast({ title: '기타택배 설정이 저장되었습니다.' });
+      const msg = scheduled ? '기타택배 설정이 예약되었습니다.' : '기타택배 설정이 저장되었습니다.';
+      toast({ title: msg });
+      setOtherSchedule({ effectiveFrom: '', changeReason: '' });
     } catch {
       toast({ title: '저장 실패', variant: 'destructive' });
     }
   };
 
   const saveColdSettings = async () => {
-    if (!await confirm({ title: '설정 저장', description: '냉탑전용 설정을 저장하시겠습니까?' })) return;
+    const scheduled = formatScheduleDate(coldSchedule.effectiveFrom);
+    const desc = scheduled ? `냉탑전용 설정을 ${coldSchedule.effectiveFrom}에 예약 적용하시겠습니까?` : '냉탑전용 설정을 저장하시겠습니까?';
+    if (!await confirm({ title: '설정 저장', description: desc })) return;
     try {
+      const common = { effectiveFrom: scheduled, changeReason: coldSchedule.changeReason || undefined };
       await Promise.all([
-        saveSystemSettingMutation.mutateAsync({ key: 'cold_min_daily_fee', value: coldSettings.minDailyFee }),
-        saveSystemSettingMutation.mutateAsync({ key: 'cold_commission_rate', value: coldSettings.commissionRate }),
-        saveSystemSettingMutation.mutateAsync({ key: 'cold_urgent_commission_rate', value: coldSettings.urgentCommissionRate }),
+        saveSystemSettingMutation.mutateAsync({ key: 'cold_min_daily_fee', value: coldSettings.minDailyFee, ...common }),
+        saveSystemSettingMutation.mutateAsync({ key: 'cold_commission_rate', value: coldSettings.commissionRate, ...common }),
+        saveSystemSettingMutation.mutateAsync({ key: 'cold_urgent_commission_rate', value: coldSettings.urgentCommissionRate, ...common }),
       ]);
-      toast({ title: '냉탑전용 설정이 저장되었습니다.' });
+      const msg = scheduled ? '냉탑전용 설정이 예약되었습니다.' : '냉탑전용 설정이 저장되었습니다.';
+      toast({ title: msg });
+      setColdSchedule({ effectiveFrom: '', changeReason: '' });
     } catch {
       toast({ title: '저장 실패', variant: 'destructive' });
     }
   };
 
   const saveDepositSettings = async () => {
-    if (!await confirm({ title: '설정 저장', description: '계약금 설정을 저장하시겠습니까?' })) return;
+    const scheduled = formatScheduleDate(depositSchedule.effectiveFrom);
+    const desc = scheduled ? `계약금 설정을 ${depositSchedule.effectiveFrom}에 예약 적용하시겠습니까?` : '계약금 설정을 저장하시겠습니까?';
+    if (!await confirm({ title: '설정 저장', description: desc })) return;
     try {
-      await saveSystemSettingMutation.mutateAsync({ key: 'deposit_rate', value: depositSettings.depositRate });
-      toast({ title: '계약금 설정이 저장되었습니다.' });
+      await saveSystemSettingMutation.mutateAsync({
+        key: 'deposit_rate',
+        value: depositSettings.depositRate,
+        effectiveFrom: scheduled,
+        changeReason: depositSchedule.changeReason || undefined,
+      });
+      const msg = scheduled ? '계약금 설정이 예약되었습니다.' : '계약금 설정이 저장되었습니다.';
+      toast({ title: msg });
+      setDepositSchedule({ effectiveFrom: '', changeReason: '' });
     } catch {
       toast({ title: '저장 실패', variant: 'destructive' });
     }
@@ -276,11 +411,14 @@ export default function RatesPage() {
     .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.id - b.id);
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<CourierSetting> }) => {
+    mutationFn: async ({ id, data, effectiveFrom, changeReason }: { id: number; data: Partial<CourierSetting>; effectiveFrom?: string; changeReason?: string }) => {
+      const body: Record<string, any> = { ...data };
+      if (effectiveFrom) body.effectiveFrom = effectiveFrom;
+      if (changeReason) body.changeReason = changeReason;
       const res = await adminFetch(`/api/admin/settings/couriers/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         if (res.status === 401) {
@@ -293,6 +431,8 @@ export default function RatesPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/settings/couriers'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/settings/change-history'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/admin/settings/change-history/pending'] });
       toast({ title: '저장하였습니다.' });
     },
     onError: (err: Error) => {
@@ -368,14 +508,22 @@ export default function RatesPage() {
   const saveEdit = async (id: number) => {
     const changes = editingRows[id];
     if (changes) {
-      if (!await confirm({ title: '변경사항 저장', description: '변경사항을 저장하시겠습니까?' })) return;
-      updateMutation.mutate({ id, data: changes }, {
+      const scheduled = formatScheduleDate(courierSchedule.effectiveFrom);
+      const desc = scheduled ? `변경사항을 ${courierSchedule.effectiveFrom}에 예약 적용하시겠습니까?` : '변경사항을 저장하시겠습니까?';
+      if (!await confirm({ title: '변경사항 저장', description: desc })) return;
+      updateMutation.mutate({
+        id,
+        data: changes,
+        effectiveFrom: scheduled,
+        changeReason: courierSchedule.changeReason || undefined,
+      }, {
         onSuccess: () => {
           setEditingRows(prev => {
             const next = { ...prev };
             delete next[id];
             return next;
           });
+          setCourierSchedule({ effectiveFrom: '', changeReason: '' });
         }
       });
     }
@@ -616,13 +764,18 @@ export default function RatesPage() {
             key={tab.value}
             onClick={() => setMainTab(tab.value)}
             className={cn(
-              'px-6 py-3 text-sm font-medium transition-colors relative',
+              'px-6 py-3 text-sm font-medium transition-colors relative whitespace-nowrap',
               mainTab === tab.value
                 ? 'text-primary border-b-2 border-primary'
                 : 'text-muted-foreground hover:text-foreground'
             )}
           >
             {tab.label}
+            {tab.value === 'history' && pendingChanges.length > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 text-[10px] font-bold text-white bg-orange-500 rounded-full">
+                {pendingChanges.length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -813,7 +966,12 @@ export default function RatesPage() {
                                   size="sm"
                                   variant="ghost"
                                   onClick={() => {
-                                    updateTeamMutation.mutate({ teamId: team.id, data: teamFormData });
+                                    updateTeamMutation.mutate({
+                                      teamId: team.id,
+                                      data: teamFormData,
+                                      effectiveFrom: formatScheduleDate(teamSchedule.effectiveFrom),
+                                      changeReason: teamSchedule.changeReason || undefined,
+                                    });
                                   }}
                                   disabled={updateTeamMutation.isPending}
                                   className="h-6 w-6 p-0"
@@ -863,6 +1021,18 @@ export default function RatesPage() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+            {/* 예약 적용 필드 */}
+            {editingTeam !== null && (
+              <div className="mt-4 pt-3 border-t">
+                <ScheduleFields
+                  effectiveFrom={teamSchedule.effectiveFrom}
+                  setEffectiveFrom={v => setTeamSchedule(s => ({ ...s, effectiveFrom: v }))}
+                  changeReason={teamSchedule.changeReason}
+                  setChangeReason={v => setTeamSchedule(s => ({ ...s, changeReason: v }))}
+                  compact
+                />
               </div>
             )}
             <div className="mt-4 p-3 bg-blue-50 rounded text-xs text-blue-700">
@@ -1073,6 +1243,16 @@ export default function RatesPage() {
                 </div>
               </div>
             )}
+            {/* 예약 적용 필드 */}
+            <div className="mt-4 pt-3 border-t">
+              <ScheduleFields
+                effectiveFrom={courierSchedule.effectiveFrom}
+                setEffectiveFrom={v => setCourierSchedule(s => ({ ...s, effectiveFrom: v }))}
+                changeReason={courierSchedule.changeReason}
+                setChangeReason={v => setCourierSchedule(s => ({ ...s, changeReason: v }))}
+                compact
+              />
+            </div>
           </CardContent>
         </Card>
       ) : activeCategory === 'other' ? (
@@ -1152,10 +1332,19 @@ export default function RatesPage() {
                 </div>
               </>
             )}
-            <div className="mt-6 flex justify-end">
+            {/* 예약 적용 필드 */}
+            <div className="mt-6 pt-4 border-t">
+              <ScheduleFields
+                effectiveFrom={otherSchedule.effectiveFrom}
+                setEffectiveFrom={v => setOtherSchedule(s => ({ ...s, effectiveFrom: v }))}
+                changeReason={otherSchedule.changeReason}
+                setChangeReason={v => setOtherSchedule(s => ({ ...s, changeReason: v }))}
+              />
+            </div>
+            <div className="mt-4 flex justify-end">
               <Button onClick={saveOtherSettings} disabled={saveSystemSettingMutation.isPending}>
                 <Check className="h-4 w-4 mr-2" />
-                {saveSystemSettingMutation.isPending ? '저장중...' : '저장'}
+                {saveSystemSettingMutation.isPending ? '저장중...' : otherSchedule.effectiveFrom ? '예약 저장' : '저장'}
               </Button>
             </div>
           </CardContent>
@@ -1211,10 +1400,19 @@ export default function RatesPage() {
                 </div>
               </div>
             )}
-            <div className="mt-6 flex justify-end">
+            {/* 예약 적용 필드 */}
+            <div className="mt-6 pt-4 border-t">
+              <ScheduleFields
+                effectiveFrom={coldSchedule.effectiveFrom}
+                setEffectiveFrom={v => setColdSchedule(s => ({ ...s, effectiveFrom: v }))}
+                changeReason={coldSchedule.changeReason}
+                setChangeReason={v => setColdSchedule(s => ({ ...s, changeReason: v }))}
+              />
+            </div>
+            <div className="mt-4 flex justify-end">
               <Button onClick={saveColdSettings} disabled={saveSystemSettingMutation.isPending}>
                 <Check className="h-4 w-4 mr-2" />
-                {saveSystemSettingMutation.isPending ? '저장중...' : '저장'}
+                {saveSystemSettingMutation.isPending ? '저장중...' : coldSchedule.effectiveFrom ? '예약 저장' : '저장'}
               </Button>
             </div>
           </CardContent>
@@ -1293,12 +1491,284 @@ export default function RatesPage() {
               </div>
             </div>
 
-            <div className="flex justify-end">
+            {/* 예약 적용 필드 */}
+            <div className="border-t pt-4">
+              <ScheduleFields
+                effectiveFrom={depositSchedule.effectiveFrom}
+                setEffectiveFrom={v => setDepositSchedule(s => ({ ...s, effectiveFrom: v }))}
+                changeReason={depositSchedule.changeReason}
+                setChangeReason={v => setDepositSchedule(s => ({ ...s, changeReason: v }))}
+              />
+            </div>
+
+            <div className="mt-4 flex justify-end">
               <Button onClick={saveDepositSettings} disabled={saveSystemSettingMutation.isPending}>
                 <Check className="h-4 w-4 mr-2" />
-                {saveSystemSettingMutation.isPending ? '저장중...' : '저장'}
+                {saveSystemSettingMutation.isPending ? '저장중...' : depositSchedule.effectiveFrom ? '예약 저장' : '저장'}
               </Button>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ==================== 플랫폼 수수료 탭 ==================== */}
+      {mainTab === 'platform_fee' && (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm">플랫폼 수수료 정책</CardTitle>
+            <CardDescription className="text-xs">
+              헬퍼 정산 시 적용되는 플랫폼 수수료 정책 관리
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left p-2">정책명</th>
+                    <th className="text-center p-2">기준</th>
+                    <th className="text-center p-2">유형</th>
+                    <th className="text-right p-2">요율(%)</th>
+                    <th className="text-right p-2">고정금액</th>
+                    <th className="text-center p-2">적용일</th>
+                    <th className="text-center p-2">상태</th>
+                    <th className="text-center p-2">기본값</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {platformFeePolicies.map((p: any) => (
+                    <tr key={p.id} className="border-b hover:bg-muted/30">
+                      <td className="p-2">{p.name}</td>
+                      <td className="text-center p-2">{p.baseOn}</td>
+                      <td className="text-center p-2">{p.feeType}</td>
+                      <td className="text-right p-2">{p.ratePercent ?? '-'}</td>
+                      <td className="text-right p-2">{p.fixedAmount ? p.fixedAmount.toLocaleString() : '-'}</td>
+                      <td className="text-center p-2 text-[10px]">{p.effectiveFrom || '-'}</td>
+                      <td className="text-center p-2">
+                        <span className={cn('px-1.5 py-0.5 rounded text-[10px]', p.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500')}>
+                          {p.isActive ? '활성' : '비활성'}
+                        </span>
+                      </td>
+                      <td className="text-center p-2">
+                        {p.isDefault && <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-100 text-blue-700">기본</span>}
+                      </td>
+                    </tr>
+                  ))}
+                  {platformFeePolicies.length === 0 && (
+                    <tr><td colSpan={8} className="text-center p-4 text-muted-foreground">등록된 정책이 없습니다</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ==================== 긴급할증 탭 ==================== */}
+      {mainTab === 'urgent' && (
+        <Card>
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm">긴급할증 정책</CardTitle>
+            <CardDescription className="text-xs">
+              긴급 오더에 적용되는 할증 정책 관리
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left p-2">택배사코드</th>
+                    <th className="text-center p-2">적용방식</th>
+                    <th className="text-right p-2">값</th>
+                    <th className="text-right p-2">상한금액</th>
+                    <th className="text-center p-2">적용일</th>
+                    <th className="text-center p-2">상태</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {urgentFeePolicies.map((p: any) => (
+                    <tr key={p.id} className="border-b hover:bg-muted/30">
+                      <td className="p-2">{p.carrierCode || '전체'}</td>
+                      <td className="text-center p-2">{p.applyType === 'PERCENT' ? '비율(%)' : '고정(원)'}</td>
+                      <td className="text-right p-2">{p.applyType === 'PERCENT' ? `${p.value}%` : `${p.value?.toLocaleString()}원`}</td>
+                      <td className="text-right p-2">{p.maxUrgentFeeSupply ? `${p.maxUrgentFeeSupply.toLocaleString()}원` : '-'}</td>
+                      <td className="text-center p-2 text-[10px]">{p.effectiveFrom || '-'}</td>
+                      <td className="text-center p-2">
+                        <span className={cn('px-1.5 py-0.5 rounded text-[10px]', p.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500')}>
+                          {p.isActive ? '활성' : '비활성'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {urgentFeePolicies.length === 0 && (
+                    <tr><td colSpan={6} className="text-center p-4 text-muted-foreground">등록된 정책이 없습니다</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ==================== 변경 이력 탭 ==================== */}
+      {mainTab === 'history' && (
+        <Card>
+          <CardHeader className="py-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-sm">설정 변경 이력</CardTitle>
+                <CardDescription className="text-xs">
+                  모든 설정 변경 기록 · 예약 적용 · 롤백
+                </CardDescription>
+              </div>
+              {pendingChanges.length > 0 && (
+                <div className="bg-orange-50 border border-orange-200 rounded px-3 py-1.5 text-xs">
+                  <span className="text-orange-600 font-medium">대기 {pendingChanges.length}건</span>
+                  {pendingChanges[0]?.effectiveFrom && (
+                    <span className="text-orange-500 ml-2">다음: {pendingChanges[0].effectiveFrom}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* 필터 */}
+            <div className="flex gap-2 items-center">
+              <Select value={historyFilter.settingType || 'all'} onValueChange={v => setHistoryFilter(f => ({ ...f, settingType: v === 'all' ? '' : v, page: 1 }))}>
+                <SelectTrigger className="w-[160px] h-8 text-xs">
+                  <SelectValue placeholder="설정 유형" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체</SelectItem>
+                  <SelectItem value="courier_settings">운임설정</SelectItem>
+                  <SelectItem value="team_commission">팀 수수료</SelectItem>
+                  <SelectItem value="system_setting">시스템설정</SelectItem>
+                  <SelectItem value="platform_fee">플랫폼 수수료</SelectItem>
+                  <SelectItem value="urgent_fee">긴급할증</SelectItem>
+                  <SelectItem value="carrier_pricing">단가정책</SelectItem>
+                  <SelectItem value="refund_policy">환불정책</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={historyFilter.status || 'all'} onValueChange={v => setHistoryFilter(f => ({ ...f, status: v === 'all' ? '' : v, page: 1 }))}>
+                <SelectTrigger className="w-[120px] h-8 text-xs">
+                  <SelectValue placeholder="상태" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체</SelectItem>
+                  <SelectItem value="active">적용됨</SelectItem>
+                  <SelectItem value="pending">대기</SelectItem>
+                  <SelectItem value="cancelled">취소</SelectItem>
+                  <SelectItem value="rolled_back">롤백됨</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => refetchHistory()}>
+                <RefreshCw className="h-3 w-3 mr-1" />새로고침
+              </Button>
+            </div>
+
+            {/* 이력 테이블 */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left p-2 w-8">#</th>
+                    <th className="text-left p-2">설정유형</th>
+                    <th className="text-left p-2">대상</th>
+                    <th className="text-center p-2">적용일</th>
+                    <th className="text-center p-2">상태</th>
+                    <th className="text-left p-2">변경자</th>
+                    <th className="text-left p-2">사유</th>
+                    <th className="text-center p-2">변경일</th>
+                    <th className="text-center p-2">액션</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(changeHistoryData?.data || []).map((h: any) => (
+                    <tr key={h.id} className="border-b hover:bg-muted/30">
+                      <td className="p-2 text-muted-foreground">{h.id}</td>
+                      <td className="p-2">
+                        <span className="px-1.5 py-0.5 rounded bg-muted text-[10px]">
+                          {{
+                            courier_settings: '운임',
+                            team_commission: '팀수수료',
+                            system_setting: '시스템',
+                            platform_fee: '플랫폼수수료',
+                            urgent_fee: '긴급할증',
+                            carrier_pricing: '단가',
+                            refund_policy: '환불',
+                          }[h.settingType as string] || h.settingType}
+                        </span>
+                      </td>
+                      <td className="p-2">{h.entityId || '-'}</td>
+                      <td className="text-center p-2 text-[10px]">{h.effectiveFrom || '즉시'}</td>
+                      <td className="text-center p-2">
+                        <span className={cn('px-1.5 py-0.5 rounded text-[10px]', {
+                          'bg-green-100 text-green-700': h.status === 'active',
+                          'bg-orange-100 text-orange-700': h.status === 'pending',
+                          'bg-gray-100 text-gray-500': h.status === 'cancelled',
+                          'bg-red-100 text-red-600': h.status === 'rolled_back',
+                        })}>
+                          {{active: '적용', pending: '대기', cancelled: '취소', rolled_back: '롤백', expired: '만료'}[h.status as string] || h.status}
+                        </span>
+                      </td>
+                      <td className="p-2">{h.changedByName || '-'}</td>
+                      <td className="p-2 max-w-[150px] truncate">{h.reason || '-'}</td>
+                      <td className="text-center p-2 text-[10px]">{h.createdAt ? new Date(h.createdAt).toLocaleString('ko-KR') : '-'}</td>
+                      <td className="text-center p-2">
+                        {h.status === 'pending' && (
+                          <Button variant="ghost" size="sm" className="h-6 text-[10px] text-red-500 hover:text-red-700" onClick={async () => {
+                            if (!await confirm({ title: '예약 취소', description: `변경 #${h.id}을 취소하시겠습니까?` })) return;
+                            const res = await adminFetch(`/api/admin/settings/change-history/${h.id}/cancel`, { method: 'POST' });
+                            if (res.ok) {
+                              toast({ title: '취소되었습니다' });
+                              refetchHistory();
+                              queryClient.invalidateQueries({ queryKey: ['/api/admin/settings/change-history/pending'] });
+                            }
+                          }}>
+                            취소
+                          </Button>
+                        )}
+                        {h.status === 'active' && (
+                          <Button variant="ghost" size="sm" className="h-6 text-[10px] text-orange-500 hover:text-orange-700" onClick={async () => {
+                            if (!await confirm({ title: '롤백', description: `변경 #${h.id}을 이전 값으로 롤백하시겠습니까?` })) return;
+                            const res = await adminFetch(`/api/admin/settings/change-history/${h.id}/rollback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+                            if (res.ok) {
+                              toast({ title: '롤백 완료' });
+                              refetchHistory();
+                            } else {
+                              toast({ title: '롤백 실패', variant: 'destructive' });
+                            }
+                          }}>
+                            롤백
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {(!changeHistoryData?.data || changeHistoryData.data.length === 0) && (
+                    <tr><td colSpan={9} className="text-center p-4 text-muted-foreground">변경 이력이 없습니다</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 페이지네이션 */}
+            {changeHistoryData && changeHistoryData.total > 20 && (
+              <div className="flex items-center justify-center gap-2 pt-2">
+                <Button variant="outline" size="sm" className="h-7 text-xs" disabled={historyFilter.page <= 1}
+                  onClick={() => setHistoryFilter(f => ({ ...f, page: f.page - 1 }))}>
+                  이전
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  {historyFilter.page} / {Math.ceil(changeHistoryData.total / 20)}
+                </span>
+                <Button variant="outline" size="sm" className="h-7 text-xs" disabled={historyFilter.page >= Math.ceil(changeHistoryData.total / 20)}
+                  onClick={() => setHistoryFilter(f => ({ ...f, page: f.page + 1 }))}>
+                  다음
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

@@ -4,6 +4,9 @@ import helmet from "helmet";
 import { registerRoutes } from "./routes";
 import { registerApiDocs } from "./api-docs";
 import { serveStatic } from "./static";
+import { checkDataIntegrity } from "./lib/data-integrity-check";
+import { startScheduledSettingsChecker } from "./utils/scheduled-settings";
+import { storage } from "./storage";
 import { createServer } from "http";
 import { notificationWS } from "./websocket";
 import { randomUUID } from "crypto";
@@ -48,6 +51,7 @@ app.use((req, res, next) => {
     ...(isProduction ? [] : [
       'http://localhost:5000',
       'http://localhost:5173',
+      'http://localhost:5174',  // Partner dev server
       'http://localhost:8081',  // Expo dev server
     ]),
   ];
@@ -93,10 +97,19 @@ app.use(
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
 // 업로드 파일 정적 서빙 (이미지 접근용)
-// 보안: 인증된 사용자만 접근 가능하도록 미들웨어 추가
 import path from "path";
 import jwt from "jsonwebtoken";
 
+// 공지사항 이미지는 공개 접근 허용 (앱 팝업에서 인증 헤더 전달 불가)
+app.use("/uploads/announcements", express.static(path.join(process.cwd(), "uploads", "announcements")));
+
+// 마감/증빙 이미지는 공개 접근 허용 (React Native Image 컴포넌트에서 인증 헤더 전달 불가)
+app.use("/uploads/closing", express.static(path.join(process.cwd(), "uploads", "closing")));
+
+// 오더 배송지 이미지는 공개 접근 허용 (admin 페이지 img 태그에서 인증 헤더 전달 불가)
+app.use("/uploads/orders", express.static(path.join(process.cwd(), "uploads", "orders")));
+
+// 나머지 업로드 파일은 인증 필요
 app.use("/uploads", (req, res, next) => {
   // Authorization 헤더 또는 쿼리 파라미터에서 토큰 추출
   const authHeader = req.headers.authorization;
@@ -291,6 +304,12 @@ function checkEnvironmentVariables() {
   checkEnvironmentVariables();
   registerApiDocs(app);
   await registerRoutes(httpServer, app);
+
+  // 서버 시작 시 데이터 무결성 체크 (비동기, 서버 시작 차단 안함)
+  checkDataIntegrity().catch(err => console.error("[Startup] Integrity check error:", err));
+
+  // 예약 설정 변경 스케줄러 시작 (60초 간격)
+  startScheduledSettingsChecker(storage);
 
   app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

@@ -15,17 +15,20 @@ import { useHeaderHeight } from "@react-navigation/elements";
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
 import { format } from "date-fns";
 import { ko } from "date-fns/locale";
+import { formatOrderNumber } from "@/lib/format-order-number";
 
 import { ThemedText } from "@/components/ThemedText";
 import { Card } from "@/components/Card";
 import { Icon } from "@/components/Icon";
 import { useTheme } from "@/hooks/useTheme";
+import { useResponsive } from "@/hooks/useResponsive";
 import { Spacing, BorderRadius, BrandColors } from "@/constants/theme";
 import { apiRequest } from "@/lib/query-client";
 
 interface DeductionItem {
   id: number;
   orderId: number;
+  orderNumber?: string | null;
   incidentType: string;
   helperName: string | null;
   helperId: string | null;
@@ -58,6 +61,7 @@ const getIncidentTypeLabel = (type: string) => {
 
 export default function AdminDeductionListScreen({ navigation }: AdminDeductionListScreenProps) {
   const { theme } = useTheme();
+  const { showDesktopLayout, containerMaxWidth } = useResponsive();
   const insets = useSafeAreaInsets();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
@@ -109,7 +113,7 @@ export default function AdminDeductionListScreen({ navigation }: AdminDeductionL
         <View style={styles.cardHeader}>
           <View style={styles.orderInfo}>
             <ThemedText style={[styles.orderId, { color: theme.text }]}>
-              오더 #{item.orderId}
+              {formatOrderNumber(item.orderNumber, item.orderId)}
             </ThemedText>
             <View
               style={[
@@ -252,7 +256,12 @@ export default function AdminDeductionListScreen({ navigation }: AdminDeductionL
           contentContainerStyle={{
             paddingHorizontal: Spacing.lg,
             paddingTop: Spacing.md,
-            paddingBottom: tabBarHeight + Spacing.xl,
+            paddingBottom: showDesktopLayout ? Spacing.xl : tabBarHeight + Spacing.xl,
+            ...(showDesktopLayout && {
+              maxWidth: containerMaxWidth,
+              alignSelf: 'center' as const,
+              width: '100%' as any,
+            }),
           }}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} />

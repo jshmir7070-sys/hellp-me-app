@@ -1,0 +1,51 @@
+# ============================================
+# 택배 오더 등록 테스트
+# ============================================
+
+appId: host.exp.exponent
+
+---
+
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# ── 로그인 ──
+- tapOn: "이메일을 입력하세요"
+- inputText: ${TEST_EMAIL}
+- tapOn: "비밀번호를 입력하세요"
+- inputText: ${TEST_PASSWORD}
+- tapOn: "로그인"
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# ── 오더등록 탭으로 이동 ──
+- tapOn: "오더등록"
+- waitForAnimationToEnd
+
+- takeScreenshot: "courier-01-order-tab"
+
+# ── 택배사 탭 ──
+- tapOn: "택배사"
+- waitForAnimationToEnd
+
+# ── 택배사 선택 (드롭다운) ──
+- tapOn: "택배사 선택"
+- waitForAnimationToEnd
+
+- takeScreenshot: "courier-02-company-modal"
+
+# ── 첫 번째 선택 ──
+- tapOn: "CJ대한통운"
+- waitForAnimationToEnd
+
+- takeScreenshot: "courier-03-company-selected"
+
+# ── 다음 버튼 ──
+- tapOn: "다음"
+- waitForAnimationToEnd
+
+# ── 2단계 확인 ──
+- assertVisible: "2단계"
+
+- takeScreenshot: "courier-04-step2-reached"
